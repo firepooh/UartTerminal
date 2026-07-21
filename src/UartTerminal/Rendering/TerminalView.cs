@@ -22,6 +22,7 @@ public sealed class TerminalView : FrameworkElement
     {
         public int Cols;
         public int Version;
+        public int EffLen = -1; // 후행 공백을 제외한 유효 길이(커서 포함). 커서 이동으로 바뀔 수 있어 캐시 키에 포함.
         public int[] Starts = { 0 };
     }
 
@@ -335,15 +336,20 @@ public sealed class TerminalView : FrameworkElement
 
     // ── 래핑 캐시 ──────────────────────────────────────────────────────────────
 
-    private int[] GetWrapStarts(LogicalLine line, int cols)
+    private int[] GetWrapStarts(LogicalLine line, int cols) =>
+        GetWrapStarts(line, cols, EffectiveLength(line));
+
+    private int[] GetWrapStarts(LogicalLine line, int cols, int effLen)
     {
         var entry = _wrapCache.GetValue(line, _ => new WrapEntry { Cols = -1, Version = -1 });
-        if (entry.Cols == cols && entry.Version == line.Version)
+        if (entry.Cols == cols && entry.Version == line.Version && entry.EffLen == effLen)
             return entry.Starts;
 
+        // 유효 길이(effLen)까지만 래핑 → 후행 공백이 빈 시각 행을 만들지 않게 한다.
+        // (linenoise getColumns 의 ESC[999C 가 남기는 대량 패딩 공백이 하단 빈 줄로 새는 문제 해결)
         var starts = new List<int> { 0 };
         int col = 0;
-        for (int i = 0; i < line.Count; i++)
+        for (int i = 0; i < effLen; i++)
         {
             int cw = CharWidth.Width(line[i].Ch);
             if (cw == 0) continue; // 결합 문자: 현재 행에 포함, 열 미증가
@@ -357,12 +363,29 @@ public sealed class TerminalView : FrameworkElement
 
         entry.Cols = cols;
         entry.Version = line.Version;
+        entry.EffLen = effLen;
         entry.Starts = starts.ToArray();
         return entry.Starts;
     }
 
-    private static int RowRangeEnd(LogicalLine line, int[] starts, int row) =>
-        row + 1 < starts.Length ? starts[row + 1] : line.Count;
+    /// <summary>
+    /// 표시상 의미 없는 후행 공백을 제외한 유효 셀 수(단, 커서 위치는 항상 포함해 커서가 잘리지 않게 함).
+    /// 색 배경/reverse 가 있는 공백은 시각적으로 보이므로 트리밍하지 않는다.
+    /// </summary>
+    private static int EffectiveLength(LogicalLine line)
+    {
+        int last = -1;
+        for (int i = line.Count - 1; i >= 0; i--)
+        {
+            var c = line[i];
+            bool trimmable = c.Ch == ' '
+                && c.Attributes.Background.Kind == ColorKind.Default
+                && !c.Attributes.Flags.HasFlag(CellFlags.Reverse);
+            if (!trimmable) { last = i; break; }
+        }
+        int eff = Math.Max(last + 1, line.Cursor);
+        return Math.Clamp(eff, 0, line.Count);
+    }
 
     // ── 보이는 행 계산(가상화) ──────────────────────────────────────────────────
 
@@ -389,10 +412,11 @@ public sealed class TerminalView : FrameworkElement
                 for (int li = lineCount - 1; li >= 0 && temp.Count < rows; li--)
                 {
                     var line = _buffer.GetLine(li);
-                    var starts = GetWrapStarts(line, cols);
+                    int effLen = EffectiveLength(line);
+                    var starts = GetWrapStarts(line, cols, effLen);
                     long abs = _buffer.TrimmedCount + li;
                     for (int r = starts.Length - 1; r >= 0 && temp.Count < rows; r--)
-                        temp.Add(MakeVisRow(line, abs, starts, r));
+                        temp.Add(MakeVisRow(line, abs, starts, r, effLen));
                 }
                 temp.Reverse();
                 list.AddRange(temp);
@@ -404,12 +428,13 @@ public sealed class TerminalView : FrameworkElement
                 while (li < lineCount && list.Count < rows)
                 {
                     var line = _buffer.GetLine(li);
-                    var starts = GetWrapStarts(line, cols);
+                    int effLen = EffectiveLength(line);
+                    var starts = GetWrapStarts(line, cols, effLen);
                     long abs = _buffer.TrimmedCount + li;
                     // 첫 라인의 시작 행은 현재 폭 기준 래핑 수로 clamp(리사이즈/트림 시 라인 누락 방지)
                     int r0 = first ? Math.Min(_topSubRow, Math.Max(0, starts.Length - 1)) : 0;
                     for (int r = r0; r < starts.Length && list.Count < rows; r++)
-                        list.Add(MakeVisRow(line, abs, starts, r));
+                        list.Add(MakeVisRow(line, abs, starts, r, effLen));
                     first = false;
                     li++;
                 }
@@ -422,10 +447,10 @@ public sealed class TerminalView : FrameworkElement
         return new Snapshot(list.ToArray(), topListIndex, revision, totalLines, cursorAbs, cursorCol);
     }
 
-    private VisRow MakeVisRow(LogicalLine line, long abs, int[] starts, int row)
+    private VisRow MakeVisRow(LogicalLine line, long abs, int[] starts, int row, int effLen)
     {
         int start = starts[row];
-        int end = RowRangeEnd(line, starts, row);
+        int end = row + 1 < starts.Length ? starts[row + 1] : effLen; // 마지막 행은 유효 길이까지(후행 공백 제외)
         int n = Math.Max(0, end - start);
         var cells = new Cell[n];
         for (int i = 0; i < n; i++)
