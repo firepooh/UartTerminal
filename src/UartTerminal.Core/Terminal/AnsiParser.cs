@@ -152,8 +152,13 @@ public sealed class AnsiParser
             case 'D': _sink.CursorBack(Param(0, 1)); break;
             case 'G': _sink.CursorColumnAbsolute(Param(0, 1), _attr); break;
             case 'n':
-                if (!_privatePrefix && Param(0, 0) == 6)
-                    RespondCursorPosition();
+                if (!_privatePrefix)
+                {
+                    // DSR: 6=커서 위치 질의(→ESC[row;colR), 5=장치 상태 질의(→ESC[0n, "정상").
+                    // esp_console/linenoise 는 ESC[5n 프로브 응답으로 터미널 능력을 감지한다(§6 Q2).
+                    if (Param(0, 0) == 6) RespondCursorPosition();
+                    else if (Param(0, 0) == 5) RespondDeviceStatus();
+                }
                 break;
             // 미지원(수직 이동/화면 제어/모드 설정 등)은 소비 후 무시:
             // 'A','B'(CUU/CUD), 'H','f'(CUP), 'r'(DECSTBM), 'h','l'(모드), 'd','S','T','X','P','@','L','M' 등
@@ -168,6 +173,13 @@ public sealed class AnsiParser
         var (row, col) = _sink.GetCursorPosition();
         string report = $"{ESC}[{row};{col}R";
         Respond(Encoding.ASCII.GetBytes(report));
+    }
+
+    /// <summary>DSR(ESC[5n) 응답: 터미널 정상(ESC[0n). linenoise 가 이 응답으로 이스케이프 지원을 확인.</summary>
+    private void RespondDeviceStatus()
+    {
+        if (Respond is null) return;
+        Respond(Encoding.ASCII.GetBytes($"{ESC}[0n"));
     }
 
     private void ApplySgr()

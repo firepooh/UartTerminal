@@ -197,6 +197,18 @@ public class TerminalEngineTests
     }
 
     [Fact]
+    public void Dsr_DeviceStatus_RespondsOk()
+    {
+        // linenoise 프로브: ESC[5n → 터미널은 ESC[0n("정상")으로 응답해야 이스케이프 지원이 감지됨(§6 Q2)
+        var e = NewEngine();
+        byte[]? response = null;
+        e.Respond = mem => response = mem.ToArray();
+        Feed(e, ESC + "[5n");
+        Assert.NotNull(response);
+        Assert.Equal(ESC + "[0n", Encoding.ASCII.GetString(response!));
+    }
+
+    [Fact]
     public void Scrollback_TrimsOldestBeyondCap()
     {
         var e = new TerminalEngine(new UTF8Encoding(false), maxLines: 100);
