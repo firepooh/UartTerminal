@@ -131,6 +131,7 @@ public sealed class SerialPortSession : ISerialSession
     {
         try
         {
+            // BaseStream 접근도 try 안에서: 시작 경합(Open 직후 Dispose)으로 인한 예외를 여기서 흡수
             var stream = _port.BaseStream;
             await foreach (var data in _txQueue.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             {
@@ -152,6 +153,15 @@ public sealed class SerialPortSession : ISerialSession
         catch (OperationCanceledException)
         {
             // 정상 종료
+        }
+        catch (Exception ex) when (IsDisconnect(ex))
+        {
+            // RxLoop 와 대칭: 분리/폐기 예외를 종료로 정규화(관측되지 않은 faulted task 방지)
+            Shutdown(SerialCloseReason.DeviceRemoved);
+        }
+        catch
+        {
+            // 그 외 예상 밖 예외도 삼켜 task 가 faulted 로 끝나지 않게 함
         }
     }
 

@@ -30,13 +30,17 @@ public static partial class PortEnumerator
             using var results = searcher.Get();
             foreach (ManagementBaseObject mo in results)
             {
-                if (mo["Caption"] is not string caption)
-                    continue;
-                var m = ComInCaptionRegex().Match(caption);
-                if (!m.Success)
-                    continue;
-                string com = m.Groups[1].Value.ToUpperInvariant();
-                byName[com] = new PortInfo(com, caption);
+                // 각 ManagementBaseObject 는 부모 컬렉션과 별개로 해제해야 하는 COM 래퍼(핸들 누수 방지)
+                using (mo)
+                {
+                    if (mo["Caption"] is not string caption)
+                        continue;
+                    var m = ComInCaptionRegex().Match(caption);
+                    if (!m.Success)
+                        continue;
+                    string com = m.Groups[1].Value.ToUpperInvariant();
+                    byName[com] = new PortInfo(com, caption);
+                }
             }
         }
         catch

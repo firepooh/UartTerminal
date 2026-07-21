@@ -150,6 +150,25 @@ public sealed class TerminalBuffer : ITerminalSink
 
     // ── 로컬(사용자) 조작 ──────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 사용자 "Clear screen": 스크롤백을 보존하면서 화면을 비운다. 뷰포트 높이만큼 빈 라인을 넣어
+    /// 기존 내용을 위로 밀어내므로, 위로 스크롤하면 이전 로그(부팅/크래시 기록 등)를 여전히 볼 수 있다.
+    /// </summary>
+    public void ClearScreen(int viewportRows)
+    {
+        int n = Math.Clamp(viewportRows, 1, 1000);
+        lock (_sync)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                _current = new LogicalLine();
+                _lines.Add(_current);
+            }
+            TrimIfNeeded();
+            Bump();
+        }
+    }
+
     /// <summary>사용자 "Clear buffer": 스크롤백 포함 전체 삭제.</summary>
     public void Clear()
     {
