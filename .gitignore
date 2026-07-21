@@ -1,0 +1,49 @@
+# .NET / Visual Studio
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+build/
+publish/
+[Pp]ublish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+
+# Build results
+*.dll
+*.exe
+*.pdb
+*.cache
+project.lock.json
+artifacts/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!packages/build/
+
+# Rider
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# App runtime state (local only)
+# %APPDATA%\UartTerminal\state.json 는 저장소 밖이므로 무관
+
+# Logs
+*.log
