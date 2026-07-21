@@ -136,4 +136,26 @@ public sealed class LogicalLine
             sb.Append(_cells[i].Ch);
         return sb.ToString();
     }
+
+    /// <summary>
+    /// 표시상 유효한 셀 수: 마지막으로 "보이는" 셀의 다음 위치와 커서 위치 중 큰 값.
+    /// 후행 공백(기본 배경·비reverse)은 화면에 보이지 않으므로 제외하되, 커서는 항상 포함해 잘리지 않게 한다.
+    /// 색 배경/reverse 가 적용된 공백은 시각적으로 보이므로 트리밍하지 않는다.
+    /// 렌더러가 이 길이까지만 soft-wrap 하면, 커서 위치 질의(ESC[6n)용 대량 커서 전진 패딩
+    /// (linenoise getColumns 의 ESC[999C 가 남기는 공백)이 하단 빈 줄로 새지 않는다.
+    /// </summary>
+    public int EffectiveLength()
+    {
+        int last = -1;
+        for (int i = _cells.Count - 1; i >= 0; i--)
+        {
+            var c = _cells[i];
+            bool trimmable = c.Ch == ' '
+                && c.Attributes.Background.Kind == ColorKind.Default
+                && !c.Attributes.Flags.HasFlag(CellFlags.Reverse);
+            if (!trimmable) { last = i; break; }
+        }
+        int eff = Math.Max(last + 1, Cursor);
+        return Math.Clamp(eff, 0, _cells.Count);
+    }
 }

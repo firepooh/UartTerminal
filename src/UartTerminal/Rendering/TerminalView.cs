@@ -337,7 +337,7 @@ public sealed class TerminalView : FrameworkElement
     // ── 래핑 캐시 ──────────────────────────────────────────────────────────────
 
     private int[] GetWrapStarts(LogicalLine line, int cols) =>
-        GetWrapStarts(line, cols, EffectiveLength(line));
+        GetWrapStarts(line, cols, line.EffectiveLength());
 
     private int[] GetWrapStarts(LogicalLine line, int cols, int effLen)
     {
@@ -368,25 +368,6 @@ public sealed class TerminalView : FrameworkElement
         return entry.Starts;
     }
 
-    /// <summary>
-    /// 표시상 의미 없는 후행 공백을 제외한 유효 셀 수(단, 커서 위치는 항상 포함해 커서가 잘리지 않게 함).
-    /// 색 배경/reverse 가 있는 공백은 시각적으로 보이므로 트리밍하지 않는다.
-    /// </summary>
-    private static int EffectiveLength(LogicalLine line)
-    {
-        int last = -1;
-        for (int i = line.Count - 1; i >= 0; i--)
-        {
-            var c = line[i];
-            bool trimmable = c.Ch == ' '
-                && c.Attributes.Background.Kind == ColorKind.Default
-                && !c.Attributes.Flags.HasFlag(CellFlags.Reverse);
-            if (!trimmable) { last = i; break; }
-        }
-        int eff = Math.Max(last + 1, line.Cursor);
-        return Math.Clamp(eff, 0, line.Count);
-    }
-
     // ── 보이는 행 계산(가상화) ──────────────────────────────────────────────────
 
     private Snapshot BuildSnapshot(int cols, int rows)
@@ -412,7 +393,7 @@ public sealed class TerminalView : FrameworkElement
                 for (int li = lineCount - 1; li >= 0 && temp.Count < rows; li--)
                 {
                     var line = _buffer.GetLine(li);
-                    int effLen = EffectiveLength(line);
+                    int effLen = line.EffectiveLength();
                     var starts = GetWrapStarts(line, cols, effLen);
                     long abs = _buffer.TrimmedCount + li;
                     for (int r = starts.Length - 1; r >= 0 && temp.Count < rows; r--)
@@ -428,7 +409,7 @@ public sealed class TerminalView : FrameworkElement
                 while (li < lineCount && list.Count < rows)
                 {
                     var line = _buffer.GetLine(li);
-                    int effLen = EffectiveLength(line);
+                    int effLen = line.EffectiveLength();
                     var starts = GetWrapStarts(line, cols, effLen);
                     long abs = _buffer.TrimmedCount + li;
                     // 첫 라인의 시작 행은 현재 폭 기준 래핑 수로 clamp(리사이즈/트림 시 라인 누락 방지)
