@@ -1,9 +1,11 @@
+using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using UartTerminal.Core.Serial;
 using UartTerminal.Core.Terminal;
+using UartTerminal.Mcp;
 using UartTerminal.Rendering;
 
 namespace UartTerminal;
@@ -17,6 +19,8 @@ public partial class MainWindow : Window
     private TerminalEngine? _engine;
     private TerminalView? _view;
     private ISerialSession? _session;
+    private UartBridge? _bridge;
+    private McpPipeServer? _mcpServer;
     private string _portName = "";
     private bool _connected;
 
@@ -68,6 +72,11 @@ public partial class MainWindow : Window
         _engine = new TerminalEngine(new UTF8Encoding(false), maxLines: 10_000);
         _engine.Respond = mem => _session?.Enqueue(mem); // DSR 등 응답 → TX
 
+        // Phase B: MCP 파사드/서버(포트별 Named Pipe). 기본은 비활성 — 사용자가 메뉴로 켠다.
+        _bridge = new UartBridge(_engine);
+        _mcpServer = new McpPipeServer(_bridge, _portName);
+        UpdateMcpStatus();
+
         _view = new TerminalView(_engine.Buffer) { FontSize = _state.FontSize };
         _view.ScrollMetricsChanged += OnScrollMetrics;
         _view.AutoCopyRequested += TrySetClipboard;
@@ -82,6 +91,7 @@ public partial class MainWindow : Window
             var session = new SerialPortSession(_portName, _params);
             session.DataReceived += OnDataReceived;
             session.Closed += OnSessionClosed;
+            _bridge?.AttachSession(session); // tee 의 두 소비자(화면 엔진 + MCP 링버퍼)를 Open 전에 모두 구독
             session.Open();
 
             _session = session;
@@ -96,6 +106,7 @@ public partial class MainWindow : Window
         {
             DiagLog.Warn($"포트 사용 중: {_portName}");
             _connected = false;
+            _bridge?.DetachSession(); // Open 실패 → 미리 붙인 세션 구독 정리
             UpdateTitle();
             SetStatus($"{_portName} 사용 중(다른 프로그램/창)");
             MessageBox.Show(this,
@@ -106,6 +117,7 @@ public partial class MainWindow : Window
         {
             DiagLog.Exception("OpenSession", ex);
             _connected = false;
+            _bridge?.DetachSession(); // Open 실패 → 미리 붙인 세션 구독 정리
             UpdateTitle();
             SetStatus($"연결 실패: {ex.Message}");
             MessageBox.Show(this, $"{_portName} 연결 실패:\n{ex.Message}",
@@ -126,6 +138,7 @@ public partial class MainWindow : Window
         {
             _connected = false;
             _session = null;
+            _bridge?.DetachSession();
             UpdateTitle();
             switch (reason)
             {
@@ -251,6 +264,61 @@ public partial class MainWindow : Window
         _state.Save();
     }
 
+    // ── MCP(Phase B) ─────────────────────────────────────────────────────────────
+
+    private void McpEnabled_Click(object sender, RoutedEventArgs e)
+    {
+        if (_bridge is null || _mcpServer is null) return;
+        bool on = MenuMcpEnabled.IsChecked;
+        _bridge.Enabled = on;
+        if (on) _mcpServer.Start();
+        else _mcpServer.Stop();
+
+        DiagLog.Info($"MCP {(on ? "활성화" : "비활성화")}: {McpPipeServer.PipeNameFor(_portName)}");
+        UpdateMcpStatus();
+    }
+
+    private void McpReadOnly_Click(object sender, RoutedEventArgs e)
+    {
+        if (_bridge is null) return;
+        _bridge.ReadOnly = MenuMcpReadOnly.IsChecked;
+        UpdateMcpStatus();
+    }
+
+    private void McpCopyCmd_Click(object sender, RoutedEventArgs e)
+    {
+        string cmd = McpRegistrationCommand();
+        TrySetClipboard(cmd);
+        SetStatus("MCP 등록 명령을 클립보드에 복사했습니다");
+    }
+
+    /// <summary><c>claude mcp add</c> 등록 명령. 릴레이 exe 는 배포 시 앱과 같은 폴더에 위치.</summary>
+    private string McpRegistrationCommand()
+    {
+        string exe = Path.Combine(AppContext.BaseDirectory, "UartTerminal.McpRelay.exe");
+        string name = $"uart-{_portName.ToLowerInvariant()}";
+        return $"claude mcp add {name} -- \"{exe}\" {_portName}";
+    }
+
+    private void UpdateMcpStatus()
+    {
+        bool enabled = _bridge?.Enabled ?? false;
+        bool readOnly = _bridge?.ReadOnly ?? false;
+        if (!enabled)
+        {
+            McpStatusText.Text = "MCP: 꺼짐";
+            McpStatusText.Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0x88, 0x88, 0x88));
+        }
+        else
+        {
+            McpStatusText.Text = readOnly ? "MCP: 켜짐 (읽기 전용)" : "MCP: 켜짐";
+            McpStatusText.Foreground = new System.Windows.Media.SolidColorBrush(readOnly
+                ? System.Windows.Media.Color.FromRgb(0xD7, 0xBA, 0x7D)   // 주의(황)
+                : System.Windows.Media.Color.FromRgb(0x6A, 0x99, 0x55)); // 활성(녹)
+        }
+    }
+
     // ── 스크롤바 ───────────────────────────────────────────────────────────────
 
     private void OnScrollMetrics(ScrollMetrics m)
@@ -321,6 +389,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) { DiagLog.Warn($"종료 저장 실패: {ex.Message}"); }
 
+        try { _mcpServer?.Stop(); } catch { }
         try { _session?.Close(); } catch { }
     }
 }

@@ -27,11 +27,22 @@
                 <MenuItem Header="폰트 크게" InputGestureText="Ctrl++" Click="FontLarger_Click"/>
                 <MenuItem Header="폰트 작게" InputGestureText="Ctrl+-" Click="FontSmaller_Click"/>
             </MenuItem>
+            <MenuItem Header="MCP(_M)">
+                <MenuItem x:Name="MenuMcpEnabled" Header="MCP 서버 활성화" IsCheckable="True"
+                          Click="McpEnabled_Click"/>
+                <MenuItem x:Name="MenuMcpReadOnly" Header="AI 읽기 전용 (TX·제어선 차단)" IsCheckable="True"
+                          Click="McpReadOnly_Click"/>
+                <Separator/>
+                <MenuItem Header="등록 명령 복사 (claude mcp add)" Click="McpCopyCmd_Click"/>
+            </MenuItem>
         </Menu>
 
         <StatusBar DockPanel.Dock="Bottom" Background="#2D2D30" Foreground="#CCCCCC">
             <StatusBarItem>
                 <TextBlock x:Name="StatusText" Text="시작 중…"/>
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock x:Name="McpStatusText" Text="MCP: 꺼짐" Foreground="#888888"/>
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <TextBlock x:Name="MetricsText" Text=""/>

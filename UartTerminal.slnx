@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/UartTerminal.Core/UartTerminal.Core.csproj" />
     <Project Path="src/UartTerminal/UartTerminal.csproj" />
+    <Project Path="src/UartTerminal.McpRelay/UartTerminal.McpRelay.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/UartTerminal.Tests/UartTerminal.Tests.csproj" />

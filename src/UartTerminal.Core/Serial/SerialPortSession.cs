@@ -19,9 +19,14 @@ public sealed class SerialPortSession : ISerialSession
     private Task? _rxTask;
     private Task? _txTask;
     private int _closedFlag; // Interlocked: 0=열림, 1=종료됨
+    private volatile bool _dtr;
+    private volatile bool _rts;
 
     public string PortName { get; }
     public SerialConnectionParams Params { get; }
+
+    public bool DtrEnabled => _dtr;
+    public bool RtsEnabled => _rts;
 
     public event Action<ReadOnlyMemory<byte>>? DataReceived;
     public event Action<SerialCloseReason>? Closed;
@@ -30,6 +35,8 @@ public sealed class SerialPortSession : ISerialSession
     {
         PortName = portName;
         Params = parameters;
+        _dtr = parameters.DtrEnable;
+        _rts = parameters.RtsEnable;
         _txQueue = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions
         {
             SingleReader = true,
@@ -79,6 +86,29 @@ public sealed class SerialPortSession : ISerialSession
     {
         if (Volatile.Read(ref _closedFlag) != 0 || data.IsEmpty) return;
         _txQueue.Writer.TryWrite(data.ToArray());
+    }
+
+    public void SetDtrRts(bool dtr, bool rts)
+    {
+        if (Volatile.Read(ref _closedFlag) != 0) return;
+        try
+        {
+            _port.DtrEnable = dtr;
+            _dtr = dtr;
+        }
+        catch (Exception ex) when (IsDisconnect(ex)) { Shutdown(SerialCloseReason.DeviceRemoved); return; }
+
+        // RTS/CTS 흐름제어일 때 RtsEnable 접근은 InvalidOperationException → 그 경우 건너뜀(Open 과 동일 방침).
+        if (Params.Handshake is not (Handshake.RequestToSend or Handshake.RequestToSendXOnXOff))
+        {
+            try
+            {
+                _port.RtsEnable = rts;
+                _rts = rts;
+            }
+            catch (InvalidOperationException) { }
+            catch (Exception ex) when (IsDisconnect(ex)) { Shutdown(SerialCloseReason.DeviceRemoved); }
+        }
     }
 
     public void Close() => Shutdown(SerialCloseReason.UserClosed);

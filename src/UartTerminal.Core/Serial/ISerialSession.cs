@@ -22,7 +22,13 @@ public interface ISerialSession : IDisposable
     SerialConnectionParams Params { get; }
     bool IsOpen { get; }
 
-    /// <summary>원시 수신 바이트(tee 지점: 화면 엔진 + 향후 MCP 링버퍼가 구독).</summary>
+    /// <summary>현재 DTR 출력 상태(마지막으로 설정된 값). 상태 조회/표시용.</summary>
+    bool DtrEnabled { get; }
+
+    /// <summary>현재 RTS 출력 상태(마지막으로 설정된 값). RTS/CTS 흐름제어 시 하드웨어가 제어하므로 의미가 제한적.</summary>
+    bool RtsEnabled { get; }
+
+    /// <summary>원시 수신 바이트(tee 지점: 화면 엔진 + MCP 링버퍼가 구독).</summary>
     event Action<ReadOnlyMemory<byte>>? DataReceived;
 
     /// <summary>세션 종료(사용자 종료/장치 제거/오류).</summary>
@@ -32,6 +38,12 @@ public interface ISerialSession : IDisposable
 
     /// <summary>단일 TX 큐에 송신 데이터 적재(키 입력/붙여넣기/AI 전송 공통 경로).</summary>
     void Enqueue(ReadOnlyMemory<byte> data);
+
+    /// <summary>
+    /// DTR/RTS 제어선을 설정한다(MCP <c>uart_set_dtr_rts</c> — 예: ESP32 부트로더 진입/리셋 시퀀스).
+    /// RTS/CTS 흐름제어가 켜진 경우 RTS 설정은 하드웨어에 의해 무시될 수 있다. 닫힌 세션에서는 무시된다.
+    /// </summary>
+    void SetDtrRts(bool dtr, bool rts);
 
     void Close();
 }
