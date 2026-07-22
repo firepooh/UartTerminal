@@ -7,9 +7,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\UartTerminal.ico</ApplicationIcon>
     <AssemblyName>UartTerminal</AssemblyName>
     <RootNamespace>UartTerminal</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 창(타이틀바/작업표시줄) 아이콘용: 어셈블리 리소스 루트에 배치해 pack URI "/UartTerminal.ico" 로 참조 -->
+    <Resource Include="..\..\UartTerminal.ico" Link="UartTerminal.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol.Core" Version="1.4.1" />

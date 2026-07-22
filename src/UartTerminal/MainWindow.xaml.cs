@@ -3,6 +3,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using UartTerminal.Core.Serial;
 using UartTerminal.Core.Terminal;
 using UartTerminal.Mcp;
@@ -23,6 +24,10 @@ public partial class MainWindow : Window
     private McpPipeServer? _mcpServer;
     private string _portName = "";
     private bool _connected;
+
+    // 하단 입력창 명령 히스토리
+    private readonly List<string> _history = new();
+    private int _historyIndex;
 
     public MainWindow()
     {
@@ -90,7 +95,7 @@ public partial class MainWindow : Window
         {
             var session = new SerialPortSession(_portName, _params);
             session.DataReceived += OnDataReceived;
-            session.Closed += OnSessionClosed;
+            session.Closed += reason => OnSessionClosed(session, reason); // 세션 식별자 캡처(재연결 경쟁 가드)
             _bridge?.AttachSession(session); // tee 의 두 소비자(화면 엔진 + MCP 링버퍼)를 Open 전에 모두 구독
             session.Open();
 
@@ -132,10 +137,14 @@ public partial class MainWindow : Window
         catch (Exception ex) { DiagLog.Exception("Receive", ex); }
     }
 
-    private void OnSessionClosed(SerialCloseReason reason)
+    private void OnSessionClosed(ISerialSession closed, SerialCloseReason reason)
     {
         Dispatcher.BeginInvoke(() =>
         {
+            // 재연결 경쟁: 이미 다른 세션으로 교체됐으면 오래된 close 는 UI 상태를 건드리지 않음
+            if (_session is not null && !ReferenceEquals(_session, closed))
+                return;
+
             _connected = false;
             _session = null;
             _bridge?.DetachSession();
@@ -161,6 +170,8 @@ public partial class MainWindow : Window
     private void OnPreviewTextInput(object? sender, TextCompositionEventArgs e)
     {
         if (!_connected || string.IsNullOrEmpty(e.Text)) return;
+        // 메인 터미널이 포커스일 때만 type-through(입력창/메뉴 포커스 시엔 그쪽이 처리)
+        if (_view is null || !_view.IsKeyboardFocusWithin) return;
         Send(_txEncoding.GetBytes(e.Text));
         e.Handled = true;
     }
@@ -168,6 +179,12 @@ public partial class MainWindow : Window
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
         var mods = Keyboard.Modifiers;
+
+        // ALT 단축키: 재연결(포트 선택 다이얼로그) / 연결 종료. (Alt 조합은 실제 키가 SystemKey 에 담긴다)
+        if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.N)
+        { ReconnectViaDialog(); e.Handled = true; return; }
+        if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.I)
+        { _session?.Close(); e.Handled = true; return; }
 
         // UI 단축키 우선 처리
         if (mods == ModifierKeys.Control && e.Key == Key.Insert)
@@ -187,8 +204,8 @@ public partial class MainWindow : Window
 
         if (!_connected) return;
 
-        // 메뉴 모드(메뉴 항목에 포커스)일 때는 화살표/Enter/Escape가 메뉴 탐색이므로 시리얼로 보내지 않음
-        if (Keyboard.FocusedElement is System.Windows.Controls.MenuItem) return;
+        // 메인 터미널이 포커스일 때만 특수키 type-through(입력창/메뉴 포커스 시엔 그쪽이 처리)
+        if (_view is null || !_view.IsKeyboardFocusWithin) return;
 
         var bytes = KeyMap.Map(e.Key, mods);
         if (bytes is not null)
@@ -206,14 +223,125 @@ public partial class MainWindow : Window
 
     // ── 메뉴/명령 ──────────────────────────────────────────────────────────────
 
-    private void Reconnect_Click(object sender, RoutedEventArgs e)
-    {
-        if (_connected) { SetStatus("이미 연결됨"); return; }
-        if (string.IsNullOrEmpty(_portName)) return;
-        OpenSession();
-    }
+    private void Reconnect_Click(object sender, RoutedEventArgs e) => ReconnectViaDialog();
 
     private void Disconnect_Click(object sender, RoutedEventArgs e) => _session?.Close();
+
+    /// <summary>ALT+N: 현재 연결을 닫고 포트 리스트를 다시 보여준 뒤 선택 포트로 재연결(마지막 포트 preselect).</summary>
+    private void ReconnectViaDialog()
+    {
+        CloseCurrentSession();
+
+        string? preselect = string.IsNullOrEmpty(_portName) ? _state.LastPort : _portName;
+        var dlg = new PortSelectDialog(preselect) { Owner = this };
+        if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
+        {
+            SetStatus("재연결 취소됨");
+            return;
+        }
+
+        if (_engine is null)
+        {
+            Connect(port); // 최초 연결과 동일 경로(엔진/뷰/브리지/MCP 서버 생성)
+            return;
+        }
+
+        // 포트가 바뀌면 포트별 Named Pipe 서버를 재생성(활성 상태 유지)
+        if (!string.Equals(port.PortName, _portName, StringComparison.OrdinalIgnoreCase))
+        {
+            _portName = port.PortName;
+            RebuildMcpForPort();
+        }
+
+        OpenSession();
+        _state.LastPort = _portName;
+        _state.Save();
+    }
+
+    /// <summary>현재 세션을 동기적으로 정리(재연결 전). 오래된 Closed 콜백은 식별자 가드로 무시됨.</summary>
+    private void CloseCurrentSession()
+    {
+        var s = _session;
+        if (s is null) return;
+        _session = null;
+        _connected = false;
+        _bridge?.DetachSession();
+        try { s.Close(); } catch { }
+        UpdateTitle();
+    }
+
+    /// <summary>포트 변경 시 포트별 MCP 파이프 서버를 재생성. 직전에 켜져 있었으면 다시 시작.</summary>
+    private void RebuildMcpForPort()
+    {
+        if (_bridge is null) return;
+        bool wasEnabled = _bridge.Enabled;
+        try { _mcpServer?.Stop(); } catch { }
+        _mcpServer = new McpPipeServer(_bridge, _portName);
+        if (wasEnabled) _mcpServer.Start();
+        UpdateMcpStatus();
+    }
+
+    // ── 하단 입력 전용 창 ───────────────────────────────────────────────────────
+
+    private void InputBox_GotFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        InputBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xCC)); // 활성(파랑)
+        InputLabel.Text = "입력창 (Enter=전송)";
+        InputLabel.Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC));
+    }
+
+    private void InputBox_LostFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        InputBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0x3E, 0x3E, 0x42));
+        InputLabel.Text = "입력창";
+        InputLabel.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
+    }
+
+    private void InputBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Enter:
+                SendInputLine();
+                e.Handled = true;
+                break;
+            case Key.Up:
+                HistoryNav(-1);
+                e.Handled = true;
+                break;
+            case Key.Down:
+                HistoryNav(+1);
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                InputBox.Clear();
+                _historyIndex = _history.Count;
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void SendInputLine()
+    {
+        if (!_connected) { SetStatus("연결되지 않음 — 입력 전송 불가"); return; }
+        string line = InputBox.Text;
+        Send(_txEncoding.GetBytes(line + "\r")); // Transmit New-line = CR
+        if (!string.IsNullOrEmpty(line))
+        {
+            _history.Add(line);
+            if (_history.Count > 200) _history.RemoveAt(0);
+        }
+        _historyIndex = _history.Count;
+        InputBox.Clear();
+    }
+
+    private void HistoryNav(int dir)
+    {
+        if (_history.Count == 0) return;
+        _historyIndex = Math.Clamp(_historyIndex + dir, 0, _history.Count);
+        InputBox.Text = _historyIndex < _history.Count ? _history[_historyIndex] : "";
+        InputBox.CaretIndex = InputBox.Text.Length;
+    }
 
     private void Exit_Click(object sender, RoutedEventArgs e) => Close();
 
