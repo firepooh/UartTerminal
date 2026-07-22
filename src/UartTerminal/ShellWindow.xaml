@@ -74,9 +74,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabControl">
-                        <Border Background="{StaticResource BgPanel}"
-                                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,0,0,1"
-                                Padding="8,5,8,0">
+                        <Border Background="Transparent" BorderThickness="0" Padding="8,5,8,0">
                             <TabPanel IsItemsHost="True"/>
                         </Border>
                     </ControlTemplate>
@@ -114,8 +112,10 @@
                 <MenuItem Header="폰트 크게" InputGestureText="Ctrl++" Click="FontLarger_Click"/>
                 <MenuItem Header="폰트 작게" InputGestureText="Ctrl+-" Click="FontSmaller_Click"/>
                 <Separator/>
-                <MenuItem x:Name="MenuSplit" Header="화면 분할" IsCheckable="True" Click="Split_Click"/>
-                <MenuItem x:Name="MenuSplitOrient" Header="2분할 방향: 좌/우 ↔ 상/하" Click="SplitOrient_Click"/>
+                <MenuItem x:Name="MenuSplitSingle" Header="단일 화면" IsCheckable="True" Click="SplitSingle_Click"/>
+                <MenuItem x:Name="MenuSplitV" Header="좌우 분할" IsCheckable="True" Click="SplitV_Click"/>
+                <MenuItem x:Name="MenuSplitH" Header="상하 분할" IsCheckable="True" Click="SplitH_Click"/>
+                <MenuItem x:Name="MenuSplitGrid" Header="격자 분할" IsCheckable="True" Click="SplitGrid_Click"/>
             </MenuItem>
             <MenuItem Header="MCP(_M)">
                 <MenuItem x:Name="MenuMcpEnabled" Header="MCP 서버 활성화" IsCheckable="True"
@@ -143,8 +143,31 @@
             </Grid>
         </Border>
 
-        <TabControl x:Name="Tabs" DockPanel.Dock="Top" BorderThickness="0"
-                    SelectionChanged="Tabs_SelectionChanged"/>
+        <!-- 탭 스트립 + 화면 분할 아이콘 툴바(오른쪽 알약) -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgPanel}"
+                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TabControl x:Name="Tabs" Grid.Column="0" BorderThickness="0"
+                            SelectionChanged="Tabs_SelectionChanged"/>
+                <Border Grid.Column="1" Style="{StaticResource SplitToolbar}"
+                        VerticalAlignment="Center" Margin="6,4,10,6">
+                    <StackPanel Orientation="Horizontal">
+                        <ToggleButton x:Name="BtnSplitSingle" Style="{StaticResource SplitToggle}"
+                                      Tag="{StaticResource Ic.Single}" Click="SplitSingle_Click" ToolTip="단일 화면"/>
+                        <ToggleButton x:Name="BtnSplitV" Style="{StaticResource SplitToggle}"
+                                      Tag="{StaticResource Ic.SplitV}" Click="SplitV_Click" ToolTip="좌우 분할"/>
+                        <ToggleButton x:Name="BtnSplitH" Style="{StaticResource SplitToggle}"
+                                      Tag="{StaticResource Ic.SplitH}" Click="SplitH_Click" ToolTip="상하 분할"/>
+                        <ToggleButton x:Name="BtnSplitGrid" Style="{StaticResource SplitToggle}"
+                                      Tag="{StaticResource Ic.Grid}" Click="SplitGrid_Click" ToolTip="격자 분할"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
 
         <!-- 실제 문서(터미널) 렌더 영역: 탭 모드=활성 1개, 분할 모드=격자 배치 -->
         <Grid x:Name="ContentHost" Background="{StaticResource Bg}"/>

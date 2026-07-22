@@ -46,8 +46,10 @@ public partial class ShellWindow : Window
     private readonly bool _isPrimary;
     private readonly Dictionary<TabItem, TabHooks> _hooks = new();
 
-    private bool _splitMode;
-    private bool _splitVertical = true; // 2분할 기본 = 좌/우(세로 경계)
+    // 화면 분할 레이아웃(툴바 아이콘/메뉴와 1:1). Single=분할 안 함.
+    private enum SplitLayout { Single, Columns, Rows, Grid }
+    private SplitLayout _split = SplitLayout.Single;
+    private bool IsSplit => _split != SplitLayout.Single;
 
     // 분할 렌더 시 패널 구성요소 참조(재렌더 없이 하이라이트/타이틀 갱신)
     private readonly Dictionary<UartDocumentView, Border> _panelBorders = new();
@@ -215,7 +217,7 @@ public partial class ShellWindow : Window
 
         if (docs.Count == 0) return;
 
-        if (!_splitMode)
+        if (!IsSplit)
         {
             var doc = ActiveDoc ?? docs[0];
             DetachViewFromParent(doc);
@@ -303,12 +305,15 @@ public partial class ShellWindow : Window
     private (int rows, int cols) ComputeLayout(int n)
     {
         if (n <= 1) return (1, 1);
-        if (n == 2) return _splitVertical ? (1, 2) : (2, 1);
-        if (n == 3) return (1, 3);
-        if (n == 4) return (2, 2);
-        int cols = (int)Math.Ceiling(Math.Sqrt(n));
-        int rows = (int)Math.Ceiling((double)n / cols);
-        return (rows, cols);
+        switch (_split)
+        {
+            case SplitLayout.Columns: return (1, n); // 모두 좌우로(열)
+            case SplitLayout.Rows: return (n, 1);    // 모두 상하로(행)
+            default:                                  // Grid: 균형 격자(ceil√n)
+                int cols = (int)Math.Ceiling(Math.Sqrt(n));
+                int rows = (int)Math.Ceiling((double)n / cols);
+                return (rows, cols);
+        }
     }
 
     private void ActivatePanel(UartDocumentView doc)
@@ -423,7 +428,7 @@ public partial class ShellWindow : Window
     private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!ReferenceEquals(e.Source, Tabs)) return;
-        if (_splitMode) UpdateSplitHighlights();
+        if (IsSplit) UpdateSplitHighlights();
         else RenderContent();
         RefreshChrome();
         ActiveDoc?.FocusTerminal();
@@ -436,7 +441,7 @@ public partial class ShellWindow : Window
         StatusText.Text = doc?.StatusMessage ?? "";
         MetricsText.Text = doc?.MetricsMessage ?? "";
         ConnDot.Fill = doc is not null ? DotFor(doc) : DotIdle;
-        MenuSplit.IsChecked = _splitMode;
+        SyncSplitChrome();
         MenuAutoReconnect.IsChecked = _state.AutoReconnect;
         RefreshMcpChrome();
     }
@@ -509,20 +514,31 @@ public partial class ShellWindow : Window
     private void FontLarger_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(+1);
     private void FontSmaller_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(-1);
 
-    private void Split_Click(object sender, RoutedEventArgs e)
+    /// <summary>툴바 아이콘/메뉴의 IsChecked 를 현재 레이아웃과 동기화(라디오 동작).</summary>
+    private void SyncSplitChrome()
     {
-        _splitMode = MenuSplit.IsChecked;
+        BtnSplitSingle.IsChecked = _split == SplitLayout.Single;
+        BtnSplitV.IsChecked = _split == SplitLayout.Columns;
+        BtnSplitH.IsChecked = _split == SplitLayout.Rows;
+        BtnSplitGrid.IsChecked = _split == SplitLayout.Grid;
+        MenuSplitSingle.IsChecked = _split == SplitLayout.Single;
+        MenuSplitV.IsChecked = _split == SplitLayout.Columns;
+        MenuSplitH.IsChecked = _split == SplitLayout.Rows;
+        MenuSplitGrid.IsChecked = _split == SplitLayout.Grid;
+    }
+
+    private void SetSplitLayout(SplitLayout layout)
+    {
+        _split = layout;
         RenderContent();
         RefreshChrome();
         ActiveDoc?.FocusTerminal();
     }
 
-    private void SplitOrient_Click(object sender, RoutedEventArgs e)
-    {
-        _splitVertical = !_splitVertical;
-        StatusText.Text = _splitVertical ? "2분할: 좌/우" : "2분할: 상/하";
-        if (_splitMode) RenderContent();
-    }
+    private void SplitSingle_Click(object sender, RoutedEventArgs e) => SetSplitLayout(SplitLayout.Single);
+    private void SplitV_Click(object sender, RoutedEventArgs e) => SetSplitLayout(SplitLayout.Columns);
+    private void SplitH_Click(object sender, RoutedEventArgs e) => SetSplitLayout(SplitLayout.Rows);
+    private void SplitGrid_Click(object sender, RoutedEventArgs e) => SetSplitLayout(SplitLayout.Grid);
 
     private void McpEnabled_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetEnabled(MenuMcpEnabled.IsChecked); RefreshMcpChrome(); }
@@ -561,7 +577,7 @@ public partial class ShellWindow : Window
         Tabs.Items.Remove(_dragTab);
         Tabs.Items.Insert(to, _dragTab);
         Tabs.SelectedItem = _dragTab;
-        if (_splitMode) RenderContent();
+        if (IsSplit) RenderContent();
     }
 
     private void Tabs_DragUp(object sender, MouseButtonEventArgs e) => _dragTab = null;

@@ -44,6 +44,7 @@
     <SolidColorBrush x:Key="TextMuted"     Color="{StaticResource C.TextMuted}"/>
     <SolidColorBrush x:Key="TextFaint"     Color="{StaticResource C.TextFaint}"/>
     <SolidColorBrush x:Key="Accent"        Color="{StaticResource C.Accent}"/>
+    <SolidColorBrush x:Key="AccentDeep"    Color="{StaticResource C.AccentDeep}"/>
     <SolidColorBrush x:Key="Green"         Color="{StaticResource C.Green}"/>
     <SolidColorBrush x:Key="GreenBright"   Color="{StaticResource C.GreenBright}"/>
     <SolidColorBrush x:Key="Blue"          Color="{StaticResource C.Blue}"/>
@@ -258,6 +259,66 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- ============================================================
+         화면 분할 아이콘 (16x16 외곽선 지오메트리) — 사용자 제공 디자인(SplitIcons).
+         Path 에 Stroke 로 그린다(채우기 아님). 어느 DPI 에서도 선명.
+         ============================================================ -->
+    <RectangleGeometry x:Key="Ic.Single" Rect="2.5,3.5,11,9" RadiusX="1.5" RadiusY="1.5"/>
+
+    <GeometryGroup x:Key="Ic.SplitV">
+        <RectangleGeometry Rect="2.5,3.5,11,9" RadiusX="1.5" RadiusY="1.5"/>
+        <LineGeometry StartPoint="8,3.5" EndPoint="8,12.5"/>
+    </GeometryGroup>
+
+    <GeometryGroup x:Key="Ic.SplitH">
+        <RectangleGeometry Rect="2.5,3.5,11,9" RadiusX="1.5" RadiusY="1.5"/>
+        <LineGeometry StartPoint="2.5,8" EndPoint="13.5,8"/>
+    </GeometryGroup>
+
+    <GeometryGroup x:Key="Ic.Grid">
+        <RectangleGeometry Rect="2.5,3.5,11,9" RadiusX="1.5" RadiusY="1.5"/>
+        <LineGeometry StartPoint="8,3.5" EndPoint="8,12.5"/>
+        <LineGeometry StartPoint="2.5,8" EndPoint="13.5,8"/>
+    </GeometryGroup>
+
+    <!-- 분할 툴바용 ToggleButton: 활성 시 accent 채움. 아이콘 지오메트리는 Tag 로 전달. -->
+    <Style x:Key="SplitToggle" TargetType="ToggleButton">
+        <Setter Property="Width" Value="26"/>
+        <Setter Property="Height" Value="22"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" CornerRadius="5" Background="Transparent">
+                        <Path x:Name="Ic" Data="{TemplateBinding Tag}"
+                              Stroke="{TemplateBinding Foreground}" StrokeThickness="1.4"
+                              Stretch="None" Width="16" Height="16"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentDeep}"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 세그먼트 알약 컨테이너(분할 토글 그룹을 감싼다) -->
+    <Style x:Key="SplitToolbar" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource TabIdle}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush2}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="3"/>
     </Style>
 
 </ResourceDictionary>
