@@ -86,7 +86,7 @@
     </Window.Resources>
 
     <DockPanel>
-        <Menu DockPanel.Dock="Top" Background="{StaticResource Bg}" Foreground="{StaticResource TextDim}"
+        <Menu DockPanel.Dock="Top"
               Padding="6,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderBrush2}">
             <MenuItem Header="터미널(_T)">
                 <MenuItem Header="새 연결(탭 추가)" InputGestureText="Ctrl+T" Click="NewTab_Click"/>
