@@ -30,10 +30,11 @@ public sealed class TerminalPalette
         Color.FromRgb(0xFF, 0xFF, 0xFF), // 15 bright white
     };
 
-    public Color DefaultForeground { get; init; } = Color.FromRgb(0xD4, 0xD4, 0xD4);
-    public Color DefaultBackground { get; init; } = Color.FromRgb(0x1E, 0x1E, 0x1E);
-    public Color SelectionBackground { get; init; } = Color.FromArgb(0x80, 0x26, 0x4F, 0x78);
-    public Color CursorColor { get; init; } = Color.FromRgb(0xD4, 0xD4, 0xD4);
+    // GitHub-dark(사용자 제공 디자인) 기준 기본색
+    public Color DefaultForeground { get; init; } = Color.FromRgb(0xE6, 0xED, 0xF5);
+    public Color DefaultBackground { get; init; } = Color.FromRgb(0x0D, 0x11, 0x17);
+    public Color SelectionBackground { get; init; } = Color.FromArgb(0x66, 0x2F, 0x81, 0xF7);
+    public Color CursorColor { get; init; } = Color.FromRgb(0x3F, 0xB9, 0x50);
 
     public static TerminalPalette Dark { get; } = new();
 

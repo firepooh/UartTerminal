@@ -276,19 +276,14 @@ public partial class UartDocumentView : UserControl
 
     // ── 하단 입력 전용 창 ───────────────────────────────────────────────────────
 
+    // 입력 필드 테두리 강조는 CommandInput 스타일(포커스 시 accent)이 처리. 프롬프트만 밝게.
     private void InputBox_GotFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        InputBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xCC));
-        InputLabel.Text = "입력창 (Enter=전송)";
-        InputLabel.Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC));
-    }
+        => Prompt.Foreground = new SolidColorBrush(Color.FromRgb(0x3F, 0xB9, 0x50));
 
     private void InputBox_LostFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        InputBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0x3E, 0x3E, 0x42));
-        InputLabel.Text = "입력창";
-        InputLabel.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
-    }
+        => Prompt.Foreground = new SolidColorBrush(Color.FromRgb(0x2E, 0xA0, 0x43));
+
+    private void Send_Click(object sender, RoutedEventArgs e) => SendInputLine();
 
     private void InputBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {

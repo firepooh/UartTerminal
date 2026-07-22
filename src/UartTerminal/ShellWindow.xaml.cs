@@ -2,32 +2,56 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using UartTerminal.Mcp;
 
 namespace UartTerminal;
 
 /// <summary>
-/// 탭 호스트 창(Tier A). 여러 UART 문서(<see cref="UartDocumentView"/>)를 탭으로 담고,
-/// 메뉴/상태바를 활성 탭에 연결한다. 탭을 다른 창으로 "분리"(TabItem 이동)하거나 "합치기"할 수 있으며,
-/// 같은 프로세스 내 reparent 라서 이동 중에도 시리얼 연결/ MCP 가 유지된다.
-/// 메인/떠다니는 창 모두 이 클래스의 인스턴스이며 <see cref="_isPrimary"/> 로 구분한다.
+/// 탭 호스트 창(Tier A + 화면 분할). 여러 UART 문서(<see cref="UartDocumentView"/>)를 탭 헤더로 관리하고,
+/// 콘텐츠는 <c>ContentHost</c> 가 직접 렌더한다 — 탭 모드(활성 1개) 또는 분할 모드(격자 배치).
+/// 문서는 TabItem.Tag 에 보관하며, 탭을 다른 창으로 옮기거나 분할해도 같은 프로세스 내 reparent 라
+/// 시리얼 연결/ MCP 가 유지된다. 메인/떠다니는 창 모두 이 클래스의 인스턴스다.
 /// </summary>
 public partial class ShellWindow : Window
 {
     private sealed class TabHooks
     {
         public required TextBlock HeaderText;
+        public required Ellipse HeaderDot;
         public required Action Title;
         public required Action<string> Status;
         public required Action<string> Metrics;
         public required Action Mcp;
     }
 
+    // GitHub-dark 팔레트(사용자 제공 디자인)
+    private static readonly Brush AccentBrush = Frozen(Color.FromRgb(0x2F, 0x81, 0xF7));
+    private static readonly Brush PanelBorderInactive = Frozen(Color.FromRgb(0x1C, 0x24, 0x33));
+    private static readonly Brush PanelHeaderBg = Frozen(Color.FromRgb(0x0F, 0x14, 0x1D));
+    private static readonly Brush ContentBg = Frozen(Color.FromRgb(0x0D, 0x11, 0x17));
+    private static readonly Brush DotConnected = Frozen(Color.FromRgb(0x3F, 0xB9, 0x50));
+    private static readonly Brush DotIdle = Frozen(Color.FromRgb(0x4B, 0x55, 0x63));
+    private static readonly Brush TitleActiveFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
+    private static readonly Brush TitleInactiveFg = Frozen(Color.FromRgb(0x8B, 0x97, 0xA8));
+    private static readonly Brush ConnectedFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
+    private static readonly Brush DisconnectedFg = Frozen(Color.FromRgb(0x8B, 0x97, 0xA8));
+
+    private static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+
     public static ShellWindow? Primary { get; private set; }
 
     private readonly AppState _state;
     private readonly bool _isPrimary;
     private readonly Dictionary<TabItem, TabHooks> _hooks = new();
+
+    private bool _splitMode;
+    private bool _splitVertical = true; // 2분할 기본 = 좌/우(세로 경계)
+
+    // 분할 렌더 시 패널 구성요소 참조(재렌더 없이 하이라이트/타이틀 갱신)
+    private readonly Dictionary<UartDocumentView, Border> _panelBorders = new();
+    private readonly Dictionary<UartDocumentView, TextBlock> _panelTitleTexts = new();
+    private readonly Dictionary<UartDocumentView, Ellipse> _panelDots = new();
 
     public ShellWindow(AppState state, bool isPrimary)
     {
@@ -39,9 +63,20 @@ public partial class ShellWindow : Window
         PreviewKeyDown += OnPreviewKeyDown;
         Loaded += OnLoaded;
         Closing += OnClosing;
+
+        Tabs.PreviewMouseLeftButtonDown += Tabs_DragDown;
+        Tabs.PreviewMouseMove += Tabs_DragMove;
+        Tabs.PreviewMouseLeftButtonUp += Tabs_DragUp;
     }
 
-    private UartDocumentView? ActiveDoc => (Tabs.SelectedItem as TabItem)?.Content as UartDocumentView;
+    // ── 문서/탭 접근 ─────────────────────────────────────────────────────────────
+
+    private static UartDocumentView? DocOf(TabItem ti) => ti.Tag as UartDocumentView;
+    private UartDocumentView? ActiveDoc => (Tabs.SelectedItem as TabItem)?.Tag as UartDocumentView;
+    private TabItem? TabOf(UartDocumentView doc) =>
+        Tabs.Items.OfType<TabItem>().FirstOrDefault(t => ReferenceEquals(t.Tag, doc));
+    private IEnumerable<UartDocumentView> AllDocs() =>
+        Tabs.Items.OfType<TabItem>().Select(DocOf).Where(d => d is not null)!.Cast<UartDocumentView>();
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
@@ -49,7 +84,7 @@ public partial class ShellWindow : Window
         {
             RestoreWindowBounds();
             NewTab();
-            if (Tabs.Items.Count == 0) Close(); // 최초 포트 선택 취소 시 종료
+            if (Tabs.Items.Count == 0) Close();
         }
         else
         {
@@ -59,7 +94,6 @@ public partial class ShellWindow : Window
 
     // ── 탭 생성/부착 ────────────────────────────────────────────────────────────
 
-    /// <summary>포트 선택 다이얼로그 → 새 UART 탭 추가·연결. 취소 시 아무것도 하지 않음.</summary>
     private void NewTab()
     {
         var dlg = new PortSelectDialog(_state.LastPort) { Owner = this };
@@ -67,27 +101,29 @@ public partial class ShellWindow : Window
             return;
 
         var doc = new UartDocumentView(_state);
-        var ti = new TabItem { Content = doc };
+        var ti = new TabItem { Tag = doc };
         AttachTab(ti, doc);
         Tabs.Items.Add(ti);
         Tabs.SelectedItem = ti;
         doc.ConnectTo(port);
+        RenderContent();
         doc.FocusTerminal();
     }
 
     private void AttachTab(TabItem ti, UartDocumentView doc)
     {
-        var (header, text) = BuildHeader(ti);
+        var (header, text, dot) = BuildHeader(ti);
         ti.Header = header;
-        UpdateHeaderText(text, doc);
+        UpdateHeaderText(text, dot, doc);
 
         var hooks = new TabHooks
         {
             HeaderText = text,
-            Title = () => { UpdateHeaderText(text, doc); if (IsTabActive(ti)) RefreshChrome(); },
-            Status = s => { if (IsTabActive(ti)) StatusText.Text = s; },
-            Metrics = s => { if (IsTabActive(ti)) MetricsText.Text = s; },
-            Mcp = () => { if (IsTabActive(ti)) RefreshMcpChrome(); },
+            HeaderDot = dot,
+            Title = () => { UpdateHeaderText(text, dot, doc); UpdatePanelTitle(doc); if (ReferenceEquals(ActiveDoc, doc)) RefreshChrome(); },
+            Status = s => { if (ReferenceEquals(ActiveDoc, doc)) StatusText.Text = s; },
+            Metrics = s => { if (ReferenceEquals(ActiveDoc, doc)) MetricsText.Text = s; },
+            Mcp = () => { if (ReferenceEquals(ActiveDoc, doc)) RefreshMcpChrome(); },
         };
         doc.TitleChanged += hooks.Title;
         doc.StatusChanged += hooks.Status;
@@ -98,7 +134,7 @@ public partial class ShellWindow : Window
 
     private void DetachTabHooks(TabItem ti)
     {
-        if (_hooks.TryGetValue(ti, out var h) && ti.Content is UartDocumentView doc)
+        if (_hooks.TryGetValue(ti, out var h) && DocOf(ti) is { } doc)
         {
             doc.TitleChanged -= h.Title;
             doc.StatusChanged -= h.Status;
@@ -108,29 +144,34 @@ public partial class ShellWindow : Window
         _hooks.Remove(ti);
     }
 
-    private (FrameworkElement header, TextBlock text) BuildHeader(TabItem ti)
+    private (FrameworkElement header, TextBlock text, Ellipse dot) BuildHeader(TabItem ti)
     {
         var panel = new DockPanel { LastChildFill = true };
 
         var close = new Button
         {
-            Content = "×",
-            Width = 18,
-            Height = 16,
-            Padding = new Thickness(0),
             Margin = new Thickness(8, 0, 0, 0),
-            Focusable = false,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99)),
+            VerticalAlignment = VerticalAlignment.Center,
             ToolTip = "탭 닫기",
+            Style = (Style)FindResource("TabCloseButton"),
         };
         close.Click += (_, _) => CloseTab(ti);
         DockPanel.SetDock(close, Dock.Right);
 
+        var dot = new Ellipse
+        {
+            Width = 7,
+            Height = 7,
+            Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Fill = DotIdle,
+        };
+        DockPanel.SetDock(dot, Dock.Left);
+
         var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
 
         panel.Children.Add(close);
+        panel.Children.Add(dot);
         panel.Children.Add(text);
 
         var cm = new ContextMenu();
@@ -145,29 +186,177 @@ public partial class ShellWindow : Window
         cm.Items.Add(miClose);
         panel.ContextMenu = cm;
 
-        return (panel, text);
+        return (panel, text, dot);
     }
 
-    private static void UpdateHeaderText(TextBlock text, UartDocumentView doc)
+    private static void UpdateHeaderText(TextBlock text, Ellipse dot, UartDocumentView doc)
     {
         text.Text = doc.Title;
-        text.Foreground = doc.IsConnected
-            ? new SolidColorBrush(Color.FromRgb(0xD4, 0xD4, 0xD4))
-            : new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99));
+        text.Foreground = doc.IsConnected ? ConnectedFg : DisconnectedFg;
+        dot.Fill = doc.IsConnected ? DotConnected : DotIdle;
     }
 
-    private bool IsTabActive(TabItem ti) => ReferenceEquals(Tabs.SelectedItem, ti);
+    // ── 콘텐츠 렌더(탭/분할) ─────────────────────────────────────────────────────
+
+    private void RenderContent()
+    {
+        var docs = AllDocs().ToList();
+        foreach (var d in docs) DetachViewFromParent(d);
+        ContentHost.Children.Clear();
+        _panelBorders.Clear();
+        _panelTitleTexts.Clear();
+        _panelDots.Clear();
+
+        if (docs.Count == 0) return;
+
+        if (!_splitMode)
+        {
+            var doc = ActiveDoc ?? docs[0];
+            DetachViewFromParent(doc);
+            ContentHost.Children.Add(doc);
+            return;
+        }
+
+        var (rows, cols) = ComputeLayout(docs.Count);
+        var grid = new Grid();
+        for (int r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        for (int c = 0; c < cols; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        for (int i = 0; i < docs.Count; i++)
+        {
+            var panel = BuildPanel(docs[i]);
+            Grid.SetRow(panel, i / cols);
+            Grid.SetColumn(panel, i % cols);
+            grid.Children.Add(panel);
+        }
+        ContentHost.Children.Add(grid);
+    }
+
+    private Border BuildPanel(UartDocumentView doc)
+    {
+        bool active = ReferenceEquals(ActiveDoc, doc);
+        var mono = (FontFamily)FindResource("MonoFont");
+
+        var border = new Border
+        {
+            Margin = new Thickness(2),
+            BorderThickness = new Thickness(active ? 2 : 1),
+            BorderBrush = active ? AccentBrush : PanelBorderInactive,
+            Background = ContentBg,
+        };
+
+        var dock = new DockPanel { LastChildFill = true };
+
+        var dot = new Ellipse
+        {
+            Width = 6, Height = 6, Margin = new Thickness(0, 0, 7, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Fill = doc.IsConnected ? DotConnected : DotIdle,
+        };
+        var title = new TextBlock
+        {
+            Text = doc.Title,
+            FontFamily = mono,
+            FontSize = 11.5,
+            FontWeight = active ? FontWeights.Bold : FontWeights.Normal,
+            Foreground = active ? TitleActiveFg : TitleInactiveFg,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var titleInner = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(11, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        titleInner.Children.Add(dot);
+        titleInner.Children.Add(title);
+
+        var titleBar = new Border
+        {
+            Background = PanelHeaderBg,
+            Height = 26,
+            BorderBrush = PanelBorderInactive,
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = titleInner,
+        };
+        DockPanel.SetDock(titleBar, Dock.Top);
+        dock.Children.Add(titleBar);
+
+        DetachViewFromParent(doc);
+        dock.Children.Add(doc);
+
+        border.Child = dock;
+        border.PreviewMouseDown += (_, _) => ActivatePanel(doc);
+
+        _panelBorders[doc] = border;
+        _panelTitleTexts[doc] = title;
+        _panelDots[doc] = dot;
+        return border;
+    }
+
+    private (int rows, int cols) ComputeLayout(int n)
+    {
+        if (n <= 1) return (1, 1);
+        if (n == 2) return _splitVertical ? (1, 2) : (2, 1);
+        if (n == 3) return (1, 3);
+        if (n == 4) return (2, 2);
+        int cols = (int)Math.Ceiling(Math.Sqrt(n));
+        int rows = (int)Math.Ceiling((double)n / cols);
+        return (rows, cols);
+    }
+
+    private void ActivatePanel(UartDocumentView doc)
+    {
+        var ti = TabOf(doc);
+        if (ti is not null) Tabs.SelectedItem = ti; // 탭 동기화(SelectionChanged 에서 하이라이트/포커스)
+        UpdateSplitHighlights();
+        doc.FocusTerminal();
+    }
+
+    private void UpdateSplitHighlights()
+    {
+        foreach (var (doc, border) in _panelBorders)
+        {
+            bool active = ReferenceEquals(ActiveDoc, doc);
+            border.BorderBrush = active ? AccentBrush : PanelBorderInactive;
+            border.BorderThickness = new Thickness(active ? 2 : 1);
+            if (_panelTitleTexts.TryGetValue(doc, out var tx))
+            {
+                tx.Foreground = active ? TitleActiveFg : TitleInactiveFg;
+                tx.FontWeight = active ? FontWeights.Bold : FontWeights.Normal;
+            }
+        }
+    }
+
+    private void UpdatePanelTitle(UartDocumentView doc)
+    {
+        if (_panelTitleTexts.TryGetValue(doc, out var tx)) tx.Text = doc.Title;
+        if (_panelDots.TryGetValue(doc, out var dot)) dot.Fill = doc.IsConnected ? DotConnected : DotIdle;
+    }
+
+    private static void DetachViewFromParent(UartDocumentView doc)
+    {
+        switch (doc.Parent)
+        {
+            case Panel p: p.Children.Remove(doc); break;
+            case Decorator d: d.Child = null; break;
+            case ContentControl c: c.Content = null; break;
+            case ContentPresenter cp: cp.Content = null; break;
+        }
+    }
 
     // ── 탭 닫기 ──────────────────────────────────────────────────────────────────
 
     private void CloseTab(TabItem ti)
     {
-        var doc = ti.Content as UartDocumentView;
+        var doc = DocOf(ti);
         DetachTabHooks(ti);
+        if (doc is not null) DetachViewFromParent(doc);
         Tabs.Items.Remove(ti);
         doc?.CloseDocument();
-        if (Tabs.Items.Count == 0)
-            Close(); // 창의 마지막 탭 → 창 닫기(메인이면 앱 종료)
+        if (Tabs.Items.Count == 0) { Close(); return; }
+        RenderContent();
+        RefreshChrome();
     }
 
     private void CloseActiveTab()
@@ -175,7 +364,7 @@ public partial class ShellWindow : Window
         if (Tabs.SelectedItem is TabItem ti) CloseTab(ti);
     }
 
-    // ── 분리 / 합치기 (창 간 TabItem 이동) ───────────────────────────────────────
+    // ── 분리 / 합치기 ────────────────────────────────────────────────────────────
 
     private void DetachTab(TabItem ti)
     {
@@ -203,12 +392,14 @@ public partial class ShellWindow : Window
 
     private void MoveTab(TabItem ti, ShellWindow target)
     {
-        if (ti.Content is not UartDocumentView doc) return;
+        if (DocOf(ti) is not { } doc) return;
         DetachTabHooks(ti);
+        DetachViewFromParent(doc);
         Tabs.Items.Remove(ti);
+        RenderContent();
+        RefreshChrome();
         target.AdoptTab(ti, doc);
-        if (Tabs.Items.Count == 0 && !_isPrimary)
-            Close();
+        if (Tabs.Items.Count == 0 && !_isPrimary) Close();
     }
 
     private void AdoptTab(TabItem ti, UartDocumentView doc)
@@ -216,15 +407,18 @@ public partial class ShellWindow : Window
         AttachTab(ti, doc);
         Tabs.Items.Add(ti);
         Tabs.SelectedItem = ti;
+        RenderContent();
         RefreshChrome();
         doc.FocusTerminal();
     }
 
-    // ── 탭 전환 / 크롬 갱신 ──────────────────────────────────────────────────────
+    // ── 탭 전환 / 크롬 ───────────────────────────────────────────────────────────
 
     private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!ReferenceEquals(e.Source, Tabs)) return;
+        if (_splitMode) UpdateSplitHighlights();
+        else RenderContent();
         RefreshChrome();
         ActiveDoc?.FocusTerminal();
     }
@@ -235,6 +429,8 @@ public partial class ShellWindow : Window
         Title = doc is null ? "UartTerminal" : $"{doc.Title} - UartTerminal";
         StatusText.Text = doc?.StatusMessage ?? "";
         MetricsText.Text = doc?.MetricsMessage ?? "";
+        ConnDot.Fill = doc?.IsConnected == true ? DotConnected : DotIdle;
+        MenuSplit.IsChecked = _splitMode;
         RefreshMcpChrome();
     }
 
@@ -274,7 +470,7 @@ public partial class ShellWindow : Window
         { CloseActiveTab(); e.Handled = true; return; }
     }
 
-    // ── 메뉴(활성 탭으로 포워드) ─────────────────────────────────────────────────
+    // ── 메뉴 ─────────────────────────────────────────────────────────────────────
 
     private void NewTab_Click(object sender, RoutedEventArgs e) => NewTab();
     private void Reconnect_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ReconnectViaDialog();
@@ -292,11 +488,72 @@ public partial class ShellWindow : Window
     private void FontLarger_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(+1);
     private void FontSmaller_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(-1);
 
+    private void Split_Click(object sender, RoutedEventArgs e)
+    {
+        _splitMode = MenuSplit.IsChecked;
+        RenderContent();
+        RefreshChrome();
+        ActiveDoc?.FocusTerminal();
+    }
+
+    private void SplitOrient_Click(object sender, RoutedEventArgs e)
+    {
+        _splitVertical = !_splitVertical;
+        StatusText.Text = _splitVertical ? "2분할: 좌/우" : "2분할: 상/하";
+        if (_splitMode) RenderContent();
+    }
+
     private void McpEnabled_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetEnabled(MenuMcpEnabled.IsChecked); RefreshMcpChrome(); }
     private void McpReadOnly_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetReadOnly(MenuMcpReadOnly.IsChecked); RefreshMcpChrome(); }
     private void McpCopyCmd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.McpCopyCommand();
+
+    // ── 탭 순서 변경(드래그) ─────────────────────────────────────────────────────
+
+    private Point _dragStart;
+    private TabItem? _dragTab;
+
+    private void Tabs_DragDown(object sender, MouseButtonEventArgs e)
+    {
+        if (FindAncestor<Button>(e.OriginalSource as DependencyObject) is not null) return;
+        var ti = FindAncestor<TabItem>(e.OriginalSource as DependencyObject);
+        if (ti is not null && Tabs.Items.Contains(ti))
+        {
+            _dragTab = ti;
+            _dragStart = e.GetPosition(Tabs);
+        }
+    }
+
+    private void Tabs_DragMove(object sender, MouseEventArgs e)
+    {
+        if (_dragTab is null || e.LeftButton != MouseButtonState.Pressed) return;
+        if (!Tabs.Items.Contains(_dragTab)) { _dragTab = null; return; }
+
+        var pos = e.GetPosition(Tabs);
+        if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance) return;
+
+        var over = FindAncestor<TabItem>(e.OriginalSource as DependencyObject);
+        if (over is null || ReferenceEquals(over, _dragTab) || !Tabs.Items.Contains(over)) return;
+
+        int to = Tabs.Items.IndexOf(over);
+        Tabs.Items.Remove(_dragTab);
+        Tabs.Items.Insert(to, _dragTab);
+        Tabs.SelectedItem = _dragTab;
+        if (_splitMode) RenderContent();
+    }
+
+    private void Tabs_DragUp(object sender, MouseButtonEventArgs e) => _dragTab = null;
+
+    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject
+    {
+        while (d is not null)
+        {
+            if (d is T t) return t;
+            d = VisualTreeHelper.GetParent(d);
+        }
+        return null;
+    }
 
     // ── 창 위치/크기 ─────────────────────────────────────────────────────────────
 
@@ -327,11 +584,10 @@ public partial class ShellWindow : Window
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        // 이 창의 모든 탭 문서 정리(세션/ MCP)
         foreach (var ti in Tabs.Items.OfType<TabItem>().ToList())
         {
             DetachTabHooks(ti);
-            (ti.Content as UartDocumentView)?.CloseDocument();
+            DocOf(ti)?.CloseDocument();
         }
 
         if (_isPrimary)

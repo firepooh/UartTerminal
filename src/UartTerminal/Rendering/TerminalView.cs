@@ -55,7 +55,7 @@ public sealed class TerminalView : FrameworkElement
         }
     }
 
-    private static readonly string[] PrimaryFonts = { "Cascadia Mono", "D2Coding", "Consolas", "Courier New" };
+    private static readonly string[] PrimaryFonts = { "Cascadia Code", "Cascadia Mono", "D2Coding", "Consolas", "Courier New" };
     private static readonly string[] FallbackFonts = { "Malgun Gothic", "맑은 고딕", "Gulim", "굴림" };
 
     private readonly TerminalBuffer _buffer;
