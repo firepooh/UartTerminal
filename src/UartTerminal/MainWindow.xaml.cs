@@ -180,22 +180,27 @@ public partial class MainWindow : Window
     {
         var mods = Keyboard.Modifiers;
 
-        // ALT 단축키: 재연결(포트 선택 다이얼로그) / 연결 종료. (Alt 조합은 실제 키가 SystemKey 에 담긴다)
+        // ALT 단축키는 어디서 눌러도 동작(전역): 재연결(포트 선택 다이얼로그) / 연결 종료.
+        // (Alt 조합은 실제 키가 SystemKey 에 담긴다)
         if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.N)
         { ReconnectViaDialog(); e.Handled = true; return; }
         if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.I)
         { _session?.Close(); e.Handled = true; return; }
 
-        // UI 단축키 우선 처리
+        // 이하 창-레벨 단축키/타입-스루는 "메인 터미널 뷰가 포커스일 때만" 처리한다.
+        // 그렇지 않으면(하단 입력창/메뉴 포커스) 복사·붙여넣기·캐럿이동을 가로채지 않고 그쪽 기본 동작에 위임.
+        if (_view is null || !_view.IsKeyboardFocusWithin) return;
+
+        // UI 단축키(터미널 뷰 대상). 복사/스크롤은 연결 여부와 무관하게 동작.
         if (mods == ModifierKeys.Control && e.Key == Key.Insert)
         { Copy_Click(null, null!); e.Handled = true; return; }
         if (mods == ModifierKeys.Shift && e.Key == Key.Insert)
         { DoPaste(); e.Handled = true; return; }
         if (mods == ModifierKeys.Control && e.Key == Key.End)
-        { _view?.ScrollToEnd(); e.Handled = true; return; }
-        if (e.Key == Key.PageUp && _view is not null)
+        { _view.ScrollToEnd(); e.Handled = true; return; }
+        if (e.Key == Key.PageUp)
         { _view.ScrollByRows(-(_view.Rows - 1)); e.Handled = true; return; }
-        if (e.Key == Key.PageDown && _view is not null)
+        if (e.Key == Key.PageDown)
         { _view.ScrollByRows(_view.Rows - 1); e.Handled = true; return; }
         if (mods == ModifierKeys.Control && (e.Key == Key.OemPlus || e.Key == Key.Add))
         { AdjustFont(+1); e.Handled = true; return; }
@@ -203,9 +208,6 @@ public partial class MainWindow : Window
         { AdjustFont(-1); e.Handled = true; return; }
 
         if (!_connected) return;
-
-        // 메인 터미널이 포커스일 때만 특수키 type-through(입력창/메뉴 포커스 시엔 그쪽이 처리)
-        if (_view is null || !_view.IsKeyboardFocusWithin) return;
 
         var bytes = KeyMap.Map(e.Key, mods);
         if (bytes is not null)
@@ -227,18 +229,19 @@ public partial class MainWindow : Window
 
     private void Disconnect_Click(object sender, RoutedEventArgs e) => _session?.Close();
 
-    /// <summary>ALT+N: 현재 연결을 닫고 포트 리스트를 다시 보여준 뒤 선택 포트로 재연결(마지막 포트 preselect).</summary>
+    /// <summary>ALT+N: 포트 리스트를 다시 보여준 뒤 선택 포트로 재연결(마지막 포트 preselect).
+    /// 다이얼로그에서 실제로 포트를 고른 경우에만 기존 연결을 닫는다(취소 시 현재 연결 유지).</summary>
     private void ReconnectViaDialog()
     {
-        CloseCurrentSession();
-
         string? preselect = string.IsNullOrEmpty(_portName) ? _state.LastPort : _portName;
         var dlg = new PortSelectDialog(preselect) { Owner = this };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
         {
             SetStatus("재연결 취소됨");
-            return;
+            return; // 취소: 기존 연결을 그대로 유지
         }
+
+        CloseCurrentSession(); // 선택이 확정된 뒤에만 기존 세션 정리
 
         if (_engine is null)
         {
@@ -277,7 +280,13 @@ public partial class MainWindow : Window
         bool wasEnabled = _bridge.Enabled;
         try { _mcpServer?.Stop(); } catch { }
         _mcpServer = new McpPipeServer(_bridge, _portName);
-        if (wasEnabled) _mcpServer.Start();
+        if (wasEnabled)
+        {
+            _mcpServer.Start();
+            // 파이프명이 포트에 종속이라 바뀜 → 기존 .mcp.json 등록은 무효. 재등록 필요를 명확히 안내.
+            DiagLog.Info($"MCP 파이프 변경: {McpPipeServer.PipeNameFor(_portName)} — 릴레이 재등록 필요");
+            SetStatus($"포트 변경 — MCP 재등록 필요: [MCP] 메뉴 > 등록 명령 복사 ({_portName})");
+        }
         UpdateMcpStatus();
     }
 
@@ -338,7 +347,9 @@ public partial class MainWindow : Window
     private void HistoryNav(int dir)
     {
         if (_history.Count == 0) return;
-        _historyIndex = Math.Clamp(_historyIndex + dir, 0, _history.Count);
+        int next = Math.Clamp(_historyIndex + dir, 0, _history.Count);
+        if (next == _historyIndex) return; // 최신 슬롯에서 Down 등 변화 없으면 입력 중이던 텍스트 보존
+        _historyIndex = next;
         InputBox.Text = _historyIndex < _history.Count ? _history[_historyIndex] : "";
         InputBox.CaretIndex = InputBox.Text.Length;
     }
@@ -440,10 +451,12 @@ public partial class MainWindow : Window
         }
         else
         {
-            McpStatusText.Text = readOnly ? "MCP: 켜짐 (읽기 전용)" : "MCP: 켜짐";
-            McpStatusText.Foreground = new System.Windows.Media.SolidColorBrush(readOnly
-                ? System.Windows.Media.Color.FromRgb(0xD7, 0xBA, 0x7D)   // 주의(황)
-                : System.Windows.Media.Color.FromRgb(0x6A, 0x99, 0x55)); // 활성(녹)
+            // 파이프명(포트)을 함께 표시 → 포트 변경 시 등록 파이프가 바뀐 것을 사용자가 인지
+            string pipe = McpPipeServer.PipeNameFor(_portName);
+            McpStatusText.Text = readOnly ? $"MCP: 켜짐 (읽기 전용, {pipe})" : $"MCP: 켜짐 ({pipe})";
+            McpStatusText.Foreground = new SolidColorBrush(readOnly
+                ? Color.FromRgb(0xD7, 0xBA, 0x7D)   // 주의(황)
+                : Color.FromRgb(0x6A, 0x99, 0x55)); // 활성(녹)
         }
     }
 
