@@ -54,7 +54,8 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 - 커스텀 렌더러 (GlyphRun 가상화, 30~60Hz 배칭, Per-Monitor V2 DPI)
 - 키보드 입력 → TX: **즉시 전송(type-through)** — 키를 누르는 즉시 해당 바이트 송신 (§6 Q1). 키맵: 화살표=ESC[A~D(linenoise 히스토리 ↑↓/커서 ←→), Backspace=0x7F
 - 복사/붙여넣기(드래그 선택=복사, 우클릭=붙여넣기), Clear screen/buffer 메뉴
-- USB 핫플러그 크래시 방어: 분리 감지 → 창 제목 [disconnected] → 수동 재연결
+- USB 핫플러그 크래시 방어: 분리 감지 → 창 제목 [끊김] → 수동 재연결(Alt+N)
+- **자동 재연결**(기본 켬, [터미널] 메뉴 토글): USB 분리 후 같은 포트가 다시 나타나면 1.5초 폴링으로 감지해 조용히 재연결(팝업/포커스 뺏기 없음). 대기 중엔 상태바 안내 + 헤더 점 호박색. 사용자가 직접 끊은 경우(Alt+I)엔 동작 안 함
 - 창 제목: `COM4:115200 - UartTerminal`
 - 앱 진단 로그 최소 구현 (%LOCALAPPDATA%, 예외/포트 이벤트)
 

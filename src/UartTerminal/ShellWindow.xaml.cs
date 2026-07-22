@@ -32,6 +32,7 @@ public partial class ShellWindow : Window
     private static readonly Brush ContentBg = Frozen(Color.FromRgb(0x0D, 0x11, 0x17));
     private static readonly Brush DotConnected = Frozen(Color.FromRgb(0x3F, 0xB9, 0x50));
     private static readonly Brush DotIdle = Frozen(Color.FromRgb(0x4B, 0x55, 0x63));
+    private static readonly Brush DotReconnecting = Frozen(Color.FromRgb(0xD2, 0x99, 0x22));
     private static readonly Brush TitleActiveFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
     private static readonly Brush TitleInactiveFg = Frozen(Color.FromRgb(0x8B, 0x97, 0xA8));
     private static readonly Brush ConnectedFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
@@ -75,11 +76,12 @@ public partial class ShellWindow : Window
     private UartDocumentView? ActiveDoc => (Tabs.SelectedItem as TabItem)?.Tag as UartDocumentView;
     private TabItem? TabOf(UartDocumentView doc) =>
         Tabs.Items.OfType<TabItem>().FirstOrDefault(t => ReferenceEquals(t.Tag, doc));
-    private IEnumerable<UartDocumentView> AllDocs() =>
+    internal IEnumerable<UartDocumentView> AllDocs() =>
         Tabs.Items.OfType<TabItem>().Select(DocOf).Where(d => d is not null)!.Cast<UartDocumentView>();
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
+        MenuAutoReconnect.IsChecked = _state.AutoReconnect;
         if (_isPrimary)
         {
             RestoreWindowBounds();
@@ -189,11 +191,15 @@ public partial class ShellWindow : Window
         return (panel, text, dot);
     }
 
+    /// <summary>연결 상태 점 색: 연결됨=초록, 재연결 대기=호박, 끊김=회색.</summary>
+    private static Brush DotFor(UartDocumentView doc) =>
+        doc.IsConnected ? DotConnected : doc.IsReconnecting ? DotReconnecting : DotIdle;
+
     private static void UpdateHeaderText(TextBlock text, Ellipse dot, UartDocumentView doc)
     {
         text.Text = doc.Title;
         text.Foreground = doc.IsConnected ? ConnectedFg : DisconnectedFg;
-        dot.Fill = doc.IsConnected ? DotConnected : DotIdle;
+        dot.Fill = DotFor(doc);
     }
 
     // ── 콘텐츠 렌더(탭/분할) ─────────────────────────────────────────────────────
@@ -251,7 +257,7 @@ public partial class ShellWindow : Window
         {
             Width = 6, Height = 6, Margin = new Thickness(0, 0, 7, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            Fill = doc.IsConnected ? DotConnected : DotIdle,
+            Fill = DotFor(doc),
         };
         var title = new TextBlock
         {
@@ -331,7 +337,7 @@ public partial class ShellWindow : Window
     private void UpdatePanelTitle(UartDocumentView doc)
     {
         if (_panelTitleTexts.TryGetValue(doc, out var tx)) tx.Text = doc.Title;
-        if (_panelDots.TryGetValue(doc, out var dot)) dot.Fill = doc.IsConnected ? DotConnected : DotIdle;
+        if (_panelDots.TryGetValue(doc, out var dot)) dot.Fill = DotFor(doc);
     }
 
     private static void DetachViewFromParent(UartDocumentView doc)
@@ -429,8 +435,9 @@ public partial class ShellWindow : Window
         Title = doc is null ? "UartTerminal" : $"{doc.Title} - UartTerminal";
         StatusText.Text = doc?.StatusMessage ?? "";
         MetricsText.Text = doc?.MetricsMessage ?? "";
-        ConnDot.Fill = doc?.IsConnected == true ? DotConnected : DotIdle;
+        ConnDot.Fill = doc is not null ? DotFor(doc) : DotIdle;
         MenuSplit.IsChecked = _splitMode;
+        MenuAutoReconnect.IsChecked = _state.AutoReconnect;
         RefreshMcpChrome();
     }
 
@@ -475,6 +482,20 @@ public partial class ShellWindow : Window
     private void NewTab_Click(object sender, RoutedEventArgs e) => NewTab();
     private void Reconnect_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ReconnectViaDialog();
     private void Disconnect_Click(object sender, RoutedEventArgs e) => ActiveDoc?.Disconnect();
+
+    private void AutoReconnect_Click(object sender, RoutedEventArgs e)
+    {
+        _state.AutoReconnect = MenuAutoReconnect.IsChecked;
+        _state.Save();
+        // 설정은 전역(_state)이므로 열린 모든 창의 메뉴 체크를 동기화하고,
+        // 끄는 경우 모든 창의 진행 중 자동 재연결 대기를 즉시 취소한다(플로팅 창 포함).
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+        {
+            w.MenuAutoReconnect.IsChecked = _state.AutoReconnect;
+            if (!_state.AutoReconnect)
+                foreach (var d in w.AllDocs()) d.CancelAutoReconnect();
+        }
+    }
     private void Detach_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) DetachTab(ti); }
     private void Merge_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) MergeTab(ti); }
     private void CloseTab_Click(object sender, RoutedEventArgs e) => CloseActiveTab();

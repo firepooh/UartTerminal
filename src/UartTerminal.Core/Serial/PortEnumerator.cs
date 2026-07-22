@@ -54,6 +54,17 @@ public static partial class PortEnumerator
             .ToList();
     }
 
+    /// <summary>지정 포트명이 현재 존재하는지 빠르게 확인(WMI 없이 <see cref="SerialPort.GetPortNames"/>만). 자동 재연결 폴링용.</summary>
+    public static bool PortExists(string portName)
+    {
+        if (string.IsNullOrWhiteSpace(portName))
+            return false;
+        foreach (var n in SafeGetPortNames())
+            if (string.Equals(n, portName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
     private static IEnumerable<string> SafeGetPortNames()
     {
         try

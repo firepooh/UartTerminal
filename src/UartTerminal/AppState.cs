@@ -11,6 +11,10 @@ public sealed class AppState
 {
     public string? LastPort { get; set; }
     public double FontSize { get; set; } = 14.0;
+
+    /// <summary>USB 재접속(장치 분리) 시 같은 포트로 자동 재연결할지. 기본 켬.</summary>
+    public bool AutoReconnect { get; set; } = true;
+
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }
