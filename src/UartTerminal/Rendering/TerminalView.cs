@@ -88,6 +88,11 @@ public sealed class TerminalView : FrameworkElement
     private (long Line, int Cell) _selAnchor;
     private (long Line, int Cell) _selFocus;
 
+    // 드래그 선택이 뷰 밖으로 나갈 때의 자동 스크롤
+    private DispatcherTimer? _autoScrollTimer;
+    private int _autoScrollDir;    // -1=위, +1=아래, 0=정지
+    private Point _lastDragPoint;  // 최근 드래그 좌표(자동 스크롤 시 열 위치 유지용)
+
     public event Action<ScrollMetrics>? ScrollMetricsChanged;
 
     /// <summary>드래그 선택 완료 시 선택 텍스트를 전달(TeraTerm식 자동 복사).</summary>
@@ -161,6 +166,13 @@ public sealed class TerminalView : FrameworkElement
             else MoveAnchorDown(deltaRows);
         }
         _forceRender = true;
+
+        // 선택 중 스크롤(휠/PageUp·Down/자동 스크롤 공통) → 스크롤 방향의 가장자리로 선택을 확장.
+        if (_selecting && deltaRows != 0)
+        {
+            double edgeY = deltaRows < 0 ? 0 : Math.Max(0, ActualHeight - 1);
+            UpdateSelectionFocusFromPoint(new Point(_lastDragPoint.X, edgeY));
+        }
     }
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -539,7 +551,9 @@ public sealed class TerminalView : FrameworkElement
     {
         base.OnMouseLeftButtonDown(e);
         Focus();
-        var pos = HitTest(e.GetPosition(this));
+        var p = e.GetPosition(this);
+        _lastDragPoint = p;
+        var pos = HitTest(p);
         if (pos is null) return;
         _selAnchor = _selFocus = pos.Value;
         _hasSelection = false;
@@ -552,11 +566,21 @@ public sealed class TerminalView : FrameworkElement
     {
         base.OnMouseMove(e);
         if (!_selecting) return;
-        var pos = HitTest(e.GetPosition(this));
-        if (pos is null) return;
-        _selFocus = pos.Value;
-        _hasSelection = _selFocus != _selAnchor;
-        _forceRender = true;
+        var p = e.GetPosition(this);
+        _lastDragPoint = p;
+
+        // 뷰 위/아래로 벗어나면 그 방향으로 자동 스크롤하며 선택을 계속 확장(한 화면을 넘는 드래그 선택).
+        int dir = p.Y < 0 ? -1 : (p.Y > ActualHeight ? 1 : 0);
+        if (dir != 0)
+        {
+            _autoScrollDir = dir;
+            StartAutoScroll();
+        }
+        else
+        {
+            StopAutoScroll();
+            UpdateSelectionFocusFromPoint(p);
+        }
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -564,6 +588,7 @@ public sealed class TerminalView : FrameworkElement
         base.OnMouseLeftButtonUp(e);
         if (!_selecting) return;
         _selecting = false;
+        StopAutoScroll();
         ReleaseMouseCapture();
         if (_hasSelection)
         {
@@ -571,6 +596,49 @@ public sealed class TerminalView : FrameworkElement
             if (!string.IsNullOrEmpty(text))
                 AutoCopyRequested?.Invoke(text!);
         }
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        _selecting = false;
+        StopAutoScroll();
+    }
+
+    // 드래그 좌표를 뷰 안으로 clamp 해 히트테스트하고 선택 초점을 갱신.
+    private void UpdateSelectionFocusFromPoint(Point p)
+    {
+        double y = Math.Clamp(p.Y, 0, Math.Max(0, ActualHeight - 1));
+        var pos = HitTest(new Point(p.X, y));
+        if (pos is null) return;
+        _selFocus = pos.Value;
+        _hasSelection = _selFocus != _selAnchor;
+        _forceRender = true;
+    }
+
+    private void StartAutoScroll()
+    {
+        if (_autoScrollTimer is null)
+        {
+            _autoScrollTimer = new DispatcherTimer(DispatcherPriority.Input)
+            {
+                Interval = TimeSpan.FromMilliseconds(40)
+            };
+            _autoScrollTimer.Tick += AutoScrollTick;
+        }
+        if (!_autoScrollTimer.IsEnabled) _autoScrollTimer.Start();
+    }
+
+    private void StopAutoScroll()
+    {
+        _autoScrollDir = 0;
+        _autoScrollTimer?.Stop();
+    }
+
+    private void AutoScrollTick(object? sender, EventArgs e)
+    {
+        if (!_selecting || _autoScrollDir == 0) { StopAutoScroll(); return; }
+        ScrollByRows(_autoScrollDir * 2); // 방향당 2행씩(초점 확장은 ScrollByRows 내부에서 처리)
     }
 
     protected override void OnMouseRightButtonUp(MouseButtonEventArgs e)
@@ -626,6 +694,7 @@ public sealed class TerminalView : FrameworkElement
     {
         _hasSelection = false;
         _selecting = false;
+        StopAutoScroll();
         _forceRender = true;
     }
 
