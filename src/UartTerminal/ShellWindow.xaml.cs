@@ -33,6 +33,7 @@ public partial class ShellWindow : Window
     private static readonly Brush DotConnected = Frozen(Color.FromRgb(0x3F, 0xB9, 0x50));
     private static readonly Brush DotIdle = Frozen(Color.FromRgb(0x4B, 0x55, 0x63));
     private static readonly Brush DotReconnecting = Frozen(Color.FromRgb(0xD2, 0x99, 0x22));
+    private static readonly Brush DotReleased = Frozen(Color.FromRgb(0x8A, 0x63, 0xD2));
     private static readonly Brush TitleActiveFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
     private static readonly Brush TitleInactiveFg = Frozen(Color.FromRgb(0x8B, 0x97, 0xA8));
     private static readonly Brush ConnectedFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
@@ -193,9 +194,12 @@ public partial class ShellWindow : Window
         return (panel, text, dot);
     }
 
-    /// <summary>연결 상태 점 색: 연결됨=초록, 재연결 대기=호박, 끊김=회색.</summary>
+    /// <summary>연결 상태 점 색: 연결됨=초록, AI 양보=보라, 재연결 대기=호박, 끊김=회색.</summary>
     private static Brush DotFor(UartDocumentView doc) =>
-        doc.IsConnected ? DotConnected : doc.IsReconnecting ? DotReconnecting : DotIdle;
+        doc.IsConnected ? DotConnected
+        : doc.IsPortReleased ? DotReleased
+        : doc.IsReconnecting ? DotReconnecting
+        : DotIdle;
 
     private static void UpdateHeaderText(TextBlock text, Ellipse dot, UartDocumentView doc)
     {

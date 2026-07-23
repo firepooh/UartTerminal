@@ -66,10 +66,13 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 - **SDK**: 공식 C# SDK — NuGet [`ModelContextProtocol`](https://www.nuget.org/packages/ModelContextProtocol)
 - **전송(권장, §6 Q4)**: 인스턴스별 Named Pipe(`\\.\pipe\uartterm-mcp-COM4`) + `StreamServerTransport` + 초소형 stdio 릴레이 exe.
   `.mcp.json`에 `claude mcp add uart-com4 -- UartTermMcp.exe COM4`로 정적 등록. 동적 포트/토큰/방화벽/Kestrel 문제가 모두 사라짐. 파이프 ACL은 현재 사용자 전용. GUI에 "등록 명령 복사" 버튼.
-- **도구**: `uart_status`, `uart_send`(원자적 전송), `uart_read`(단조 증가 커서, 유실 시 `dropped_bytes` 명시, `strip_ansi` 기본 true), `uart_expect`(regex+timeout — polling 왕복 최소화), `uart_screen`, `uart_set_dtr_rts`
+- **도구(8종)**: `uart_status`, `uart_send`(원자적 전송), `uart_read`(단조 증가 커서, 유실 시 `dropped_bytes` 명시, `strip_ansi` 기본 true), `uart_expect`(regex+timeout — polling 왕복 최소화), `uart_screen`, `uart_set_dtr_rts`, `uart_close`/`uart_open`(포트 양보/재점유 — esptool 등 외부 플래싱 도구용)
 - **AI TX 화면 표시**: 수신 스트림에 섞지 않고 버퍼의 **메타 라인 타입**으로 삽입 (예: 회색 배경 `[AI→] ...`)
-- **접근 제어**: MCP 활성/비활성 토글 + AI 읽기 전용(TX 차단) 모드 + 상태바 인디케이터
+- **접근 제어**: MCP 활성/비활성 토글 + AI 읽기 전용(TX·제어·포트 열기/닫기 차단) 모드 + 상태바 인디케이터
+- **포트 양보(플래싱)**: `uart_close`로 포트를 해제 → 셸에서 `esptool` 실행 → `uart_open`으로 재연결. 양보 중에는 자동 재연결이 중지되고 탭에 `[AI 양보]`로 표시.
 - 포트 분리 상태를 에러 모델로 노출 (AI가 재시도 판단 가능하게)
+
+> MCP 서버의 구조·등록·도구 레퍼런스·플래싱 워크플로우 상세: **[docs/MCP.md](docs/MCP.md)**
 
 ## 4. 핵심 아키텍처
 

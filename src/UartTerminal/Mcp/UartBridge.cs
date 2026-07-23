@@ -68,12 +68,23 @@ public sealed record DtrRtsResult
     [JsonPropertyName("error")] public string? Error { get; init; }
 }
 
+public sealed record PortActionResult
+{
+    [JsonPropertyName("ok")] public bool Ok { get; init; }
+    [JsonPropertyName("connected")] public bool Connected { get; init; }
+    [JsonPropertyName("port")] public string Port { get; init; } = "";
+    /// <summary>closed / already_closed / open / already_open / in_use / error</summary>
+    [JsonPropertyName("state")] public string State { get; init; } = "";
+    [JsonPropertyName("error")] public string? Error { get; init; }
+}
+
 /// <summary>
 /// MCP 툴과 WPF 앱 사이의 스레드 안전 파사드(README 기능 3). 시리얼 세션·터미널 엔진·수신 링버퍼·접근제어
-/// 상태를 한곳에서 감싸, MCP 서버 스레드에서 호출되는 6개 툴이 안전하게 포트를 공유하도록 한다.
+/// 상태를 한곳에서 감싸, MCP 서버 스레드에서 호출되는 8개 툴이 안전하게 포트를 공유하도록 한다.
 ///  - TX 는 단일 큐(<see cref="ISerialSession.Enqueue"/>)로 직렬화되어 사용자 입력과 원자적으로 섞인다.
 ///  - AI 송신은 화면에 <c>[AI→]</c> 메타 라인으로 표시(수신 스트림과 구분).
-///  - 접근제어: 비활성/읽기전용에서 TX·제어선 변경을 차단.
+///  - 접근제어: 비활성/읽기전용에서 TX·제어선 변경·포트 열기/닫기를 차단.
+///  - 포트 열기/닫기(uart_open/uart_close)는 UI 스레드의 문서가 소유하므로 델리게이트로 위임한다.
 /// COM 포트는 한 프로세스만 열 수 있어 MCP 서버는 반드시 in-process 여야 한다(README §4.2).
 /// </summary>
 public sealed class UartBridge
@@ -98,6 +109,10 @@ public sealed class UartBridge
     private volatile bool _enabled;
     private volatile bool _readOnly;
 
+    // 포트 열기/닫기 핸들러(문서가 UI 스레드에서 Dispatcher 로 마샬링하여 수행). null 이면 not_supported.
+    private volatile Func<Task<PortActionResult>>? _closeHandler;
+    private volatile Func<Task<PortActionResult>>? _openHandler;
+
     public UartBridge(TerminalEngine engine) => _engine = engine;
 
     /// <summary>MCP 서버 활성 여부(꺼지면 파이프 리스너가 닫히고 툴 호출도 거부).</summary>
@@ -109,6 +124,13 @@ public sealed class UartBridge
     public string PortName { get { lock (_gate) return _portName; } }
 
     public event Action? StateChanged;
+
+    /// <summary>포트 열기/닫기 핸들러를 등록한다(문서가 UI 스레드 마샬링을 담당). uart_open/uart_close 가 이를 호출.</summary>
+    public void SetPortController(Func<Task<PortActionResult>> closeHandler, Func<Task<PortActionResult>> openHandler)
+    {
+        _closeHandler = closeHandler;
+        _openHandler = openHandler;
+    }
 
     // ── 세션 수명주기(UI 스레드에서 호출) ───────────────────────────────────────
 
@@ -372,6 +394,28 @@ public sealed class UartBridge
 
         s.SetDtrRts(dtr, rts);
         return new DtrRtsResult { Ok = true, Dtr = s.DtrEnabled, Rts = s.RtsEnabled };
+    }
+
+    /// <summary>포트를 닫아 외부 도구(esptool 등)에 양보. 실제 닫기는 문서가 UI 스레드에서 수행.</summary>
+    public Task<PortActionResult> ClosePortAsync() => InvokePortHandler(_closeHandler);
+
+    /// <summary>양보했던(또는 끊긴) 포트를 다시 연다. 실제 열기는 문서가 UI 스레드에서 수행.</summary>
+    public Task<PortActionResult> OpenPortAsync() => InvokePortHandler(_openHandler);
+
+    private async Task<PortActionResult> InvokePortHandler(Func<Task<PortActionResult>>? handler)
+    {
+        if (!_enabled) return new PortActionResult { Ok = false, Port = PortName, Error = "mcp_disabled" };
+        if (_readOnly) return new PortActionResult { Ok = false, Port = PortName, Error = "read_only" };
+        if (handler is null) return new PortActionResult { Ok = false, Port = PortName, Error = "not_supported" };
+        try
+        {
+            return await handler().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // 문서/디스패처 종료 경합 등 — 예외를 툴 결과로 정규화(서버 스레드 크래시 방지).
+            return new PortActionResult { Ok = false, Port = PortName, Error = $"exception: {ex.Message}" };
+        }
     }
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────────

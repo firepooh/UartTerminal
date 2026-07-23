@@ -160,7 +160,10 @@ public sealed class McpPipeServer
                 "송신(uart_send)은 화면에 [AI→] 로 표시되고 사용자 입력과 원자적으로 섞인다. " +
                 "수신은 단조 증가 커서로 읽는다: uart_read/uart_expect 가 돌려준 cursor 를 다음 호출에 넘겨 이어서 읽고, " +
                 "dropped_bytes 가 0 이 아니면 버퍼 용량 초과로 유실이 있었다는 뜻이다. " +
-                "명령 응답을 기다릴 때는 uart_send 후 uart_expect 를 쓰면 폴링 왕복을 줄일 수 있다.",
+                "명령 응답을 기다릴 때는 uart_send 후 uart_expect 를 쓰면 폴링 왕복을 줄일 수 있다. " +
+                "펌웨어 플래싱(esptool 등 포트를 독점하는 외부 도구)이 필요하면: uart_close 로 포트를 양보 → " +
+                "셸에서 esptool 실행(예: esptool --port " + _portName + " write_flash …) → uart_open 으로 재연결한다. " +
+                "uart_open 이 in_use 를 반환하면 외부 도구가 아직 포트를 쥐고 있는 것이니 잠시 후 재시도한다.",
             ToolCollection = toolCollection,
         };
     }

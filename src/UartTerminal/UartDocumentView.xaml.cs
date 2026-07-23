@@ -37,6 +37,7 @@ public partial class UartDocumentView : UserControl
     private bool _reconnectPending;
     private string? _lastOpenError;
     private bool _closed; // 문서가 닫힘/폐기됨 — 지연된 Closed 콜백의 재무장을 차단
+    private bool _mcpReleased; // AI(MCP)가 외부 작업(플래싱 등)을 위해 포트를 양보한 상태
 
     private readonly List<string> _history = new();
     private int _historyIndex;
@@ -50,6 +51,7 @@ public partial class UartDocumentView : UserControl
     public string PortName => _portName;
     public bool IsConnected => _connected;
     public bool IsReconnecting => _reconnectPending;
+    public bool IsPortReleased => _mcpReleased;
     public bool McpEnabled => _bridge?.Enabled ?? false;
     public bool McpReadOnly => _bridge?.ReadOnly ?? false;
     public string StatusMessage { get; private set; } = "";
@@ -60,6 +62,7 @@ public partial class UartDocumentView : UserControl
         string.IsNullOrEmpty(_portName)
             ? "(새 연결)"
             : _connected ? _portName
+            : _mcpReleased ? $"{_portName} [AI 양보]"
             : _reconnectPending ? $"{_portName} [재연결 중…]"
             : $"{_portName} [끊김]";
 
@@ -125,6 +128,7 @@ public partial class UartDocumentView : UserControl
         var s = _session;
         _session = null;
         _connected = false;
+        _mcpReleased = false; // 사용자가 직접 해제 — 'AI 양보'가 아니라 '끊김' 상태로
         _bridge?.DetachSession();
         RaiseTitle();
         RefreshMetrics();
@@ -140,6 +144,10 @@ public partial class UartDocumentView : UserControl
         _engine.Respond = mem => _session?.Enqueue(mem); // DSR 등 응답 → TX
 
         _bridge = new UartBridge(_engine);
+        // uart_close/uart_open 은 MCP 서버 스레드에서 호출되므로 UI 스레드로 마샬링해 포트를 닫고/연다.
+        _bridge.SetPortController(
+            () => Dispatcher.InvokeAsync(McpReleasePort).Task,
+            () => Dispatcher.InvokeAsync(McpReopenPort).Task);
         _mcpServer = new McpPipeServer(_bridge, _portName);
         RaiseMcpState();
 
@@ -182,6 +190,7 @@ public partial class UartDocumentView : UserControl
 
         _session = session;
         _connected = true;
+        _mcpReleased = false; // 어떤 경로로든 열림에 성공하면 'AI 양보' 상태 해제
         _engine!.ResetParsing();
         DiagLog.Info($"연결됨: {_portName} ({_params.Summary()})");
         RaiseTitle();
@@ -204,6 +213,7 @@ public partial class UartDocumentView : UserControl
     private void OpenSession()
     {
         StopAutoReconnect();
+        _mcpReleased = false; // 사용자 개시 연결 — 실패(InUse/Failed)해도 'AI 양보' 상태가 남지 않게
         switch (TryOpenSessionCore())
         {
             case OpenOutcome.Success:
@@ -524,6 +534,68 @@ public partial class UartDocumentView : UserControl
         string cmd = $"claude mcp add {name} -- \"{exe}\" {_portName}";
         TrySetClipboard(cmd);
         SetStatus("MCP 등록 명령을 클립보드에 복사했습니다");
+    }
+
+    // ── MCP 포트 제어(uart_close / uart_open) ────────────────────────────────────
+    // AI 가 외부 도구(esptool 등)에 포트를 양보/재점유하는 경로. UartBridge 델리게이트가
+    // Dispatcher 로 마샬링해 아래 두 메서드를 항상 UI 스레드에서 실행한다.
+
+    /// <summary>AI(MCP)가 외부 작업(플래싱 등)을 위해 포트를 양보. 자동 재연결을 억제하고 세션을 닫는다.</summary>
+    private PortActionResult McpReleasePort()
+    {
+        if (_closed || _engine is null || string.IsNullOrEmpty(_portName))
+            return new PortActionResult { Ok = false, Port = _portName, State = "error", Error = "no_port" };
+
+        StopAutoReconnect(); // AI 가 명시적으로 닫음 — USB 감시 폴링이 포트를 도로 잡지 않게 중단
+        var s = _session;
+        // _session 을 먼저 비워 지연된 Closed 콜백이 낡은 것이 되어 OnSessionClosed 가드에서 무시되게 한다
+        // (Disconnect 와 동일 방침 — 사용자 해제·장치 분리 콜백이 자동 재연결을 재무장하는 것 방지).
+        _session = null;
+        _connected = false;
+        bool wasOpen = s is not null;
+        _mcpReleased = true;
+        _bridge?.DetachSession();
+        RaiseTitle();
+        RefreshMetrics();
+        SetStatus($"AI가 포트 양보 — 외부 작업 대기 중… ({_portName})");
+        DiagLog.Info($"MCP 포트 양보(uart_close): {_portName}");
+        if (s is not null) { try { s.Close(); } catch { } } // 실제 포트 핸들 해제(외부 도구가 열 수 있도록)
+
+        return new PortActionResult
+        {
+            Ok = true,
+            Connected = false,
+            Port = _portName,
+            State = wasOpen ? "closed" : "already_closed",
+        };
+    }
+
+    /// <summary>AI(MCP)가 양보했던(또는 끊긴) 포트를 다시 연다(외부 작업 종료 후).</summary>
+    private PortActionResult McpReopenPort()
+    {
+        if (_closed || _engine is null || string.IsNullOrEmpty(_portName))
+            return new PortActionResult { Ok = false, Port = _portName, State = "error", Error = "no_port" };
+
+        if (_connected)
+        {
+            _mcpReleased = false;
+            return new PortActionResult { Ok = true, Connected = true, Port = _portName, State = "already_open" };
+        }
+
+        switch (TryOpenSessionCore()) // 성공 시 내부에서 _mcpReleased=false 처리
+        {
+            case OpenOutcome.Success:
+                StopAutoReconnect(); // 장치 분리 후 대기 중이었다면 함께 종료
+                SetStatus($"AI가 포트 재연결(uart_open): {_portName}");
+                DiagLog.Info($"MCP 포트 재연결(uart_open): {_portName}");
+                return new PortActionResult { Ok = true, Connected = true, Port = _portName, State = "open" };
+            case OpenOutcome.InUse:
+                SetStatus($"재연결 대기 — {_portName} 아직 사용 중(외부 작업 진행 중?)");
+                return new PortActionResult { Ok = false, Connected = false, Port = _portName, State = "in_use", Error = "in_use" };
+            default:
+                SetStatus($"재연결 실패: {_lastOpenError}");
+                return new PortActionResult { Ok = false, Connected = false, Port = _portName, State = "error", Error = _lastOpenError ?? "open_failed" };
+        }
     }
 
     // ── 정리 ─────────────────────────────────────────────────────────────────────

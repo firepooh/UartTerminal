@@ -4,7 +4,7 @@ using ModelContextProtocol.Server;
 namespace UartTerminal.Mcp;
 
 /// <summary>
-/// AI(Claude Code)가 사용자와 같은 UART 포트를 공유해 읽고 쓰는 MCP 툴 6종(README 기능 3 / Phase B).
+/// AI(Claude Code)가 사용자와 같은 UART 포트를 공유해 읽고 쓰는 MCP 툴 8종(README 기능 3 / Phase B).
 /// 실제 동작은 스레드 안전 <see cref="UartBridge"/>에 위임한다. 각 툴 메서드는 MCP 서버 스레드에서 호출된다.
 /// 반환 객체는 JSON(snake_case)으로 직렬화되어 AI 에게 전달된다.
 /// </summary>
@@ -71,4 +71,22 @@ public sealed class UartMcpTools
         [Description("DTR 라인 상태.")] bool dtr,
         [Description("RTS 라인 상태.")] bool rts)
         => _bridge.SetDtrRts(dtr, rts);
+
+    [McpServerTool(Name = "uart_close", Destructive = true, OpenWorld = false)]
+    [Description("터미널이 점유한 UART 포트를 닫아 다른 프로그램(예: esptool)이 열 수 있게 양보한다. " +
+                 "COM 포트는 한 프로세스만 열 수 있으므로, ESP32 펌웨어 플래싱처럼 포트 독점이 필요한 " +
+                 "외부 작업 전에 반드시 호출해야 한다. 반환 후에는 포트가 해제돼 esptool 등을 바로 실행할 수 있다. " +
+                 "닫혀 있는 동안 자동 재연결(USB 재접속 감시)은 일시 중지되며, 작업이 끝나면 uart_open 으로 다시 연다. " +
+                 "state 는 closed(방금 닫음) 또는 already_closed(이미 닫혀 있었음). " +
+                 "MCP 가 읽기 전용이거나 비활성이면 error 를 반환한다.")]
+    public Task<PortActionResult> Close() => _bridge.ClosePortAsync();
+
+    [McpServerTool(Name = "uart_open", Destructive = true, OpenWorld = false)]
+    [Description("uart_close 로 양보했거나 끊긴 포트를 같은 포트명·같은 설정으로 다시 연다. " +
+                 "외부 작업(플래싱 등)이 끝난 뒤 호출한다. " +
+                 "state 는 open(방금 열림) 또는 already_open(이미 열려 있었음). " +
+                 "포트가 아직 다른 프로그램(esptool 등)에 점유돼 있으면 ok=false, state=in_use, error=in_use 를 " +
+                 "반환하니 잠시(수백 ms) 후 재시도한다. " +
+                 "MCP 가 읽기 전용이거나 비활성이면 error 를 반환한다.")]
+    public Task<PortActionResult> Open() => _bridge.OpenPortAsync();
 }
