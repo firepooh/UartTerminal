@@ -34,6 +34,7 @@ public partial class ShellWindow : Window
     private static readonly Brush DotIdle = Frozen(Color.FromRgb(0x4B, 0x55, 0x63));
     private static readonly Brush DotReconnecting = Frozen(Color.FromRgb(0xD2, 0x99, 0x22));
     private static readonly Brush DotReleased = Frozen(Color.FromRgb(0x8A, 0x63, 0xD2));
+    private static readonly Brush SplitterBrush = Frozen(Color.FromRgb(0x26, 0x31, 0x41));
     private static readonly Brush TitleActiveFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
     private static readonly Brush TitleInactiveFg = Frozen(Color.FromRgb(0x8B, 0x97, 0xA8));
     private static readonly Brush ConnectedFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
@@ -231,15 +232,65 @@ public partial class ShellWindow : Window
 
         var (rows, cols) = ComputeLayout(docs.Count);
         var grid = new Grid();
-        for (int r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        for (int c = 0; c < cols; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        const double SplitterSize = 6;
+
+        // 콘텐츠 트랙(Star) 사이에 스플리터 트랙(고정 6px)을 끼워 넣는다: [콘텐츠, 스플리터, 콘텐츠, …]
+        // → 콘텐츠는 짝수 인덱스, 스플리터는 홀수 인덱스 트랙에 위치.
+        for (int c = 0; c < cols; c++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            if (c < cols - 1) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(SplitterSize) });
+        }
+        for (int r = 0; r < rows; r++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            if (r < rows - 1) grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(SplitterSize) });
+        }
+
+        int totalCols = grid.ColumnDefinitions.Count;
+        int totalRows = grid.RowDefinitions.Count;
 
         for (int i = 0; i < docs.Count; i++)
         {
             var panel = BuildPanel(docs[i]);
-            Grid.SetRow(panel, i / cols);
-            Grid.SetColumn(panel, i % cols);
+            Grid.SetRow(panel, (i / cols) * 2);
+            Grid.SetColumn(panel, (i % cols) * 2);
             grid.Children.Add(panel);
+        }
+
+        // 세로 스플리터(열 경계) — 좌우 크기 조절
+        for (int c = 1; c < totalCols; c += 2)
+        {
+            var gs = new GridSplitter
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Background = SplitterBrush,
+                ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+                ResizeDirection = GridResizeDirection.Columns,
+                ShowsPreview = false,
+            };
+            Grid.SetColumn(gs, c);
+            Grid.SetRow(gs, 0);
+            Grid.SetRowSpan(gs, totalRows);
+            grid.Children.Add(gs);
+        }
+        // 가로 스플리터(행 경계) — 상하 크기 조절
+        for (int r = 1; r < totalRows; r += 2)
+        {
+            var gs = new GridSplitter
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Background = SplitterBrush,
+                ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+                ResizeDirection = GridResizeDirection.Rows,
+                ShowsPreview = false,
+            };
+            Grid.SetRow(gs, r);
+            Grid.SetColumn(gs, 0);
+            Grid.SetColumnSpan(gs, totalCols);
+            grid.Children.Add(gs);
         }
         ContentHost.Children.Add(grid);
     }
@@ -252,7 +303,9 @@ public partial class ShellWindow : Window
         var border = new Border
         {
             Margin = new Thickness(2),
-            BorderThickness = new Thickness(active ? 2 : 1),
+            // 두께는 활성/비활성 무관하게 고정 — 활성 전환 시 내부 폭이 변해 터미널이 reflow(글자 이동)되는 것 방지.
+            // 하이라이트는 색상으로만 표현한다.
+            BorderThickness = new Thickness(2),
             BorderBrush = active ? AccentBrush : PanelBorderInactive,
             Background = ContentBg,
         };
@@ -333,8 +386,7 @@ public partial class ShellWindow : Window
         foreach (var (doc, border) in _panelBorders)
         {
             bool active = ReferenceEquals(ActiveDoc, doc);
-            border.BorderBrush = active ? AccentBrush : PanelBorderInactive;
-            border.BorderThickness = new Thickness(active ? 2 : 1);
+            border.BorderBrush = active ? AccentBrush : PanelBorderInactive; // 색상만 변경(두께 고정 — reflow 방지)
             if (_panelTitleTexts.TryGetValue(doc, out var tx))
             {
                 tx.Foreground = active ? TitleActiveFg : TitleInactiveFg;
