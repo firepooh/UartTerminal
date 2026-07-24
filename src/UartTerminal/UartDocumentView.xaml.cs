@@ -499,12 +499,39 @@ public partial class UartDocumentView : UserControl
     public void ClearBuffer() => _engine?.Buffer.Clear();
     public void ScrollEnd() => _view?.ScrollToEnd();
 
+    /// <summary>폰트 크기 조절(Ctrl+± / Ctrl+휠). 6~48pt 로 clamp, 크기를 잠깐 오버레이로 표시.</summary>
     public void AdjustFont(double delta)
     {
         if (_view is null) return;
-        _view.FontSize += delta;
-        _state.FontSize = _view.FontSize;
-        _state.Save();
+        double next = Math.Clamp(_view.FontSize + delta, 6, 48);
+        if (Math.Abs(next - _view.FontSize) >= 0.01)
+        {
+            _view.FontSize = next;
+            _state.FontSize = next;
+            RefreshMetrics();
+        }
+        ShowZoomIndicator(next); // 한계에 도달해 크기가 안 바뀌어도 현재 크기는 표시
+    }
+
+    // 폰트 크기 오버레이 + 상태 저장 디바운스(줌 제스처가 끝난 뒤 1회 저장).
+    private DispatcherTimer? _zoomTimer;
+
+    private void ShowZoomIndicator(double size)
+    {
+        ZoomText.Text = $"{size:0.#} pt";
+        ZoomIndicator.Visibility = Visibility.Visible;
+        if (_zoomTimer is null)
+        {
+            _zoomTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1100) };
+            _zoomTimer.Tick += (_, _) =>
+            {
+                _zoomTimer!.Stop();
+                ZoomIndicator.Visibility = Visibility.Collapsed;
+                try { _state.Save(); } catch { } // 연속 휠 중 매번 디스크 쓰기 대신 제스처 종료 시 1회
+            };
+        }
+        _zoomTimer.Stop();
+        _zoomTimer.Start();
     }
 
     public void FocusTerminal() => _view?.Focus();
@@ -625,9 +652,10 @@ public partial class UartDocumentView : UserControl
     /// <summary>하단 메트릭 문자열을 현재 연결 상태 기준으로 다시 만들어 통지(연결/분리 전이 시에도 갱신되도록).</summary>
     private void RefreshMetrics()
     {
+        string font = _view is null ? "" : $"  ·  {_view.FontSize:0.#}pt";
         MetricsMessage = _connected
-            ? $"{_portName}  {_params.Summary()}  ·  {_view?.Columns}×{_view?.Rows}  ·  UTF-8"
-            : $"(연결 안 됨)  ·  {_view?.Columns}×{_view?.Rows}";
+            ? $"{_portName}  {_params.Summary()}  ·  {_view?.Columns}×{_view?.Rows}{font}  ·  UTF-8"
+            : $"(연결 안 됨)  ·  {_view?.Columns}×{_view?.Rows}{font}";
         MetricsChanged?.Invoke(MetricsMessage);
     }
 

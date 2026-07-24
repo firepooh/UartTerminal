@@ -66,6 +66,7 @@ public partial class ShellWindow : Window
         if (isPrimary) Primary = this;
 
         PreviewKeyDown += OnPreviewKeyDown;
+        PreviewMouseWheel += OnPreviewMouseWheel;
         Loaded += OnLoaded;
         Closing += OnClosing;
 
@@ -536,6 +537,14 @@ public partial class ShellWindow : Window
         { NewTab(); e.Handled = true; return; }
         if (mods == ModifierKeys.Control && e.Key == Key.W)
         { CloseActiveTab(); e.Handled = true; return; }
+    }
+
+    /// <summary>Ctrl+마우스휠 → 활성 창(패널)의 폰트 크기 조절(스크롤 대신). Ctrl 없으면 뷰가 스크롤 처리.</summary>
+    private void OnPreviewMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == 0 || e.Delta == 0) return;
+        ActiveDoc?.AdjustFont(e.Delta > 0 ? +1 : -1);
+        e.Handled = true; // TerminalView 의 휠 스크롤로 전달되지 않게
     }
 
     // ── 메뉴 ─────────────────────────────────────────────────────────────────────
