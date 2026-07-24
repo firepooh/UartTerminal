@@ -125,6 +125,9 @@
                 <Separator/>
                 <MenuItem Header="등록 명령 복사 (claude mcp add)" Click="McpCopyCmd_Click"/>
             </MenuItem>
+            <MenuItem Header="도움말(_H)">
+                <MenuItem Header="UartTerminal 정보(_A)" Click="About_Click"/>
+            </MenuItem>
         </Menu>
 
         <!-- 세그먼트 상태바 -->

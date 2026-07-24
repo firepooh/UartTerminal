@@ -602,6 +602,9 @@ public partial class ShellWindow : Window
     { ActiveDoc?.McpSetReadOnly(MenuMcpReadOnly.IsChecked); RefreshMcpChrome(); }
     private void McpCopyCmd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.McpCopyCommand();
 
+    private void About_Click(object sender, RoutedEventArgs e)
+        => new AboutDialog { Owner = this }.ShowDialog();
+
     // ── 탭 순서 변경(드래그) ─────────────────────────────────────────────────────
 
     private Point _dragStart;

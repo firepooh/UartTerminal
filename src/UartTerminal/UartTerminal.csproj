@@ -10,6 +10,8 @@
     <ApplicationIcon>..\..\UartTerminal.ico</ApplicationIcon>
     <AssemblyName>UartTerminal</AssemblyName>
     <RootNamespace>UartTerminal</RootNamespace>
+    <!-- 기본(로컬) 버전. CI 는 태그에서 -p:Version=... 으로 덮어쓴다. -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
