@@ -84,6 +84,11 @@
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
                         </Trigger>
+                        <!-- 비활성(선택된 명령이 없을 때 등)임을 시각적으로 알린다 — 없으면 입력 가능한 것처럼 보인다 -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -247,6 +252,10 @@
                             <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
                             <Setter Property="Foreground" Value="{StaticResource Text}"/>
                         </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Box" Property="Opacity" Value="0.45"/>
+                            <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -272,7 +281,9 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="8" SnapsToDevicePixels="True">
-                        <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}">
+                        <!-- 가로 스크롤을 끊어야 항목이 뷰포트 폭으로 측정된다 → TextTrimming(줄임표)이 실제로 동작 -->
+                        <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}"
+                                      HorizontalScrollBarVisibility="Disabled">
                             <ItemsPresenter/>
                         </ScrollViewer>
                     </Border>

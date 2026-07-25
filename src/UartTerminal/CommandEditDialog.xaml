@@ -44,11 +44,18 @@
                 <ListBox x:Name="CmdList" SelectionChanged="CmdList_SelectionChanged">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="⚠" Margin="0,0,6,0" Foreground="{StaticResource Amber}"
+                            <!-- StackPanel(가로)은 자식을 무한 폭으로 측정해 TextTrimming 이 죽는다 → Grid(Auto,*) 사용 -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="⚠" Margin="0,0,6,0"
+                                           Foreground="{StaticResource Amber}"
                                            Visibility="{Binding ConfirmMark}"/>
-                                <TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis"/>
-                            </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding Display}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>

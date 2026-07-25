@@ -533,6 +533,11 @@ public partial class ShellWindow : Window
 
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
+        // 아래 단축키는 모두 1회성 명령이다. 키 자동반복(약 30회/초)을 그대로 받으면
+        // 탭이 여러 개 열리거나 명령 바가 깜빡이며 state.json 이 반복 재기록된다.
+        // (type-through 의 화살표 반복 등은 이 창 핸들러가 아니라 문서 핸들러가 처리하므로 영향 없음.)
+        if (e.IsRepeat) return;
+
         var mods = Keyboard.Modifiers;
         if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.N)
         { ActiveDoc?.ReconnectViaDialog(); e.Handled = true; return; }

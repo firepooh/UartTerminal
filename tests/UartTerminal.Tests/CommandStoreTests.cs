@@ -194,6 +194,59 @@ public sealed class CommandStoreTests : IDisposable
         Assert.All(s.Items, c => Assert.True(c.Text.Length <= CommandStore.MaxTextLength));
     }
 
+    // ── 적대적 리뷰에서 확정된 결함들의 회귀 방지 ────────────────────────────────
+
+    [Theory]
+    [InlineData("""{ "schemaVersion": 1, "commands": null }""")]   // STJ 가 초기화값을 null 로 덮어쓴다
+    [InlineData("""{ "schemaVersion": 1, "commands": [ null ] }""")]
+    [InlineData("""{ "schemaVersion": 1 }""")]                      // commands 키 자체가 없음
+    [InlineData("null")]                                            // 문서 전체가 null
+    public void NullShapes_DoNotThrow(string json)
+    {
+        // 앱 시작 경로(App.OnStartup)와 편집기 열기 경로가 이 Load 를 호출한다 —
+        // 여기서 예외가 나가면 창 하나 없이 앱이 죽는다.
+        File.WriteAllText(_path, json);
+        var s = NewStore();
+        s.Load();                 // 던지지 않아야 함
+        Assert.Empty(s.Items);
+    }
+
+    [Fact]
+    public void SaveRefused_LeavesInMemoryListUnchanged()
+    {
+        // 저장이 거부되면 목록도 바뀌지 않아야 한다 — 그렇지 않으면 칩 바가
+        // 디스크에 없는 '유령 명령'을 보여주고 클릭 시 실제로 전송된다.
+        File.WriteAllText(_path,
+            """{ "schemaVersion": 99, "commands": [ { "name": "keep", "text": "free" } ] }""");
+        var s = NewStore();
+        s.Load();
+        Assert.True(s.IsReadOnly);
+
+        int changed = 0;
+        s.Changed += () => changed++;
+
+        Assert.False(s.ReplaceAll(new[] { Cmd("ghost", "restart") }));
+        Assert.Single(s.Items);
+        Assert.Equal("keep", s.Items[0].Name);   // 목록 불변
+        Assert.Equal(0, changed);                // 유령 갱신 방송 없음
+
+        Assert.False(s.Add(Cmd("ghost2", "erase")));
+        Assert.Single(s.Items);
+    }
+
+    [Fact]
+    public void Add_AtCapacity_FailsLoudlyInsteadOfSilentlyDropping()
+    {
+        var s = NewStore();
+        s.Load();
+        s.ReplaceAll(Enumerable.Range(0, CommandStore.MaxCommands).Select(i => Cmd($"n{i}", $"cmd{i}")));
+        Assert.Equal(CommandStore.MaxCommands, s.Items.Count);
+
+        Assert.False(s.Add(Cmd("overflow", "one_more")));  // 조용히 버리고 성공을 반환하면 안 됨
+        Assert.NotNull(s.LastError);
+        Assert.DoesNotContain(s.Items, c => c.Text == "one_more");
+    }
+
     [Fact]
     public void Changed_FiresOnLoadAndReplace()
     {

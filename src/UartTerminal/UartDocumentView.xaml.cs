@@ -113,15 +113,19 @@ public partial class UartDocumentView : UserControl
     /// <summary>포트 리스트를 다시 보여주고 선택 포트로 재연결. 선택 확정 시에만 기존 세션을 닫는다.</summary>
     public void ReconnectViaDialog()
     {
-        StopAutoReconnect(); // 사용자가 직접 재연결을 개시 — 자동 대기는 종료
         string? preselect = string.IsNullOrEmpty(_portName) ? _state.LastPort : _portName;
         var dlg = new PortSelectDialog(preselect, _params.BaudRate) { Owner = OwnerWindow };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
         {
-            SetStatus("재연결 취소됨");
+            // 취소는 아무것도 바꾸지 않아야 한다. 특히 진행 중인 자동 재연결 대기를 죽이면
+            // USB 를 다시 꽂아도 되살아나지 않는다(사용자가 직접 재연결해야 함).
+            SetStatus(_reconnectPending
+                ? $"재연결 취소됨 — 자동 재연결 대기 계속 ({_portName})"
+                : "재연결 취소됨");
             return;
         }
 
+        StopAutoReconnect(); // 사용자가 직접 재연결을 확정 — 이제 자동 대기는 종료
         CloseCurrentSession();
 
         if (_engine is null)
@@ -559,9 +563,10 @@ public partial class UartDocumentView : UserControl
 
         if (cmd.Confirm)
         {
+            // 기본 버튼을 취소로 둔다 — 스트레이 Enter 로 위험 명령(restart/erase)이 나가면 안 된다.
             var r = MessageBox.Show(OwnerWindow,
                 $"이 명령을 전송할까요?\n\n{cmd.Text}", "UartTerminal",
-                MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
             if (r != MessageBoxResult.OK) return;
         }
 
@@ -577,6 +582,8 @@ public partial class UartDocumentView : UserControl
             SetStatus("저장할 내용이 없습니다 — 입력창에 명령을 입력하세요");
             return;
         }
+        // 저장 직전에 파일을 다시 읽어 외부 손편집/다른 인스턴스의 변경을 통째로 덮어쓰지 않게 한다.
+        _commands.Load();
         if (!_commands.Add(new SavedCommand { Name = text, Text = text }))
         {
             SetStatus(_commands.LastError ?? "명령 저장 실패");
@@ -612,7 +619,7 @@ public partial class UartDocumentView : UserControl
         {
             var r = MessageBox.Show(OwnerWindow,
                 "여러 줄을 붙여넣습니다. 전송할까요?", "UartTerminal",
-                MessageBoxButton.OKCancel, MessageBoxImage.Question);
+                MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
             if (r != MessageBoxResult.OK) return;
         }
 

@@ -112,7 +112,8 @@ public sealed class CommandStore
                 IsReadOnly = true;
                 LastError = $"명령 파일이 최신 버전(v{file.SchemaVersion})에서 만들어졌습니다. 읽기 전용으로 엽니다.";
             }
-            _items = Sanitize(file.Commands);
+            // "commands": null 이면 System.Text.Json 이 초기화값(new())을 null 로 덮어쓴다 → 빈 목록으로 취급.
+            _items = Sanitize(file.Commands ?? new List<SavedCommand>());
         }
         catch (JsonException ex)
         {
@@ -120,27 +121,54 @@ public sealed class CommandStore
             LastError = $"명령 파일이 손상되었습니다: {ex.Message}";
             PreserveCorrupt();
         }
+        catch (Exception ex)
+        {
+            // 예상 밖의 역직렬화 실패. 내용을 신뢰할 수 없으므로 저장을 잠가 원본을 보호하고,
+            // 예외를 밖으로 내보내지 않는다(App 시작 경로에서 던지면 창 하나 없이 앱이 죽는다).
+            _items = new List<SavedCommand>();
+            IsReadOnly = true;
+            LastError = $"명령 파일을 해석할 수 없습니다({ex.GetType().Name}). 이번 실행에서는 저장하지 않습니다: {_path}";
+        }
 
         RaiseChanged();
     }
 
-    /// <summary>목록 전체를 교체하고 저장(편집 확정 경로). 저장 성공 여부를 반환한다.</summary>
+    /// <summary>
+    /// 목록 전체를 교체하고 저장(편집 확정 경로). <b>저장에 성공했을 때만</b> in-memory 목록을 커밋하고
+    /// <see cref="Changed"/>를 발생시킨다 — 그렇지 않으면 칩 바가 디스크에 없는 '유령 명령'을 보여주게 된다.
+    /// </summary>
     public bool ReplaceAll(IEnumerable<SavedCommand> items)
     {
-        _items = Sanitize(items);
-        bool ok = Save();
+        if (IsReadOnly)
+        {
+            LastError ??= "명령 파일이 읽기 전용 상태여서 저장하지 않았습니다.";
+            return false;
+        }
+
+        var next = Sanitize(items);
+        if (!SaveList(next)) return false;
+
+        _items = next;
         RaiseChanged();
-        return ok;
+        return true;
     }
 
     /// <summary>명령 하나를 목록 끝에 추가하고 저장("현재 입력 저장" 경로).</summary>
     public bool Add(SavedCommand item)
     {
+        // 상한을 먼저 검사한다. Sanitize 는 초과분을 조용히 잘라내므로, 여기서 막지 않으면
+        // 새 명령이 버려졌는데도 "저장됨"으로 보고된다.
+        if (_items.Count >= MaxCommands)
+        {
+            LastError = $"저장 명령이 최대 {MaxCommands}개입니다 — [명령 > 저장 명령 편집]에서 정리하세요.";
+            return false;
+        }
+
         var list = new List<SavedCommand>(_items) { item };
         return ReplaceAll(list);
     }
 
-    private bool Save()
+    private bool SaveList(List<SavedCommand> items)
     {
         if (IsReadOnly)
         {
@@ -156,7 +184,7 @@ public sealed class CommandStore
             var file = new CommandFile
             {
                 SchemaVersion = SupportedSchemaVersion,
-                Commands = new List<SavedCommand>(_items),
+                Commands = items,
             };
 
             string tmp = _path + ".tmp";
