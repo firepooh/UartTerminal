@@ -1,0 +1,23 @@
+<Window x:Class="UartTerminal.TextPromptDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="UartTerminal"
+        Icon="/UartTerminal.ico"
+        Width="440" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource Bg}"
+        Foreground="{StaticResource Text}"
+        FontFamily="{StaticResource UiFont}">
+    <StackPanel Margin="16">
+        <TextBlock x:Name="PromptText" TextWrapping="Wrap" FontSize="12.5" Margin="2,0,0,10"
+                   Foreground="{StaticResource TextDim}"/>
+        <TextBox x:Name="InputBox" Style="{StaticResource CommandInput}" MaxLength="40"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="확인" Style="{StaticResource SendButton}"
+                    MinWidth="86" MinHeight="30" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
+            <Button Content="취소" Style="{StaticResource DialogButton}" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

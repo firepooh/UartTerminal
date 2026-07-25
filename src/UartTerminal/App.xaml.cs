@@ -20,7 +20,8 @@ public partial class App : Application
 
         // 저장 명령은 창 좌표 같은 휘발성 상태(state.json)와 분리된 사용자 저작 파일이다(팀 공유 = 이 파일 복사).
         var commands = new CommandStore(Path.Combine(AppState.Dir, "commands.json"));
-        // 명령 파일 문제로 앱이 창 하나 없이 죽는 일이 없도록 시작 경로를 감싼다(파일은 손편집 대상이다).
+        var sessions = new SessionStore(Path.Combine(AppState.Dir, "sessions.json"));
+        // 설정 파일 문제로 앱이 창 하나 없이 죽는 일이 없도록 시작 경로를 감싼다(둘 다 손편집 대상이다).
         try
         {
             commands.Load();
@@ -30,8 +31,17 @@ public partial class App : Application
         {
             DiagLog.Exception("CommandStore.Load", ex);
         }
+        try
+        {
+            sessions.Load();
+            if (sessions.LastError is { } err) DiagLog.Warn(err);
+        }
+        catch (Exception ex)
+        {
+            DiagLog.Exception("SessionStore.Load", ex);
+        }
 
-        var shell = new ShellWindow(state, commands, isPrimary: true);
+        var shell = new ShellWindow(state, commands, sessions, isPrimary: true);
         MainWindow = shell;
         shell.Show();
     }

@@ -47,6 +47,7 @@ public partial class ShellWindow : Window
 
     private readonly AppState _state;
     private readonly CommandStore _commands;
+    private readonly SessionStore _sessions;
     private readonly bool _isPrimary;
     private readonly Dictionary<TabItem, TabHooks> _hooks = new();
 
@@ -60,11 +61,12 @@ public partial class ShellWindow : Window
     private readonly Dictionary<UartDocumentView, TextBlock> _panelTitleTexts = new();
     private readonly Dictionary<UartDocumentView, Ellipse> _panelDots = new();
 
-    public ShellWindow(AppState state, CommandStore commands, bool isPrimary)
+    public ShellWindow(AppState state, CommandStore commands, SessionStore sessions, bool isPrimary)
     {
         InitializeComponent();
         _state = state;
         _commands = commands;
+        _sessions = sessions;
         _isPrimary = isPrimary;
         if (isPrimary) Primary = this;
 
@@ -107,11 +109,11 @@ public partial class ShellWindow : Window
 
     private void NewTab()
     {
-        var dlg = new PortSelectDialog(_state.LastPort, _state.LastBaud) { Owner = this };
+        var dlg = new PortSelectDialog(_state.LastPort, _state.LastBaud, _sessions) { Owner = this };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
             return;
 
-        var doc = new UartDocumentView(_state, _commands);
+        var doc = new UartDocumentView(_state, _commands, _sessions);
         var ti = new TabItem { Tag = doc };
         AttachTab(ti, doc);
         Tabs.Items.Add(ti);
@@ -445,7 +447,7 @@ public partial class ShellWindow : Window
             StatusText.Text = "분리할 탭이 하나뿐입니다";
             return;
         }
-        var floatWin = new ShellWindow(_state, _commands, isPrimary: false);
+        var floatWin = new ShellWindow(_state, _commands, _sessions, isPrimary: false);
         floatWin.Show();
         MoveTab(ti, floatWin);
         floatWin.Activate();
@@ -579,6 +581,7 @@ public partial class ShellWindow : Window
                 foreach (var d in w.AllDocs()) d.CancelAutoReconnect();
         }
     }
+    private void SaveSession_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentAsSession();
     private void Detach_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) DetachTab(ti); }
     private void Merge_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) MergeTab(ti); }
     private void CloseTab_Click(object sender, RoutedEventArgs e) => CloseActiveTab();

@@ -23,6 +23,7 @@ public partial class UartDocumentView : UserControl
 {
     private readonly AppState _state;
     private readonly CommandStore _commands;
+    private readonly SessionStore _sessions;
 
     // 연결 시 선택된 통신 속도를 담는다(readonly 아님). 수동 재연결·자동 재연결(TryOpenSessionCore)·
     // MCP uart_open 이 모두 이 필드를 쓰므로, 여기만 갱신하면 세 경로가 같은 속도로 일관되게 열린다.
@@ -71,11 +72,12 @@ public partial class UartDocumentView : UserControl
             : _reconnectPending ? $"{_portName} [재연결 중…]"
             : $"{_portName} [끊김]";
 
-    public UartDocumentView(AppState state, CommandStore commands)
+    public UartDocumentView(AppState state, CommandStore commands, SessionStore sessions)
     {
         InitializeComponent();
         _state = state;
         _commands = commands;
+        _sessions = sessions;
         _params = MakeParams(state.LastBaud);
         _commands.Changed += OnCommandsChanged;
         SetCommandBarVisible(state.ShowCommandBar);
@@ -593,6 +595,36 @@ public partial class UartDocumentView : UserControl
     }
 
     private void SaveCommand_Click(object sender, RoutedEventArgs e) => SaveCurrentInputAsCommand();
+
+    // ── 접속 프로필(세션) ────────────────────────────────────────────────────────
+
+    /// <summary>현재 탭의 포트·속도를 이름 붙인 세션으로 저장(같은 이름이면 갱신).</summary>
+    public void SaveCurrentAsSession()
+    {
+        if (string.IsNullOrEmpty(_portName))
+        {
+            SetStatus("저장할 연결이 없습니다");
+            return;
+        }
+
+        // 기본 이름은 friendly name 이 아니라 포트명 — 사용자가 보드 별칭을 직접 붙이게 한다.
+        string? name = TextPromptDialog.Ask(OwnerWindow, "세션 저장",
+            $"이 연결({_portName} · {_params.BaudRate}bps)을 어떤 이름으로 저장할까요?", _portName);
+        if (name is null) return;
+
+        _sessions.Load(); // 다른 인스턴스/손편집 반영 후 추가
+        if (!_sessions.AddOrReplace(new SessionProfile
+        {
+            Name = name,
+            Port = _portName,
+            Baud = _params.BaudRate,
+        }))
+        {
+            SetStatus(_sessions.LastError ?? "세션 저장 실패");
+            return;
+        }
+        SetStatus($"세션 저장됨: {name} — {_portName} · {_params.BaudRate}");
+    }
 
     private void EditCommands_Click(object sender, RoutedEventArgs e)
         => CommandEditDialog.ShowEditor(_commands, OwnerWindow);
