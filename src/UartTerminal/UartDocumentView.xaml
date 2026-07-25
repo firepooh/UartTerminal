@@ -32,6 +32,34 @@
             </Grid>
         </Border>
 
+        <!-- 저장 명령 칩 바(Alt+B). 입력바보다 뒤에 선언 → DockPanel 도킹 순서상 입력바 '위'에 쌓인다.
+             칩은 Focusable=False 여야 클릭 직후 타이핑이 그대로 터미널(type-through)로 나간다. -->
+        <Border x:Name="CommandBar" DockPanel.Dock="Bottom" Visibility="Collapsed"
+                Background="{StaticResource BgPanel}"
+                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,1,0,0"
+                Padding="12,7">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <ScrollViewer Grid.Column="0" Focusable="False"
+                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="ChipHost" Orientation="Horizontal"/>
+                </ScrollViewer>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0">
+                    <Button x:Name="SaveCmdButton" Content="+ 저장" Style="{StaticResource DialogButton}"
+                            MinWidth="0" MinHeight="26" Padding="10,0" Focusable="False"
+                            ToolTip="현재 입력창 내용을 명령으로 저장" Click="SaveCommand_Click"/>
+                    <Button x:Name="EditCmdButton" Content="편집" Style="{StaticResource DialogButton}"
+                            MinWidth="0" MinHeight="26" Padding="10,0" Margin="6,0,0,0" Focusable="False"
+                            ToolTip="저장 명령 편집" Click="EditCommands_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>

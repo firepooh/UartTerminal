@@ -117,6 +117,13 @@
                 <MenuItem x:Name="MenuSplitH" Header="상하 분할" IsCheckable="True" Click="SplitH_Click"/>
                 <MenuItem x:Name="MenuSplitGrid" Header="격자 분할" IsCheckable="True" Click="SplitGrid_Click"/>
             </MenuItem>
+            <MenuItem Header="명령(_C)">
+                <MenuItem x:Name="MenuCommandBar" Header="명령 바 표시" InputGestureText="Alt+B"
+                          IsCheckable="True" Click="CommandBar_Click"/>
+                <Separator/>
+                <MenuItem Header="현재 입력을 명령으로 저장" Click="SaveCommand_Click"/>
+                <MenuItem Header="저장 명령 편집(_E)…" Click="EditCommands_Click"/>
+            </MenuItem>
             <MenuItem Header="MCP(_M)">
                 <MenuItem x:Name="MenuMcpEnabled" Header="MCP 서버 활성화" IsCheckable="True"
                           Click="McpEnabled_Click"/>

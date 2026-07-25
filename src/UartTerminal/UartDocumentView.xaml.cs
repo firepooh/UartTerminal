@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using UartTerminal.Core.Config;
 using UartTerminal.Core.Serial;
 using UartTerminal.Core.Terminal;
 using UartTerminal.Mcp;
@@ -21,7 +22,11 @@ namespace UartTerminal;
 public partial class UartDocumentView : UserControl
 {
     private readonly AppState _state;
-    private readonly SerialConnectionParams _params = SerialConnectionParams.Default;
+    private readonly CommandStore _commands;
+
+    // 연결 시 선택된 통신 속도를 담는다(readonly 아님). 수동 재연결·자동 재연결(TryOpenSessionCore)·
+    // MCP uart_open 이 모두 이 필드를 쓰므로, 여기만 갱신하면 세 경로가 같은 속도로 일관되게 열린다.
+    private SerialConnectionParams _params = SerialConnectionParams.Default;
     private readonly Encoding _txEncoding = new UTF8Encoding(false);
 
     private TerminalEngine? _engine;
@@ -66,25 +71,42 @@ public partial class UartDocumentView : UserControl
             : _reconnectPending ? $"{_portName} [재연결 중…]"
             : $"{_portName} [끊김]";
 
-    public UartDocumentView(AppState state)
+    public UartDocumentView(AppState state, CommandStore commands)
     {
         InitializeComponent();
         _state = state;
+        _commands = commands;
+        _params = MakeParams(state.LastBaud);
+        _commands.Changed += OnCommandsChanged;
+        SetCommandBarVisible(state.ShowCommandBar);
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewTextInput += OnPreviewTextInput;
     }
 
     private Window? OwnerWindow => Window.GetWindow(this);
 
+    /// <summary>
+    /// 통신 속도만 바꾼 접속 파라미터. 나머지는 고정(README §2) — 특히 DTR/RTS deassert 는
+    /// ESP32 의 의도치 않은 리셋/부트모드 진입을 막는 안전장치(R2)라 사용자에게 노출하지 않는다.
+    /// 범위를 벗어난 값(손편집된 state.json 등)은 기본값으로 되돌린다.
+    /// </summary>
+    private static SerialConnectionParams MakeParams(int baud)
+    {
+        int b = baud is >= 300 and <= 4_000_000 ? baud : PortSelectDialog.DefaultBaud;
+        return new SerialConnectionParams { BaudRate = b };
+    }
+
     // ── 연결 수명주기 ──────────────────────────────────────────────────────────
 
     /// <summary>최초 연결(엔진/뷰/브리지/MCP 서버 생성 후 세션 오픈).</summary>
-    public void ConnectTo(PortInfo port)
+    public void ConnectTo(PortInfo port, int baud)
     {
         _portName = port.PortName;
+        _params = MakeParams(baud);
         EnsureEngine();
         OpenSession();
         _state.LastPort = _portName;
+        _state.LastBaud = _params.BaudRate;
         _state.Save();
     }
 
@@ -93,7 +115,7 @@ public partial class UartDocumentView : UserControl
     {
         StopAutoReconnect(); // 사용자가 직접 재연결을 개시 — 자동 대기는 종료
         string? preselect = string.IsNullOrEmpty(_portName) ? _state.LastPort : _portName;
-        var dlg = new PortSelectDialog(preselect) { Owner = OwnerWindow };
+        var dlg = new PortSelectDialog(preselect, _params.BaudRate) { Owner = OwnerWindow };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
         {
             SetStatus("재연결 취소됨");
@@ -104,7 +126,7 @@ public partial class UartDocumentView : UserControl
 
         if (_engine is null)
         {
-            ConnectTo(port);
+            ConnectTo(port, dlg.SelectedBaud);
             return;
         }
 
@@ -114,9 +136,12 @@ public partial class UartDocumentView : UserControl
             RebuildMcpForPort();
             RaiseTitle();
         }
+        // 속도 변경은 세션을 새로 여는 것으로 반영된다(위에서 기존 세션을 닫았고 아래에서 재오픈).
+        _params = MakeParams(dlg.SelectedBaud);
 
         OpenSession();
         _state.LastPort = _portName;
+        _state.LastBaud = _params.BaudRate;
         _state.Save();
     }
 
@@ -444,7 +469,13 @@ public partial class UartDocumentView : UserControl
     private void SendInputLine()
     {
         if (!_connected) { SetStatus("연결되지 않음 — 입력 전송 불가"); return; }
-        string line = InputBox.Text;
+        SendLine(InputBox.Text);
+        InputBox.Clear();
+    }
+
+    /// <summary>한 줄 전송 + 히스토리 적재. 입력창 전송과 칩 전송이 같은 경로를 쓰도록 분리(개행 규약 CR 단일).</summary>
+    private void SendLine(string line)
+    {
         Send(_txEncoding.GetBytes(line + "\r"));
         if (!string.IsNullOrEmpty(line))
         {
@@ -452,7 +483,6 @@ public partial class UartDocumentView : UserControl
             if (_history.Count > 200) _history.RemoveAt(0);
         }
         _historyIndex = _history.Count;
-        InputBox.Clear();
     }
 
     private void HistoryNav(int dir)
@@ -464,6 +494,101 @@ public partial class UartDocumentView : UserControl
         InputBox.Text = _historyIndex < _history.Count ? _history[_historyIndex] : "";
         InputBox.CaretIndex = InputBox.Text.Length;
     }
+
+    // ── 저장 명령 칩 바 ─────────────────────────────────────────────────────────
+    // "버튼 = 한 줄 문자열 전송"까지만. 다단계 시퀀스/대기/조건은 MCP(uart_send/uart_expect)의 영역이다.
+
+    private void OnCommandsChanged() => RebuildCommandChips();
+
+    /// <summary>칩 바 표시/숨김(전역 설정, Alt+B). 숨기면 세로 픽셀을 전혀 쓰지 않는다.</summary>
+    public void SetCommandBarVisible(bool show)
+    {
+        CommandBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (show) RebuildCommandChips();
+    }
+
+    private void RebuildCommandChips()
+    {
+        if (CommandBar.Visibility != Visibility.Visible) return;
+        ChipHost.Children.Clear();
+
+        if (_commands.Items.Count == 0)
+        {
+            ChipHost.Children.Add(new TextBlock
+            {
+                Text = "저장된 명령이 없습니다 — 입력창에 명령을 쓰고 [+ 저장]",
+                Foreground = (Brush)FindResource("TextFaint"),
+                FontSize = 11.5,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            return;
+        }
+
+        var style = (Style)FindResource("ChipButton");
+        foreach (var cmd in _commands.Items)
+        {
+            var captured = cmd;
+            var btn = new Button
+            {
+                Content = cmd.Confirm ? "⚠ " + cmd.Name : cmd.Name,
+                Style = style,
+                Height = 26,
+                Margin = new Thickness(0, 0, 6, 0),
+                Focusable = false, // 포커스를 가져가면 클릭 직후 타이핑이 어디로도 가지 않는다
+                ToolTip = cmd.Confirm
+                    ? $"{cmd.Text}\n(전송 전 확인 · Ctrl+클릭: 입력창에 채우기)"
+                    : $"{cmd.Text}\n(Ctrl+클릭: 입력창에 채우기)",
+            };
+            btn.Click += (_, _) => RunSavedCommand(captured);
+            ChipHost.Children.Add(btn);
+        }
+    }
+
+    /// <summary>칩 클릭: 기본은 즉시 전송, Ctrl+클릭은 입력창에 채우기(수정 후 전송).</summary>
+    private void RunSavedCommand(SavedCommand cmd)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            InputBox.Text = cmd.Text;
+            InputBox.CaretIndex = InputBox.Text.Length;
+            InputBox.Focus();
+            return;
+        }
+
+        if (!_connected) { SetStatus("연결되지 않음 — 명령 전송 불가"); return; }
+
+        if (cmd.Confirm)
+        {
+            var r = MessageBox.Show(OwnerWindow,
+                $"이 명령을 전송할까요?\n\n{cmd.Text}", "UartTerminal",
+                MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (r != MessageBoxResult.OK) return;
+        }
+
+        SendLine(cmd.Text);
+    }
+
+    /// <summary>현재 입력창 내용을 명령으로 저장(휘발성 히스토리 → 영속 명령 승격 경로).</summary>
+    public void SaveCurrentInputAsCommand()
+    {
+        string text = InputBox.Text.Trim();
+        if (text.Length == 0)
+        {
+            SetStatus("저장할 내용이 없습니다 — 입력창에 명령을 입력하세요");
+            return;
+        }
+        if (!_commands.Add(new SavedCommand { Name = text, Text = text }))
+        {
+            SetStatus(_commands.LastError ?? "명령 저장 실패");
+            return;
+        }
+        SetStatus($"명령 저장됨: {text}");
+    }
+
+    private void SaveCommand_Click(object sender, RoutedEventArgs e) => SaveCurrentInputAsCommand();
+
+    private void EditCommands_Click(object sender, RoutedEventArgs e)
+        => CommandEditDialog.ShowEditor(_commands, OwnerWindow);
 
     // ── 명령(셸 메뉴에서 호출) ──────────────────────────────────────────────────
 
@@ -631,6 +756,7 @@ public partial class UartDocumentView : UserControl
     public void CloseDocument()
     {
         _closed = true; // 이후 도착하는 지연 Closed 콜백의 재무장을 차단
+        _commands.Changed -= OnCommandsChanged; // 전역 스토어 구독 해지(닫힌 문서가 갱신을 붙잡지 않게)
         StopAutoReconnect();
         var s = _session;
         _session = null;

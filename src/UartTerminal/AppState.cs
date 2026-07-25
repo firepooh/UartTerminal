@@ -10,10 +10,17 @@ namespace UartTerminal;
 public sealed class AppState
 {
     public string? LastPort { get; set; }
+
+    /// <summary>마지막으로 선택한 통신 속도(bps). 포트 선택 다이얼로그의 기본값으로 쓰인다(README §2).</summary>
+    public int LastBaud { get; set; } = 115200;
+
     public double FontSize { get; set; } = 14.0;
 
     /// <summary>USB 재접속(장치 분리) 시 같은 포트로 자동 재연결할지. 기본 켬.</summary>
     public bool AutoReconnect { get; set; } = true;
+
+    /// <summary>저장 명령 칩 바를 표시할지(Alt+B). 모든 창/탭에 공통 적용되는 전역 설정.</summary>
+    public bool ShowCommandBar { get; set; } = true;
 
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }

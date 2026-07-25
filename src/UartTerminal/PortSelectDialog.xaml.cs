@@ -6,12 +6,51 @@ namespace UartTerminal;
 
 public partial class PortSelectDialog : Window
 {
+    /// <summary>
+    /// 선택 가능한 통신 속도(README §2). ESP-IDF 개발에서 실제로 쓰이는 값만 둔다:
+    /// 74880=ROM 부트로더 출력(부트루프 진단), 115200=기본 콘솔, 230400/460800/921600=고속 로그.
+    /// </summary>
+    public static readonly int[] BaudPresets = { 74880, 115200, 230400, 460800, 921600 };
+
+    public const int DefaultBaud = 115200;
+
     public PortInfo? SelectedPort { get; private set; }
 
-    public PortSelectDialog(string? preselectPort = null)
+    /// <summary>사용자가 고른 통신 속도. 취소 시 의미 없음.</summary>
+    public int SelectedBaud { get; private set; } = DefaultBaud;
+
+    public PortSelectDialog(string? preselectPort = null, int preselectBaud = DefaultBaud)
     {
         InitializeComponent();
+        BuildBaudChips(preselectBaud);
         RefreshPorts(preselectPort);
+    }
+
+    /// <summary>속도 세그먼트를 프리셋에서 생성(RadioButton 이라 배타 선택은 프레임워크가 처리).</summary>
+    private void BuildBaudChips(int preselect)
+    {
+        int selected = BaudPresets.Contains(preselect) ? preselect : DefaultBaud;
+        foreach (int baud in BaudPresets)
+        {
+            var rb = new RadioButton
+            {
+                Content = baud.ToString(),
+                Tag = baud,
+                GroupName = "Baud",
+                IsChecked = baud == selected,
+                Style = (Style)FindResource("BaudChip"),
+            };
+            BaudHost.Children.Add(rb);
+        }
+        SelectedBaud = selected;
+    }
+
+    private int CheckedBaud()
+    {
+        foreach (var child in BaudHost.Children)
+            if (child is RadioButton { IsChecked: true, Tag: int baud })
+                return baud;
+        return DefaultBaud;
     }
 
     private void RefreshPorts(string? preselect)
@@ -52,6 +91,7 @@ public partial class PortSelectDialog : Window
             return;
         }
         SelectedPort = info;
+        SelectedBaud = CheckedBaud();
         DialogResult = true;
     }
 }

@@ -3,32 +3,51 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="포트 선택 — UartTerminal"
         Icon="/UartTerminal.ico"
-        Width="460" Height="360"
+        Width="500" Height="430"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
-        ShowInTaskbar="True">
-    <Grid Margin="12">
+        ShowInTaskbar="True"
+        Background="{StaticResource Bg}"
+        Foreground="{StaticResource Text}"
+        FontFamily="{StaticResource UiFont}">
+    <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Margin="0,0,0,8"
-                   Text="연결할 시리얼 포트를 선택하세요:" FontSize="13"/>
+        <TextBlock Grid.Row="0" Margin="2,0,0,8" FontSize="13"
+                   Foreground="{StaticResource Text}"
+                   Text="연결할 시리얼 포트를 선택하세요:"/>
 
         <ListBox x:Name="PortList" Grid.Row="1"
                  MouseDoubleClick="PortList_MouseDoubleClick"
                  DisplayMemberPath="Display"/>
 
-        <TextBlock Grid.Row="2" Margin="0,8,0,8" Foreground="#666"
-                   Text="설정(고정): 115200 bps · 8 · None · 1 · Flow None · DTR/RTS 해제(보드 리셋 안 함)"/>
+        <!-- 통신 속도(README §2): ESP-IDF 기본 115200 외에 부트로더 진단(74880)·고속 로그(921600)가 실수요 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="2,12,0,0" VerticalAlignment="Center">
+            <TextBlock Text="속도" VerticalAlignment="Center" Margin="0,0,10,0"
+                       Foreground="{StaticResource TextDim}" FontSize="12"/>
+            <Border Style="{StaticResource SplitToolbar}">
+                <StackPanel x:Name="BaudHost" Orientation="Horizontal"/>
+            </Border>
+            <TextBlock Text="bps" VerticalAlignment="Center" Margin="10,0,0,0"
+                       Foreground="{StaticResource TextFaint}" FontSize="11.5"/>
+        </StackPanel>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="RefreshButton" Content="새로고침" Width="80" Margin="0,0,8,0" Click="Refresh_Click"/>
-            <Button x:Name="OkButton" Content="연결" Width="80" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
-            <Button Content="취소" Width="80" IsCancel="True"/>
+        <TextBlock Grid.Row="3" Margin="2,12,0,12" TextWrapping="Wrap"
+                   Foreground="{StaticResource TextFaint}" FontSize="11.5"
+                   Text="나머지는 고정: 8비트 · 패리티 없음 · 스톱 1 · 흐름제어 없음 · DTR/RTS 해제(보드 리셋 안 함)"/>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="RefreshButton" Content="새로고침" Style="{StaticResource DialogButton}"
+                    Margin="0,0,8,0" Click="Refresh_Click"/>
+            <Button x:Name="OkButton" Content="연결" Style="{StaticResource SendButton}"
+                    MinWidth="86" MinHeight="30" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
+            <Button Content="취소" Style="{StaticResource DialogButton}" IsCancel="True"/>
         </StackPanel>
     </Grid>
 </Window>

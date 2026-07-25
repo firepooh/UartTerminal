@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using UartTerminal.Core.Config;
 using UartTerminal.Mcp;
 
 namespace UartTerminal;
@@ -45,6 +46,7 @@ public partial class ShellWindow : Window
     public static ShellWindow? Primary { get; private set; }
 
     private readonly AppState _state;
+    private readonly CommandStore _commands;
     private readonly bool _isPrimary;
     private readonly Dictionary<TabItem, TabHooks> _hooks = new();
 
@@ -58,10 +60,11 @@ public partial class ShellWindow : Window
     private readonly Dictionary<UartDocumentView, TextBlock> _panelTitleTexts = new();
     private readonly Dictionary<UartDocumentView, Ellipse> _panelDots = new();
 
-    public ShellWindow(AppState state, bool isPrimary)
+    public ShellWindow(AppState state, CommandStore commands, bool isPrimary)
     {
         InitializeComponent();
         _state = state;
+        _commands = commands;
         _isPrimary = isPrimary;
         if (isPrimary) Primary = this;
 
@@ -87,6 +90,7 @@ public partial class ShellWindow : Window
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
         MenuAutoReconnect.IsChecked = _state.AutoReconnect;
+        MenuCommandBar.IsChecked = _state.ShowCommandBar;
         if (_isPrimary)
         {
             RestoreWindowBounds();
@@ -103,16 +107,16 @@ public partial class ShellWindow : Window
 
     private void NewTab()
     {
-        var dlg = new PortSelectDialog(_state.LastPort) { Owner = this };
+        var dlg = new PortSelectDialog(_state.LastPort, _state.LastBaud) { Owner = this };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
             return;
 
-        var doc = new UartDocumentView(_state);
+        var doc = new UartDocumentView(_state, _commands);
         var ti = new TabItem { Tag = doc };
         AttachTab(ti, doc);
         Tabs.Items.Add(ti);
         Tabs.SelectedItem = ti;
-        doc.ConnectTo(port);
+        doc.ConnectTo(port, dlg.SelectedBaud);
         RenderContent();
         doc.FocusTerminal();
     }
@@ -441,7 +445,7 @@ public partial class ShellWindow : Window
             StatusText.Text = "분리할 탭이 하나뿐입니다";
             return;
         }
-        var floatWin = new ShellWindow(_state, isPrimary: false);
+        var floatWin = new ShellWindow(_state, _commands, isPrimary: false);
         floatWin.Show();
         MoveTab(ti, floatWin);
         floatWin.Activate();
@@ -500,6 +504,7 @@ public partial class ShellWindow : Window
         ConnDot.Fill = doc is not null ? DotFor(doc) : DotIdle;
         SyncSplitChrome();
         MenuAutoReconnect.IsChecked = _state.AutoReconnect;
+        MenuCommandBar.IsChecked = _state.ShowCommandBar;
         RefreshMcpChrome();
     }
 
@@ -537,6 +542,9 @@ public partial class ShellWindow : Window
         { NewTab(); e.Handled = true; return; }
         if (mods == ModifierKeys.Control && e.Key == Key.W)
         { CloseActiveTab(); e.Handled = true; return; }
+        // Alt+B: 명령 바 토글. Alt 계열이라 터미널 type-through(단독 Ctrl+문자 = 제어 바이트)를 잠식하지 않는다.
+        if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.B)
+        { ToggleCommandBar(); e.Handled = true; return; }
     }
 
     /// <summary>Ctrl+마우스휠 → 활성 창(패널)의 폰트 크기 조절(스크롤 대신). Ctrl 없으면 뷰가 스크롤 처리.</summary>
@@ -604,6 +612,29 @@ public partial class ShellWindow : Window
     private void SplitV_Click(object sender, RoutedEventArgs e) => SetSplitLayout(SplitLayout.Columns);
     private void SplitH_Click(object sender, RoutedEventArgs e) => SetSplitLayout(SplitLayout.Rows);
     private void SplitGrid_Click(object sender, RoutedEventArgs e) => SetSplitLayout(SplitLayout.Grid);
+
+    // ── 저장 명령 ────────────────────────────────────────────────────────────────
+
+    private void CommandBar_Click(object sender, RoutedEventArgs e) => SetCommandBar(MenuCommandBar.IsChecked);
+
+    private void ToggleCommandBar() => SetCommandBar(!_state.ShowCommandBar);
+
+    /// <summary>칩 바 표시 여부는 전역 설정 — 열린 모든 창/탭과 메뉴 체크를 함께 동기화한다(AutoReconnect 와 같은 방침).</summary>
+    private void SetCommandBar(bool show)
+    {
+        _state.ShowCommandBar = show;
+        _state.Save();
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+        {
+            w.MenuCommandBar.IsChecked = show;
+            foreach (var d in w.AllDocs()) d.SetCommandBarVisible(show);
+        }
+    }
+
+    private void SaveCommand_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentInputAsCommand();
+
+    private void EditCommands_Click(object sender, RoutedEventArgs e)
+        => CommandEditDialog.ShowEditor(_commands, this);
 
     private void McpEnabled_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetEnabled(MenuMcpEnabled.IsChecked); RefreshMcpChrome(); }

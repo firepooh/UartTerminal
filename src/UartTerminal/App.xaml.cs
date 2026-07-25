@@ -1,4 +1,6 @@
+using System.IO;
 using System.Windows;
+using UartTerminal.Core.Config;
 
 namespace UartTerminal;
 
@@ -15,7 +17,13 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnMainWindowClose;
 
         var state = AppState.Load();
-        var shell = new ShellWindow(state, isPrimary: true);
+
+        // 저장 명령은 창 좌표 같은 휘발성 상태(state.json)와 분리된 사용자 저작 파일이다(팀 공유 = 이 파일 복사).
+        var commands = new CommandStore(Path.Combine(AppState.Dir, "commands.json"));
+        commands.Load();
+        if (commands.LastError is { } err) DiagLog.Warn(err);
+
+        var shell = new ShellWindow(state, commands, isPrimary: true);
         MainWindow = shell;
         shell.Show();
     }
