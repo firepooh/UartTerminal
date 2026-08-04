@@ -1,7 +1,8 @@
 <Window x:Class="UartTerminal.AboutDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="UartTerminal 정보"
+        xmlns:loc="clr-namespace:UartTerminal"
+        Title="{loc:Str About.Title}"
         Icon="/UartTerminal.ico"
         Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
@@ -29,7 +30,7 @@
 
             <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12.5" LineHeight="18"
                        Foreground="{StaticResource TextDim}"
-                       Text="ESP-IDF/ESP32 개발용 시리얼 터미널 — 컬러 로그, 창 크기에 맞춘 reflow, 화면 분할, USB 자동 재연결, AI(MCP) 포트 공유."/>
+                       Text="{loc:Str About.Summary}"/>
 
             <TextBlock x:Name="RuntimeText" Margin="0,12,0,0" FontSize="11.5"
                        Foreground="{StaticResource TextFaint}"/>
@@ -38,7 +39,7 @@
                            Foreground="{StaticResource Blue}" TextDecorations="{x:Null}">github.com/firepooh/UartTerminal</Hyperlink>
             </TextBlock>
 
-            <Button x:Name="OkButton" Content="확인" Width="90" Height="30"
+            <Button x:Name="OkButton" Content="{loc:Str Common.Ok}" Width="90" Height="30"
                     Margin="0,20,0,0" HorizontalAlignment="Right"
                     IsDefault="True" IsCancel="True" Click="Ok_Click"/>
         </StackPanel>

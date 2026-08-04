@@ -1,7 +1,8 @@
 <Window x:Class="UartTerminal.PortSelectDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="연결 — UartTerminal"
+        xmlns:loc="clr-namespace:UartTerminal"
+        Title="{loc:Str Port.Title}"
         Icon="/UartTerminal.ico"
         Width="520" Height="560" MinWidth="440" MinHeight="460"
         WindowStartupLocation="CenterScreen"
@@ -28,10 +29,10 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <DockPanel Grid.Row="0" Margin="2,0,0,6">
-                <Button x:Name="DeleteSessionButton" DockPanel.Dock="Right" Content="삭제"
+                <Button x:Name="DeleteSessionButton" DockPanel.Dock="Right" Content="{loc:Str Common.Delete}"
                         Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="24" Padding="10,0"
                         IsEnabled="False" Click="DeleteSession_Click"/>
-                <TextBlock Text="저장된 세션 (더블클릭하면 연결)" FontSize="13"
+                <TextBlock Text="{loc:Str Port.Sessions}" FontSize="13"
                            VerticalAlignment="Center" Foreground="{StaticResource Text}"/>
             </DockPanel>
             <ListBox x:Name="SessionList" Grid.Row="1" Height="126"
@@ -42,11 +43,11 @@
 
         <TextBlock Grid.Row="1" Margin="2,0,0,6" FontSize="13"
                    Foreground="{StaticResource Text}"
-                   Text="감지된 포트"/>
+                   Text="{loc:Str Port.Detected}"/>
 
         <TextBlock Grid.Row="2" Margin="2,0,0,6" FontSize="11"
                    Foreground="{StaticResource TextFaint}"
-                   Text="세션 없이 포트만 골라 바로 연결해도 됩니다."/>
+                   Text="{loc:Str Port.Hint}"/>
 
         <ListBox x:Name="PortList" Grid.Row="3"
                  SelectionChanged="PortList_SelectionChanged"
@@ -55,7 +56,7 @@
 
         <!-- 통신 속도(README §2): ESP-IDF 기본 115200 외에 부트로더 진단(74880)·고속 로그(921600)가 실수요 -->
         <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="2,12,0,0" VerticalAlignment="Center">
-            <TextBlock Text="속도" VerticalAlignment="Center" Margin="0,0,10,0"
+            <TextBlock Text="{loc:Str Common.Baud}" VerticalAlignment="Center" Margin="0,0,10,0"
                        Foreground="{StaticResource TextDim}" FontSize="12"/>
             <Border Style="{StaticResource SplitToolbar}">
                 <StackPanel x:Name="BaudHost" Orientation="Horizontal"/>
@@ -67,18 +68,18 @@
         <StackPanel Grid.Row="5" Margin="2,10,0,12">
             <!-- ESP32 devkit: DTR→IO0 / RTS→EN 자동 리셋 회로. 기본은 두 선 모두 해제해 보드를 건드리지 않는다. -->
             <CheckBox x:Name="ResetOnOpenCheck" Style="{StaticResource DarkCheckBox}"
-                      Content="열 때 보드 리셋 (EN 펄스 — 부팅 로그를 처음부터 보기)"
+                      Content="{loc:Str Port.ResetOnOpen}"
                       Margin="0,0,0,8"/>
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextFaint}" FontSize="11.5"
-                       Text="나머지는 고정: 8비트 · 패리티 없음 · 스톱 1 · 흐름제어 없음 · 오픈 시 DTR/RTS 해제"/>
+                       Text="{loc:Str Port.Fixed}"/>
         </StackPanel>
 
         <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="RefreshButton" Content="새로고침" Style="{StaticResource DialogButton}"
+            <Button x:Name="RefreshButton" Content="{loc:Str Common.Refresh}" Style="{StaticResource DialogButton}"
                     Margin="0,0,8,0" Click="Refresh_Click"/>
-            <Button x:Name="OkButton" Content="연결" Style="{StaticResource SendButton}"
+            <Button x:Name="OkButton" Content="{loc:Str Common.Connect}" Style="{StaticResource SendButton}"
                     MinWidth="86" MinHeight="30" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
-            <Button Content="취소" Style="{StaticResource DialogButton}" IsCancel="True"/>
+            <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource DialogButton}" IsCancel="True"/>
         </StackPanel>
     </Grid>
 </Window>

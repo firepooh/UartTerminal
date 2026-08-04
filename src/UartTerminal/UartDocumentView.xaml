@@ -1,6 +1,7 @@
 <UserControl x:Class="UartTerminal.UartDocumentView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:UartTerminal"
              Background="{StaticResource Bg}">
     <DockPanel>
         <!-- 하단 입력 전용 행: 터미널 출력이 쏟아질 때 안정적으로 명령 입력.
@@ -52,7 +53,7 @@
                                VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="GroupSelector" MinWidth="104" MaxWidth="160" Height="26"
                               Margin="0,0,8,0" VerticalContentAlignment="Center"
-                              ToolTip="명령 그룹(프로젝트) 선택"
+                              ToolTip="{loc:Str Doc.GroupTip}"
                               SelectionChanged="GroupSelector_SelectionChanged"/>
                     <!-- 그룹 구분선: 그룹 셀렉터와 칩 묶음을 시각적으로 분리 -->
                     <Rectangle x:Name="GroupDivider" Width="1" Height="16" Margin="0,0,8,0"
@@ -65,12 +66,12 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0">
-                    <Button x:Name="SaveCmdButton" Content="+ 저장" Style="{StaticResource DialogButton}"
+                    <Button x:Name="SaveCmdButton" Content="{loc:Str Doc.SaveChip}" Style="{StaticResource DialogButton}"
                             MinWidth="0" MinHeight="26" Padding="10,0" Focusable="False"
-                            ToolTip="현재 입력창 내용을 명령으로 저장" Click="SaveCommand_Click"/>
-                    <Button x:Name="EditCmdButton" Content="편집" Style="{StaticResource DialogButton}"
+                            ToolTip="{loc:Str Doc.SaveChipTip}" Click="SaveCommand_Click"/>
+                    <Button x:Name="EditCmdButton" Content="{loc:Str Common.Edit}" Style="{StaticResource DialogButton}"
                             MinWidth="0" MinHeight="26" Padding="10,0" Margin="6,0,0,0" Focusable="False"
-                            ToolTip="저장 명령 편집" Click="EditCommands_Click"/>
+                            ToolTip="{loc:Str Doc.EditChipTip}" Click="EditCommands_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -96,11 +97,11 @@
                                MinWidth="46" Foreground="{StaticResource TextMuted}" FontSize="11.5"
                                FontFamily="{StaticResource MonoFont}" Text=""/>
                     <Button Content="▲" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
-                            Padding="9,0" Focusable="False" Click="FindPrev_Click" ToolTip="이전 (Shift+Enter)"/>
+                            Padding="9,0" Focusable="False" Click="FindPrev_Click" ToolTip="{loc:Str Doc.FindPrevTip}"/>
                     <Button Content="▼" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
-                            Padding="9,0" Margin="5,0,0,0" Focusable="False" Click="FindNext_Click" ToolTip="다음 (Enter)"/>
+                            Padding="9,0" Margin="5,0,0,0" Focusable="False" Click="FindNext_Click" ToolTip="{loc:Str Doc.FindNextTip}"/>
                     <Button Content="✕" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
-                            Padding="9,0" Margin="5,0,0,0" Focusable="False" Click="FindClose_Click" ToolTip="닫기 (Esc)"/>
+                            Padding="9,0" Margin="5,0,0,0" Focusable="False" Click="FindClose_Click" ToolTip="{loc:Str Doc.FindCloseTip}"/>
                 </StackPanel>
             </Border>
 
