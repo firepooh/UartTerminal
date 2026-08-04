@@ -12,13 +12,21 @@
     <Color x:Key="C.BgPanel">#FF0B0F16</Color>
     <Color x:Key="C.Surface">#FF11161F</Color>
     <Color x:Key="C.SurfaceHover">#FF1A2130</Color>
-    <Color x:Key="C.Border">#FF1C2433</Color>
-    <Color x:Key="C.BorderStrong">#FF263141</Color>
+    <!-- 경계선 3종. WCAG 는 'UI 컴포넌트 경계' 에 3:1 을 요구한다 —
+         원래 값(Border #1C2433 = 1.22:1, BorderStrong #263141 = 1.44:1)은 사실상 보이지 않아
+         빈 체크박스·콤보 테두리가 배경에 묻었다. 용도를 나눠 각각 목표를 다르게 잡는다:
+           Border        = 장식용 구분선(패널 경계) — 구조가 읽히는 정도
+           BorderStrong  = 상호작용 컨트롤 윤곽    — 3:1 이상(필수)
+           BorderFocus   = 포커스/호버 강조 -->
+    <Color x:Key="C.Border">#FF41506A</Color>
+    <Color x:Key="C.BorderStrong">#FF6E7A8C</Color>
+    <Color x:Key="C.BorderFocus">#FF8B97A8</Color>
     <Color x:Key="C.TabIdle">#FF0F141D</Color>
     <Color x:Key="C.Text">#FFE6EDF5</Color>
     <Color x:Key="C.TextDim">#FFA9B4C4</Color>
     <Color x:Key="C.TextMuted">#FF8B97A8</Color>
-    <Color x:Key="C.TextFaint">#FF5B6675</Color>
+    <!-- 보조 문구용. 원래 #5B6675 는 3.25:1 로 작은 글씨에 부족했다 -->
+    <Color x:Key="C.TextFaint">#FF7D8899</Color>
     <Color x:Key="C.Accent">#FF2F81F7</Color>
     <Color x:Key="C.AccentDeep">#FF1F6FEB</Color>
     <Color x:Key="C.Green">#FF2EA043</Color>
@@ -28,7 +36,8 @@
     <Color x:Key="C.Red">#FFF85149</Color>
     <Color x:Key="C.Purple">#FFBC8CFF</Color>
     <Color x:Key="C.State">#FFF0883E</Color>
-    <Color x:Key="C.Idle">#FF4B5563</Color>
+    <!-- 상태 점(연결 안 됨). 원래 #4B5563 은 2.50:1 로 잘 보이지 않았다 -->
+    <Color x:Key="C.Idle">#FF6B7688</Color>
 
     <!-- ===== Brushes ===== -->
     <SolidColorBrush x:Key="Bg"            Color="{StaticResource C.Bg}"/>
@@ -38,6 +47,7 @@
     <SolidColorBrush x:Key="SurfaceHover"  Color="{StaticResource C.SurfaceHover}"/>
     <SolidColorBrush x:Key="BorderBrush2"  Color="{StaticResource C.Border}"/>
     <SolidColorBrush x:Key="BorderStrong"  Color="{StaticResource C.BorderStrong}"/>
+    <SolidColorBrush x:Key="BorderFocus"   Color="{StaticResource C.BorderFocus}"/>
     <SolidColorBrush x:Key="TabIdle"       Color="{StaticResource C.TabIdle}"/>
     <SolidColorBrush x:Key="Text"          Color="{StaticResource C.Text}"/>
     <SolidColorBrush x:Key="TextDim"       Color="{StaticResource C.TextDim}"/>
@@ -53,6 +63,33 @@
     <SolidColorBrush x:Key="Purple"        Color="{StaticResource C.Purple}"/>
     <SolidColorBrush x:Key="StateBrush"    Color="{StaticResource C.State}"/>
     <SolidColorBrush x:Key="Idle"          Color="{StaticResource C.Idle}"/>
+
+    <!-- ===== 코드에서 쓰는 브러시 =====
+         셸(분할 패널·상태 점)과 터미널 렌더러가 쓰던 색을 코드에 복사해 두면
+         테마를 고쳐도 그쪽은 옛 색을 계속 써서 화면이 어긋난다(실제로 그랬다).
+         전부 테마 키로 옮겨 '색은 테마에만 있다' 는 규칙을 세운다. -->
+    <SolidColorBrush x:Key="PanelBorderInactive" Color="{StaticResource C.Border}"/>
+    <SolidColorBrush x:Key="PanelHeaderBg"       Color="{StaticResource C.TabIdle}"/>
+    <SolidColorBrush x:Key="ContentBg"           Color="{StaticResource C.Bg}"/>
+    <SolidColorBrush x:Key="SplitterBrush"       Color="{StaticResource C.Border}"/>
+    <SolidColorBrush x:Key="TitleActiveFg"       Color="{StaticResource C.Text}"/>
+    <SolidColorBrush x:Key="TitleInactiveFg"     Color="{StaticResource C.TextMuted}"/>
+    <SolidColorBrush x:Key="DotConnected"        Color="{StaticResource C.GreenBright}"/>
+    <SolidColorBrush x:Key="DotIdle"             Color="{StaticResource C.Idle}"/>
+    <SolidColorBrush x:Key="DotReconnecting"     Color="{StaticResource C.Amber}"/>
+    <SolidColorBrush x:Key="DotReleased"         Color="{StaticResource C.Purple}"/>
+    <SolidColorBrush x:Key="PromptActive"        Color="{StaticResource C.GreenBright}"/>
+    <SolidColorBrush x:Key="PromptIdle"          Color="{StaticResource C.Green}"/>
+
+    <!-- 터미널 렌더러(색만; ANSI 16색 팔레트는 표준값이라 코드에 둔다) -->
+    <Color x:Key="C.TermFg">#FFE6EDF5</Color>
+    <Color x:Key="C.TermBg">#FF0D1117</Color>
+    <Color x:Key="C.TermCursor">#FF3FB950</Color>
+    <Color x:Key="C.TermSelection">#FF6E7A8A</Color>
+    <Color x:Key="C.TermTimestamp">#FF8B97A8</Color>
+    <Color x:Key="C.TermSearchMatch">#FF4B4612</Color>
+    <Color x:Key="C.TermSearchCurrent">#FF8A6600</Color>
+    <Color x:Key="C.TermMeta">#FFBC8CFF</Color>
 
     <!-- ===== Fonts ===== -->
     <FontFamily x:Key="MonoFont">Cascadia Code, Cascadia Mono, Consolas, monospace</FontFamily>
@@ -222,8 +259,15 @@
     </Style>
 
     <!-- 다크 체크박스(기본 WPF 체크박스는 밝은 상자라 다크에서 튄다) -->
+    <!--
+      체크박스. '빈 상태가 눈에 안 들어와 체크해야 하는지 알 수 없다' 는 문제를 고친 버전.
+       · 테두리를 BorderStrong(3:1 이상)으로 하고 두께 1.4 — 배경에 묻지 않게
+       · 박스를 16px 로 키우고 내부를 Bg 보다 밝은 Surface 로 채워 '비어 있는 칸' 임이 보이게
+       · 라벨 기본색을 Text 로(원래 TextDim) — 체크 여부에 따라 밝기가 달라지면 상태로 오해된다
+       · 호버는 테두리 색만 바꾸지 않고 배경까지 바꿔 클릭 가능함을 알린다
+    -->
     <Style x:Key="DarkCheckBox" TargetType="CheckBox">
-        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+        <Setter Property="Foreground" Value="{StaticResource Text}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -231,12 +275,12 @@
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                     <StackPanel Orientation="Horizontal" Background="Transparent">
-                        <Border x:Name="Box" Width="15" Height="15" CornerRadius="4"
+                        <Border x:Name="Box" Width="16" Height="16" CornerRadius="4"
                                 Background="{StaticResource Surface}"
-                                BorderBrush="{StaticResource BorderStrong}" BorderThickness="1"
-                                VerticalAlignment="Center">
+                                BorderBrush="{StaticResource BorderStrong}" BorderThickness="1.4"
+                                VerticalAlignment="Center" SnapsToDevicePixels="True">
                             <Path x:Name="Check" Data="M1,4.5 L4,7.5 L9,1.5"
-                                  Stroke="White" StrokeThickness="1.7" Stretch="None"
+                                  Stroke="White" StrokeThickness="1.9" Stretch="None"
                                   Visibility="Collapsed"
                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -245,15 +289,16 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                            <Setter TargetName="Box" Property="Background" Value="{StaticResource SurfaceHover}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="Box" Property="Background" Value="{StaticResource AccentDeep}"/>
                             <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}"/>
                             <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
-                            <Setter Property="Foreground" Value="{StaticResource Text}"/>
                         </Trigger>
+                        <!-- 부분 선택(3-state)은 쓰지 않지만, null 이 들어와도 빈 칸으로 보이게 둔다 -->
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="Box" Property="Opacity" Value="0.45"/>
+                            <Setter TargetName="Box" Property="Opacity" Value="0.5"/>
                             <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -629,8 +674,9 @@
     <!-- ============================================================
          SCROLLBAR (GitHub-dark) — 트랙/썸/화살표. 암시적 스타일로 앱 전체 통일.
          ============================================================ -->
-    <SolidColorBrush x:Key="ScrollThumb"      Color="#FF363C46"/>
-    <SolidColorBrush x:Key="ScrollThumbHover" Color="#FF4B5563"/>
+    <!-- 스크롤 손잡이. 원래 #363C46 은 배경 대비 1.67:1 로 '어디를 잡아야 하는지' 보이지 않았다 -->
+    <SolidColorBrush x:Key="ScrollThumb"      Color="#FF5F6A7B"/>
+    <SolidColorBrush x:Key="ScrollThumbHover" Color="#FF8B97A8"/>
 
     <Geometry x:Key="Geo.ArrowUp">M0,5 L4,1 L8,5 Z</Geometry>
     <Geometry x:Key="Geo.ArrowDown">M0,1 L4,5 L8,1 Z</Geometry>

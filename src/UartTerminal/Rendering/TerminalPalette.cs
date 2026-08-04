@@ -30,13 +30,18 @@ public sealed class TerminalPalette
         Color.FromRgb(0xFF, 0xFF, 0xFF), // 15 bright white
     };
 
-    // GitHub-dark(사용자 제공 디자인) 기준 기본색
-    public Color DefaultForeground { get; init; } = Color.FromRgb(0xE6, 0xED, 0xF5);
-    public Color DefaultBackground { get; init; } = Color.FromRgb(0x0D, 0x11, 0x17);
+    // 기본색은 테마에서 읽는다(코드에 복사해 두면 테마를 바꿔도 화면이 안 따라온다).
+    // 테마가 없을 때(단위 테스트 등)는 GitHub-dark 값으로 떨어진다.
+    public Color DefaultForeground { get; init; } = Theme.ColorOr("C.TermFg", Color.FromRgb(0xE6, 0xED, 0xF5));
+    public Color DefaultBackground { get; init; } = Theme.ColorOr("C.TermBg", Color.FromRgb(0x0D, 0x11, 0x17));
     public Color SelectionBackground { get; init; } = Color.FromArgb(0x66, 0x2F, 0x81, 0xF7);
-    public Color CursorColor { get; init; } = Color.FromRgb(0x3F, 0xB9, 0x50);
+    public Color CursorColor { get; init; } = Theme.ColorOr("C.TermCursor", Color.FromRgb(0x3F, 0xB9, 0x50));
 
-    public static TerminalPalette Dark { get; } = new();
+    /// <summary>현재 테마 기준 팔레트. 테마를 바꾸면 다시 만들어야 한다(<see cref="Reload"/>).</summary>
+    public static TerminalPalette Dark { get; private set; } = new();
+
+    /// <summary>테마 전환 후 기본색을 다시 읽는다.</summary>
+    public static void Reload() => Dark = new TerminalPalette();
 
     /// <summary>전경색 해석. bold 이고 팔레트 0~7이면 bright(8~15)로 승격(일반 터미널 동작).</summary>
     public Color ResolveForeground(in CellAttributes attr)

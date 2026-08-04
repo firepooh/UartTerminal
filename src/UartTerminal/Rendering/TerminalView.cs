@@ -101,7 +101,8 @@ public sealed class TerminalView : FrameworkElement
     private double _tsGutter;                 // 현재 프레임의 gutter 픽셀 폭(0=꺼짐)
     private const int TsGutterChars = 13;     // "HH:mm:ss.fff " 폭(문자)
     private Typeface? _tsTypeface;
-    private static readonly Color TsColor = Color.FromRgb(0x6E, 0x7A, 0x8A);
+    // 색은 테마에서. 원래 #6E7A8A 는 배경 대비 4.3:1 로 작은 글씨에 아슬아슬했다.
+    private static Color TsColor => Theme.ColorOr("C.TermTimestamp", Color.FromRgb(0x8B, 0x97, 0xA8));
 
     public bool ShowTimestamps
     {
@@ -113,8 +114,8 @@ public sealed class TerminalView : FrameworkElement
     public readonly record struct SearchHit(long AbsLine, int StartCell, int Length);
     private readonly Dictionary<long, List<(int start, int len)>> _searchLines = new();
     private SearchHit? _currentHit;
-    private static readonly Color SearchMatchBg = Color.FromRgb(0x4B, 0x46, 0x12);   // 어두운 올리브
-    private static readonly Color SearchCurrentBg = Color.FromRgb(0x8A, 0x66, 0x00); // 밝은 앰버
+    private static Color SearchMatchBg => Theme.ColorOr("C.TermSearchMatch", Color.FromRgb(0x4B, 0x46, 0x12));
+    private static Color SearchCurrentBg => Theme.ColorOr("C.TermSearchCurrent", Color.FromRgb(0x8A, 0x66, 0x00));
 
     /// <summary>검색 매치 집합과 현재 매치 인덱스를 설정(하이라이트 갱신).</summary>
     public void SetSearch(IReadOnlyList<SearchHit> hits, int current)

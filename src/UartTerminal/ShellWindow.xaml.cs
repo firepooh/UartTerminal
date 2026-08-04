@@ -27,22 +27,22 @@ public partial class ShellWindow : Window
         public required Action Mcp;
     }
 
-    // GitHub-dark 팔레트(사용자 제공 디자인)
-    private static readonly Brush AccentBrush = Frozen(Color.FromRgb(0x2F, 0x81, 0xF7));
-    private static readonly Brush PanelBorderInactive = Frozen(Color.FromRgb(0x1C, 0x24, 0x33));
-    private static readonly Brush PanelHeaderBg = Frozen(Color.FromRgb(0x0F, 0x14, 0x1D));
-    private static readonly Brush ContentBg = Frozen(Color.FromRgb(0x0D, 0x11, 0x17));
-    private static readonly Brush DotConnected = Frozen(Color.FromRgb(0x3F, 0xB9, 0x50));
-    private static readonly Brush DotIdle = Frozen(Color.FromRgb(0x4B, 0x55, 0x63));
-    private static readonly Brush DotReconnecting = Frozen(Color.FromRgb(0xD2, 0x99, 0x22));
-    private static readonly Brush DotReleased = Frozen(Color.FromRgb(0x8A, 0x63, 0xD2));
-    private static readonly Brush SplitterBrush = Frozen(Color.FromRgb(0x26, 0x31, 0x41));
-    private static readonly Brush TitleActiveFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
-    private static readonly Brush TitleInactiveFg = Frozen(Color.FromRgb(0x8B, 0x97, 0xA8));
-    private static readonly Brush ConnectedFg = Frozen(Color.FromRgb(0xE6, 0xED, 0xF5));
-    private static readonly Brush DisconnectedFg = Frozen(Color.FromRgb(0x8B, 0x97, 0xA8));
-
-    private static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+    // 색은 테마(DarkTheme.xaml)에만 둔다. 예전에는 같은 팔레트를 여기 복사해 놨는데,
+    // 테마를 고쳐도 이쪽은 옛 색을 계속 써서 패널 경계·상태 점이 배경에 묻어 있었다.
+    // 프로퍼티로 매번 조회하므로 테마를 바꾸면 다음 렌더부터 새 색이 적용된다.
+    private static Brush AccentBrush => Theme.Brush("Accent");
+    private static Brush PanelBorderInactive => Theme.Brush("PanelBorderInactive");
+    private static Brush PanelHeaderBg => Theme.Brush("PanelHeaderBg");
+    private static Brush ContentBg => Theme.Brush("ContentBg");
+    private static Brush DotConnected => Theme.Brush("DotConnected");
+    private static Brush DotIdle => Theme.Brush("DotIdle");
+    private static Brush DotReconnecting => Theme.Brush("DotReconnecting");
+    private static Brush DotReleased => Theme.Brush("DotReleased");
+    private static Brush SplitterBrush => Theme.Brush("SplitterBrush");
+    private static Brush TitleActiveFg => Theme.Brush("TitleActiveFg");
+    private static Brush TitleInactiveFg => Theme.Brush("TitleInactiveFg");
+    private static Brush ConnectedFg => Theme.Brush("TitleActiveFg");
+    private static Brush DisconnectedFg => Theme.Brush("TitleInactiveFg");
 
     public static ShellWindow? Primary { get; private set; }
 

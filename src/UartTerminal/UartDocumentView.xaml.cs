@@ -374,10 +374,10 @@ public partial class UartDocumentView : UserControl
 
     // 입력 필드 테두리 강조는 CommandInput 스타일(포커스 시 accent)이 처리. 프롬프트만 밝게.
     private void InputBox_GotFocus(object sender, KeyboardFocusChangedEventArgs e)
-        => Prompt.Foreground = new SolidColorBrush(Color.FromRgb(0x3F, 0xB9, 0x50));
+        => Prompt.Foreground = Theme.Brush("PromptActive");
 
     private void InputBox_LostFocus(object sender, KeyboardFocusChangedEventArgs e)
-        => Prompt.Foreground = new SolidColorBrush(Color.FromRgb(0x2E, 0xA0, 0x43));
+        => Prompt.Foreground = Theme.Brush("PromptIdle");
 
     private void Send_Click(object sender, RoutedEventArgs e) => SendInputLine();
 
