@@ -140,9 +140,9 @@ public sealed class FlashPackageTests : IDisposable
 
         Assert.Equal(EspChip.Esp32, pkg.Chip);              // 사용자 지정이 최종
         Assert.Equal("사용자 지정", pkg.ChipSource);
-        Assert.Contains(pkg.Warnings, w => w.Contains("다릅니다"));
+        Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.ChipMismatch");
         // ESP32 의 부트로더는 0x1000 인데 패키지는 0x0 → 별도 경고
-        Assert.Contains(pkg.Warnings, w => w.Contains("0x1000"));
+        Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.BootloaderOffset" && w.Args.Contains("0x1000"));
     }
 
     // ── 오프셋/파일 매칭 ────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ public sealed class FlashPackageTests : IDisposable
         Assert.Equal("myapp-1.2.3.bin", app.FileName);   // 버전 붙은 사본 우선
         Assert.Equal(2, app.Candidates.Count);                   // 사용자가 바꿀 수 있게 후보 노출
         Assert.Contains("myapp.bin", app.Candidates);
-        Assert.Contains(pkg.Warnings, w => w.Contains("firmware.bin"));
+        Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.ArgsCandidates" && w.Args.Contains("firmware.bin"));
     }
 
     [Fact]
@@ -211,8 +211,8 @@ public sealed class FlashPackageTests : IDisposable
         // 왜 안 켜져 있는지 알아야 켤 수 있다.
         var pkg = Analyze(MakeRealisticZip());
 
-        Assert.Contains("구성이 바뀌면", pkg.Items.Single(i => i.Role == "bootloader").Note);
-        Assert.Contains("데이터 보호", pkg.Items.Single(i => i.Role == "storage").Note);
+        Assert.Equal("Flash.Note.UncheckedConfig", pkg.Items.Single(i => i.Role == "bootloader").Note!.Key);
+        Assert.Equal("Flash.Note.UncheckedData", pkg.Items.Single(i => i.Role == "storage").Note!.Key);
         Assert.Null(pkg.Items.Single(i => i.Role == "otadata").Note);   // 켜진 줄은 조용히
     }
 
@@ -229,7 +229,7 @@ public sealed class FlashPackageTests : IDisposable
         });
 
         var pkg = Analyze(zip);
-        Assert.Contains(pkg.Errors, e => e.Contains("0x10000"));
+        Assert.Contains(pkg.Errors, e => e.Key == "Flash.Err.DuplicateOffset" && e.Args.Contains("0x10000"));
         Assert.False(pkg.IsUsable);
     }
 
@@ -247,7 +247,7 @@ public sealed class FlashPackageTests : IDisposable
         var pt = pkg.Items.Single(i => i.Role == "partition-table");
         Assert.Null(pt.FileName);
         Assert.False(pt.Selected);
-        Assert.Contains(pkg.Warnings, w => w.Contains("partition-table.bin"));
+        Assert.Contains(pkg.Warnings, w => w.Args.Contains("partition-table.bin"));
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public sealed class FlashPackageTests : IDisposable
             AddBytes(z, "app.bin", Array.Empty<byte>());
         });
 
-        Assert.Contains(Analyze(zip).Errors, e => e.Contains("크기가 0"));
+        Assert.Contains(Analyze(zip).Errors, e => e.Key == "Flash.Err.EmptyFile");
     }
 
     [Fact]
@@ -277,7 +277,7 @@ public sealed class FlashPackageTests : IDisposable
         Assert.Equal(0x0u, pkg.Items.Single(i => i.Role == "bootloader").Offset);      // S3 → 0x0
         Assert.Equal(0x8000u, pkg.Items.Single(i => i.Role == "partition-table").Offset);
         Assert.Equal(0x10000u, pkg.Items.Single(i => i.Role == "app").Offset);
-        Assert.Contains(pkg.Warnings, w => w.Contains("추정"));
+        Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.NoArgsFile");
     }
 
     [Fact]
@@ -420,7 +420,7 @@ public sealed class FlashPackageTests : IDisposable
     {
         // 앱 사본은 후보로 노출되므로 '위치 불명' 경고를 내면 안 된다(잡음).
         var pkg = Analyze(MakeRealisticZip());
-        Assert.DoesNotContain(pkg.Warnings, w => w.Contains("위치를 알 수 없어"));
+        Assert.DoesNotContain(pkg.Warnings, w => w.Key == "Flash.Warn.UnknownLocation");
     }
 
     [Fact]

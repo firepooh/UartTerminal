@@ -177,16 +177,17 @@ public sealed class EsptoolTests
     }
 
     [Fact]
-    public void Progress_ReportsPhaseText()
+    public void Progress_ReportsPhaseKeys_NotSentences()
     {
+        // Phase 는 번역 키다 — Core 는 UI 언어를 모르므로 문장을 만들지 않는다.
         var parser = new EsptoolProgressParser(new long[] { 100 });
 
         Assert.True(parser.Feed("Connecting....", out var a));
-        Assert.Equal("연결 중", a.Phase);
+        Assert.Equal("Flash.Phase.Connecting", a.Phase);
         Assert.True(parser.Feed("Writing at 0x0... (10 %)", out var b));
-        Assert.Equal("쓰는 중", b.Phase);
+        Assert.Equal("Flash.Phase.Writing", b.Phase);
         Assert.True(parser.Feed("Hash of data verified.", out var c));
-        Assert.Equal("검증됨", c.Phase);
+        Assert.Equal("Flash.Phase.Verified", c.Phase);
     }
 
     [Fact]

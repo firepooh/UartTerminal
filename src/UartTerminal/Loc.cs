@@ -59,6 +59,24 @@ public sealed class Loc : INotifyPropertyChanged
         DiagLog.Info($"언어 적용: {language}");
     }
 
+
+    /// <summary>서식 문자열에 인자를 채운다(<c>{0}</c> 자리). 인자 개수가 어긋나도 예외 없이 원문을 돌려준다.</summary>
+    public static string F(string key, params object?[] args)
+    {
+        string template = S(key);
+        if (args.Length == 0) return template;
+        try { return string.Format(template, args); }
+        catch (FormatException)
+        {
+            DiagLog.Warn($"문자열 서식 불일치: {key}");
+            return template;
+        }
+    }
+
+    /// <summary>Core 가 돌려준 메시지(키 + 인자)를 현재 언어 문장으로 조립한다.</summary>
+    public static string Format(UartTerminal.Core.Flash.FlashMessage message) =>
+        F(message.Key, message.Args.Cast<object?>().ToArray());
+
     /// <summary>번역 누락 점검용(테스트/진단). 값이 빈 키 목록.</summary>
     public static IReadOnlyList<string> MissingTranslations() =>
         Table.Where(e => string.IsNullOrEmpty(e.Value.En)).Select(e => e.Key).ToList();
@@ -235,6 +253,78 @@ public sealed class Loc : INotifyPropertyChanged
         ["Cmd.Confirm"] = ("전송 전 확인 (restart · erase 처럼 위험한 명령)", "Confirm before sending (for risky commands like restart / erase)"),
         ["Cmd.FolderHint"] = ("폴더입니다 — 전송 문자열이 없고, 클릭하면 하위 명령을 고르는 메뉴가 열립니다. [하위 명령 추가]로 항목을 넣으세요.", "This is a folder — it has no text to send; clicking it opens a menu of sub-commands. Use [Add sub-command] to add entries."),
         ["Cmd.SecretWarn"] = ("비밀번호 같은 민감정보는 저장하지 마세요 (commands.json 은 평문입니다).", "Do not store secrets such as passwords (commands.json is plain text)."),
+
+        // ── 플래시(Core 가 키로 돌려주는 메시지 + 화면 문구) ──
+        ["Flash.Phase.Preparing"] = ("준비 중", "Preparing"),
+        ["Flash.Phase.Connecting"] = ("연결 중", "Connecting"),
+        ["Flash.Phase.ChipCheck"] = ("칩 확인", "Chip check"),
+        ["Flash.Phase.Stub"] = ("스텁 로딩", "Loading stub"),
+        ["Flash.Phase.Baud"] = ("속도 변경", "Changing baud"),
+        ["Flash.Phase.Configure"] = ("플래시 설정", "Configuring flash"),
+        ["Flash.Phase.Erasing"] = ("지우는 중", "Erasing"),
+        ["Flash.Phase.Writing"] = ("쓰는 중", "Writing"),
+        ["Flash.Phase.Verifying"] = ("검증/마무리", "Verifying"),
+        ["Flash.Phase.Verified"] = ("검증됨", "Verified"),
+        ["Flash.Phase.Finishing"] = ("마무리", "Finishing"),
+        ["Flash.Phase.Resetting"] = ("리셋", "Resetting"),
+        ["Flash.Phase.Done"] = ("완료", "Done"),
+        ["Flash.Phase.Stopped"] = ("중지됨", "Stopped"),
+        ["Flash.Phase.Failed"] = ("실패", "Failed"),
+        ["Flash.Phase.Releasing"] = ("포트 양보 중…", "Releasing port…"),
+        ["Flash.Warn.UnknownLocation"] = ("{0} 은(는) 쓸 위치를 알 수 없어 목록에 넣지 않았습니다(필요하면 직접 추가).", "{0} was left out — its flash location is unknown (add it manually if needed)."),
+        ["Flash.Warn.ChipMismatch"] = ("선택한 칩({0})이 패키지에서 판별된 칩({1})과 다릅니다 — 부트로더 오프셋이 맞지 않으면 부팅되지 않습니다.", "Selected chip ({0}) differs from the chip detected in the package ({1}) — if the bootloader offset does not match, the board will not boot."),
+        ["Flash.Warn.ChipUnknown"] = ("칩을 판별하지 못했습니다 — 칩을 직접 고르거나 연결된 보드에서 감지하세요.", "Could not determine the chip — pick one manually or detect it from the connected board."),
+        ["Flash.Warn.BootloaderOffset"] = ("{0} 의 부트로더 오프셋은 {1} 인데 패키지는 {2} 입니다 — 칩이나 패키지가 맞지 않을 수 있습니다.", "{0} expects the bootloader at {1} but the package uses {2} — the chip or the package may not match."),
+        ["Flash.Warn.ArgsReadFailed"] = ("{0} 을(를) 읽지 못했습니다: {1}", "Could not read {0}: {1}"),
+        ["Flash.Warn.NoArgsFile"] = ("flash_project_args / flasher_args.json 이 없어 파일명 관례로 오프셋을 추정했습니다 — 값을 확인하세요.", "No flash_project_args / flasher_args.json — offsets were guessed from file-name conventions; please verify them."),
+        ["Flash.Warn.ArgsRenamed"] = ("{0}: args 는 {1} 을 가리키지만 패키지에 없어 {2} 을 씁니다.", "{0}: args points to {1}, which is not in the package — using {2} instead."),
+        ["Flash.Warn.ArgsCandidates"] = ("{0}: args 는 {1} 을 가리키지만 패키지에 없습니다. 후보 {2}개({3}) 중 {4} 을 기본 선택했습니다.", "{0}: args points to {1}, which is not in the package. {2} candidates ({3}) — {4} selected by default."),
+        ["Flash.Warn.FileMissing"] = ("{0}: {1} 을(를) 패키지에서 찾지 못했습니다.", "{0}: {1} was not found in the package."),
+        ["Flash.Err.NoFiles"] = ("플래시할 파일을 찾지 못했습니다(flash_project_args / flasher_args.json 도 없음).", "No files to flash (and no flash_project_args / flasher_args.json)."),
+        ["Flash.Err.DuplicateOffset"] = ("오프셋 {0} 에 파일이 {1}개 잡혔습니다 ({2}) — 하나만 남기세요.", "{1} files map to offset {0} ({2}) — keep only one."),
+        ["Flash.Err.EmptyFile"] = ("{0} 크기가 0입니다.", "{0} is empty (0 bytes)."),
+        ["Flash.Note.Missing"] = ("패키지에 파일이 없습니다", "not in package"),
+        ["Flash.Note.UncheckedConfig"] = ("기본 해제 — 구성이 바뀌면 체크", "off by default — check if layout changed"),
+        ["Flash.Note.UncheckedData"] = ("기본 해제(데이터 보호)", "off by default (protects device data)"),
+        ["Flash.Note.Unchecked"] = ("기본 해제", "off by default"),
+        ["Flash.Note.Replaced"] = ("args 의 {0} 을(를) 찾지 못해 {1} 으로 대체", "{0} from args not found — using {1}"),
+        ["Flash.Note.Candidates"] = ("후보 {0}개 — 확인 필요", "{0} candidates — please verify"),
+        ["Flash.Note.EstimatedOffset"] = ("오프셋 추정값 — 확인 필요", "offset is a guess — please verify"),
+        ["Flash.Log.Extract"] = ("패키지 해제: {0}", "Extracting package: {0}"),
+        ["Flash.Log.ReleaseRequest"] = ("{0} 양보 요청", "Requesting release of {0}"),
+        ["Flash.Log.ReleaseFailed"] = ("포트를 양보하지 못했습니다 — 중단합니다.", "Could not release the port — aborting."),
+        ["Flash.Log.Reconnecting"] = ("{0} 재연결…", "Reconnecting {0}…"),
+        ["Flash.Log.Reconnected"] = ("재연결됨.", "Reconnected."),
+        ["Flash.Log.ReconnectFailed"] = ("재연결 실패 — [터미널 > 재연결](Alt+N)로 다시 시도하세요.", "Reconnect failed — try [Terminal > Reconnect] (Alt+N)."),
+        ["Flash.Log.StillReleased"] = ("포트는 양보된 상태입니다 — 필요하면 Alt+N 으로 재연결하세요.", "The port is still released — press Alt+N to reconnect when ready."),
+        ["Flash.Log.Done"] = ("플래시 완료.", "Flash complete."),
+        ["Flash.Log.Failed"] = ("실패", "Failed"),
+        ["Flash.Log.Canceled"] = ("취소되었습니다.", "Canceled."),
+        ["Flash.Log.StopRequested"] = ("중지 요청…", "Stop requested…"),
+        ["Flash.Log.Error"] = ("오류: {0}", "Error: {0}"),
+        ["Flash.Msg.ReleaseFailedBody"] = ("포트를 양보하지 못해 플래시를 시작할 수 없습니다.", "Cannot start flashing because the port could not be released."),
+        ["Flash.Msg.DuplicateOffset"] = ("오프셋 {0} 에 파일이 여러 개 선택됐습니다. 하나만 남기세요.", "Multiple files are selected for offset {0}. Keep only one."),
+        ["Flash.Msg.ConfirmTitle"] = ("펌웨어 플래시", "Flash Firmware"),
+        ["Flash.Msg.Confirm"] = ("{0} 에 {1}개 파일({2} MB)을 씁니다.\n칩: {3} · 속도: {4}\n\n진행하는 동안 이 탭의 연결이 잠시 끊깁니다. 계속할까요?", "About to write {1} file(s) ({2} MB) to {0}.\nChip: {3} · Speed: {4}\n\nThis tab's connection will drop while flashing. Continue?"),
+        ["Flash.Chip.Auto"] = ("자동", "auto"),
+        ["Flash.Chip.AutoDetected"] = ("자동 — {0}", "Auto — {0}"),
+        ["Flash.Chip.AutoFailed"] = ("자동 (판별 실패 — 직접 고르세요)", "Auto (detection failed — pick manually)"),
+        ["Flash.Chip.Tip"] = ("판별 근거: {0}\nesptool --chip {1}", "Detected via: {0}\nesptool --chip {1}"),
+        ["Flash.Chip.TipUnknown"] = ("패키지에서 칩을 판별하지 못했습니다 — 직접 고르세요.", "Could not determine the chip from the package — pick one manually."),
+        ["Flash.Tool.NotFound"] = ("esptool 을 찾지 못했습니다 — ESP-IDF 를 설치하거나 esptool 실행 파일을 지정하세요.", "esptool not found — install ESP-IDF or point to an esptool executable."),
+        ["Flash.Tool.NotFoundHelp"] = ("esptool 실행 파일이 없어 플래시할 수 없습니다.\n· ESP-IDF 가 설치된 PC 라면 자동으로 찾습니다.\n· 아니면 esptool 공식 릴리스(standalone)를 받아 앱 폴더의 tools\\esptool\\ 에 두거나 state.json 의 esptoolPath 에 경로를 적으세요.", "Cannot flash without an esptool executable.\n· On a PC with ESP-IDF installed it is found automatically.\n· Otherwise download the official standalone esptool release and place it in tools\\esptool\\ next to the app, or set esptoolPath in state.json."),
+        ["Flash.Msg.OpenFailed"] = ("패키지를 열지 못했습니다: {0}", "Could not open the package: {0}"),
+        ["Flash.Msg.ExtractMissing"] = ("해제된 파일을 찾을 수 없습니다: {0}", "Extracted file not found: {0}"),
+        ["Flash.Msg.NoPortTitle"] = ("UartTerminal", "UartTerminal"),
+        ["Flash.Msg.NoPort"] = ("먼저 포트에 연결하세요.\n플래시는 현재 탭의 포트를 사용합니다.", "Connect to a port first.\nFlashing uses the port of the current tab."),
+        ["Flash.Status.NoPort"] = ("플래시할 포트가 없습니다 — 먼저 연결하세요(Alt+N)", "No port to flash — connect first (Alt+N)"),
+        ["Flash.Prefix.Warn"] = ("경고: {0}", "Warning: {0}"),
+        ["Flash.Prefix.Err"] = ("오류: {0}", "Error: {0}"),
+        ["Flash.NoConnection"] = ("(연결 없음)", "(not connected)"),
+        ["Flash.FileMissingCell"] = ("(패키지에 없음)", "(not in package)"),
+        ["Flash.Chip.AutoGeneric"] = ("자동 (패키지에서 판별)", "Auto (detect from package)"),
+        ["Flash.PickTitle"] = ("펌웨어 패키지 선택", "Select firmware package"),
+        ["Flash.PickFilter"] = ("펌웨어 패키지 (*.zip)|*.zip|모든 파일 (*.*)|*.*", "Firmware package (*.zip)|*.zip|All files (*.*)|*.*"),
     };
 }
 

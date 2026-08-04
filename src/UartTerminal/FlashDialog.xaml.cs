@@ -32,7 +32,10 @@ public partial class FlashDialog : Window
         /// <summary>후보별 크기(파일을 바꾸면 크기 표시도 따라가야 한다).</summary>
         public IReadOnlyDictionary<string, long> Sizes { get; init; } = new Dictionary<string, long>();
 
-        public string? Note { get; init; }
+        /// <summary>Core 가 준 번역 키 + 인자. 표시 문장은 <see cref="NoteText"/> 가 현재 언어로 만든다.</summary>
+        public FlashMessage? Note { get; init; }
+
+        public string NoteText => Note is null ? "" : Loc.Format(Note);
 
         public string OffsetText => $"0x{Offset:X}";
 
@@ -54,7 +57,7 @@ public partial class FlashDialog : Window
 
         public string SizeText => _fileName is null ? "—" : $"{Size / 1024.0:N1} KB";
 
-        public string FileDisplay => _fileName ?? "(패키지에 없음)";
+        public string FileDisplay => _fileName ?? Loc.S("Flash.FileMissingCell");
 
         // 후보가 여럿일 때만 콤보를 보여준다.
         public Visibility ChoiceVisibility => Candidates.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
@@ -81,9 +84,11 @@ public partial class FlashDialog : Window
     }
 
     /// <summary>칩 콤보 항목(자동 = null).</summary>
-    private static readonly (string Text, EspChip? Value)[] ChipItems =
+    // static readonly 로 두면 앱 시작 시 언어로 고정된다 → 매번 조회하는 프로퍼티로 둔다.
+    private static (string Text, EspChip? Value)[] ChipItems =>
+    new (string, EspChip?)[]
     {
-        ("자동 (패키지에서 판별)", null),
+        (Loc.S("Flash.Chip.AutoGeneric"), null),
         ("ESP32", EspChip.Esp32),
         ("ESP32-S2", EspChip.Esp32S2),
         ("ESP32-S3", EspChip.Esp32S3),
@@ -118,7 +123,7 @@ public partial class FlashDialog : Window
         _releasePort = releasePort;
         _reopenPort = reopenPort;
 
-        PortText.Text = string.IsNullOrEmpty(portName) ? "(연결 없음)" : portName;
+        PortText.Text = string.IsNullOrEmpty(portName) ? Loc.S("Flash.NoConnection") : portName;
         ItemList.ItemsSource = _rows;
 
         _syncing = true;
@@ -156,12 +161,9 @@ public partial class FlashDialog : Window
 
         if (_tool is null)
         {
-            ToolText.Text = "esptool 을 찾지 못했습니다 — ESP-IDF 를 설치하거나 esptool 실행 파일을 지정하세요.";
+            ToolText.Text = Loc.S("Flash.Tool.NotFound");
             ToolText.Foreground = (Brush)Application.Current.Resources["Red"];
-            AppendNotice("esptool 실행 파일이 없어 플래시할 수 없습니다.\n" +
-                         "· ESP-IDF 가 설치된 PC 라면 자동으로 찾습니다.\n" +
-                         "· 아니면 esptool 공식 릴리스(standalone)를 받아 앱 폴더의 tools\\esptool\\ 에 두거나 " +
-                         "state.json 의 esptoolPath 에 경로를 적으세요.");
+            AppendNotice(Loc.S("Flash.Tool.NotFoundHelp"));
         }
         else
         {
@@ -181,8 +183,8 @@ public partial class FlashDialog : Window
     {
         var dlg = new OpenFileDialog
         {
-            Title = "펌웨어 패키지 선택",
-            Filter = "펌웨어 패키지 (*.zip)|*.zip|모든 파일 (*.*)|*.*",
+            Title = Loc.S("Flash.PickTitle"),
+            Filter = Loc.S("Flash.PickFilter"),
             CheckFileExists = true,
         };
         if (!string.IsNullOrEmpty(_state.LastFlashZip))
@@ -209,7 +211,7 @@ public partial class FlashDialog : Window
         catch (Exception ex)
         {
             _package = null;
-            AppendNotice($"패키지를 열지 못했습니다: {ex.Message}");
+            AppendNotice(Loc.F("Flash.Msg.OpenFailed", ex.Message));
             UpdateButtons();
             return;
         }
@@ -241,18 +243,18 @@ public partial class FlashDialog : Window
             _syncing = true;
             var texts = ChipItems.Select(c => c.Text).ToList();
             texts[0] = _package.Chip == EspChip.Unknown
-                ? "자동 (판별 실패 — 직접 고르세요)"
-                : $"자동 — {_package.Chip.DisplayName()}";
+                ? Loc.S("Flash.Chip.AutoFailed")
+                : Loc.F("Flash.Chip.AutoDetected", _package.Chip.DisplayName());
             ChipBox.ItemsSource = texts;
             ChipBox.SelectedIndex = 0;
             ChipBox.ToolTip = _package.Chip == EspChip.Unknown
-                ? "패키지에서 칩을 판별하지 못했습니다 — 직접 고르세요."
-                : $"판별 근거: {_package.ChipSource}\nesptool --chip {_package.Chip.EsptoolName()}";
+                ? Loc.S("Flash.Chip.TipUnknown")
+                : Loc.F("Flash.Chip.Tip", _package.ChipSource, _package.Chip.EsptoolName());
             _syncing = false;
         }
 
-        foreach (string w in _package.Warnings) AppendNotice("경고: " + w);
-        foreach (string er in _package.Errors) AppendNotice("오류: " + er);
+        foreach (var w in _package.Warnings) AppendNotice(Loc.F("Flash.Prefix.Warn", Loc.Format(w)));
+        foreach (var er in _package.Errors) AppendNotice(Loc.F("Flash.Prefix.Err", Loc.Format(er)));
 
         _state.LastFlashZip = zipPath;
         _state.Save();
@@ -314,7 +316,7 @@ public partial class FlashDialog : Window
         var dup = selected.GroupBy(r => r.Offset).FirstOrDefault(g => g.Count() > 1);
         if (dup is not null)
         {
-            MessageBox.Show(this, $"오프셋 0x{dup.Key:X} 에 파일이 여러 개 선택됐습니다. 하나만 남기세요.",
+            MessageBox.Show(this, Loc.F("Flash.Msg.DuplicateOffset", $"0x{dup.Key:X}"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -330,17 +332,16 @@ public partial class FlashDialog : Window
 
         long total = plan.Sum(p => p.Size);
         var confirm = MessageBox.Show(this,
-            $"{_portName} 에 {plan.Count}개 파일({total / 1024.0 / 1024.0:N2} MB)을 씁니다.\n" +
-            $"칩: {(chip == EspChip.Unknown ? "자동" : chip.DisplayName())} · 속도: {baud}\n\n" +
-            "진행하는 동안 이 탭의 연결이 잠시 끊깁니다. 계속할까요?",
-            "펌웨어 플래시", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK);
+            Loc.F("Flash.Msg.Confirm", _portName, plan.Count, $"{total / 1024.0 / 1024.0:N2}",
+                  chip == EspChip.Unknown ? Loc.S("Flash.Chip.Auto") : chip.DisplayName(), baud),
+            Loc.S("Flash.Msg.ConfirmTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK);
         if (confirm != MessageBoxResult.OK) return;
 
         _running = true;
         _cts = new CancellationTokenSource();
         LogBox.Clear();
         Progress.Value = 0;
-        SetProgressText("준비 중…", 0);
+        SetProgressText("Flash.Phase.Preparing", 0);
         UpdateButtons();
 
         bool released = false;
@@ -348,25 +349,25 @@ public partial class FlashDialog : Window
         {
             // 1) 압축 해제(재사용)
             string root = Path.Combine(AppState.Dir, "flash", FlashExtractor.WorkFolderName(zipPath));
-            Log($"패키지 해제: {root}");
+            Log(Loc.F("Flash.Log.Extract", root));
             var map = await Task.Run(() => FlashExtractor.Extract(zipPath, root), _cts.Token);
 
             var files = new List<(uint Offset, string File)>();
             foreach (var p in plan)
             {
                 if (!map.TryGetValue(p.Name, out string? full))
-                    throw new FileNotFoundException($"해제된 파일을 찾을 수 없습니다: {p.Name}");
+                    throw new FileNotFoundException(Loc.F("Flash.Msg.ExtractMissing", p.Name));
                 files.Add((p.Offset, full));
             }
 
             // 2) 포트 양보
-            SetProgressText("포트 양보 중…", 0);
-            Log($"{_portName} 양보 요청");
+            SetProgressText("Flash.Phase.Releasing", 0);
+            Log(Loc.F("Flash.Log.ReleaseRequest", _portName));
             released = await _releasePort();
             if (!released)
             {
-                Log("포트를 양보하지 못했습니다 — 중단합니다.");
-                MessageBox.Show(this, "포트를 양보하지 못해 플래시를 시작할 수 없습니다.",
+                Log(Loc.S("Flash.Log.ReleaseFailed"));
+                MessageBox.Show(this, Loc.S("Flash.Msg.ReleaseFailedBody"),
                     "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
@@ -400,26 +401,26 @@ public partial class FlashDialog : Window
             if (result.Ok)
             {
                 Progress.Value = 1;
-                SetProgressText("완료", 1);
+                SetProgressText("Flash.Phase.Done", 1);
                 Log("");
-                Log("플래시 완료.");
+                Log(Loc.S("Flash.Log.Done"));
             }
             else
             {
-                SetProgressText(result.Canceled ? "중지됨" : "실패", Progress.Value);
+                SetProgressText(result.Canceled ? "Flash.Phase.Stopped" : "Flash.Phase.Failed", Progress.Value);
                 Log("");
-                Log(result.Error ?? "실패");
+                Log(result.Error ?? Loc.S("Flash.Log.Failed"));
             }
         }
         catch (OperationCanceledException)
         {
-            SetProgressText("중지됨", Progress.Value);
-            Log("취소되었습니다.");
+            SetProgressText("Flash.Phase.Stopped", Progress.Value);
+            Log(Loc.S("Flash.Log.Canceled"));
         }
         catch (Exception ex)
         {
-            SetProgressText("실패", Progress.Value);
-            Log($"오류: {ex.Message}");
+            SetProgressText("Flash.Phase.Failed", Progress.Value);
+            Log(Loc.F("Flash.Log.Error", ex.Message));
             DiagLog.Exception("Flash", ex);
         }
         finally
@@ -427,13 +428,13 @@ public partial class FlashDialog : Window
             // 4) 포트 복귀 — 성공/실패/취소 어느 경우에도 되돌린다.
             if (released && reconnectAfter)
             {
-                Log($"{_portName} 재연결…");
+                Log(Loc.F("Flash.Log.Reconnecting", _portName));
                 bool ok = await _reopenPort();
-                Log(ok ? "재연결됨." : "재연결 실패 — [터미널 > 재연결](Alt+N)로 다시 시도하세요.");
+                Log(ok ? Loc.S("Flash.Log.Reconnected") : Loc.S("Flash.Log.ReconnectFailed"));
             }
             else if (released)
             {
-                Log("포트는 양보된 상태입니다 — 필요하면 Alt+N 으로 재연결하세요.");
+                Log(Loc.S("Flash.Log.StillReleased"));
             }
 
             _cts?.Dispose();
@@ -446,7 +447,7 @@ public partial class FlashDialog : Window
     private void Stop_Click(object sender, RoutedEventArgs e)
     {
         if (!_running) return;
-        Log("중지 요청…");
+        Log(Loc.S("Flash.Log.StopRequested"));
         try { _cts?.Cancel(); } catch { }
     }
 
@@ -465,14 +466,15 @@ public partial class FlashDialog : Window
     // 아래 둘은 백그라운드에서 불릴 수 있는 자리(프로세스 출력 펌프 등)라 스스로 UI 스레드로 넘긴다.
     // 호출자가 마샬링을 잊어도 "다른 스레드가 이 개체를 소유하고 있어…" 로 죽지 않게 하는 보험이다.
 
-    private void SetProgressText(string phase, double fraction)
+    /// <summary><paramref name="phaseKey"/> 는 Core 가 준 번역 키다 — 문장은 여기서 만든다.</summary>
+    private void SetProgressText(string phaseKey, double fraction)
     {
         if (!Dispatcher.CheckAccess())
         {
-            Dispatcher.BeginInvoke(() => SetProgressText(phase, fraction));
+            Dispatcher.BeginInvoke(() => SetProgressText(phaseKey, fraction));
             return;
         }
-        ProgressText.Text = $"{phase}  ·  {fraction * 100:0}%";
+        ProgressText.Text = $"{Loc.S(phaseKey)}  ·  {fraction * 100:0}%";
     }
 
     private void Log(string line)

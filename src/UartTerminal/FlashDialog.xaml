@@ -189,7 +189,7 @@
                                       Visibility="{Binding ChoiceVisibility}"/>
                         </Grid>
                         <!-- 비고는 별도 열 — 파일명과 같은 칸에 두면 이름이 길 때 글자가 겹친다 -->
-                        <TextBlock Grid.Column="5" Text="{Binding Note}" Style="{StaticResource CellNote}"
+                        <TextBlock Grid.Column="5" Text="{Binding NoteText}" Style="{StaticResource CellNote}"
                                    Margin="0,0,10,0" TextWrapping="NoWrap"/>
                     </Grid>
                 </DataTemplate>

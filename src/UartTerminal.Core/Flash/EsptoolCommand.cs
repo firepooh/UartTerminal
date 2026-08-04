@@ -98,7 +98,7 @@ public static class EsptoolCommand
         s.Contains(' ') || s.Contains('\t') ? $"\"{s}\"" : s;
 }
 
-/// <summary>진행률 한 조각.</summary>
+/// <summary>진행률 한 조각. <c>Phase</c> 는 완성된 문장이 아니라 <b>번역 키</b>다(문장은 UI 가 만든다).</summary>
 public readonly record struct FlashProgress(double Fraction, string Phase, int FileIndex);
 
 /// <summary>
@@ -123,7 +123,7 @@ public sealed class EsptoolProgressParser
     private readonly long _total;
     private int _index;
     private int _percent;
-    private string _phase = "준비 중";
+    private string _phase = "Flash.Phase.Preparing";
 
     public EsptoolProgressParser(IReadOnlyList<long> fileSizes)
     {
@@ -150,7 +150,7 @@ public sealed class EsptoolProgressParser
             if (int.TryParse(w.Groups[1].Value, out int pct))
             {
                 _percent = Math.Clamp(pct, 0, 100);
-                _phase = "쓰는 중";
+                _phase = "Flash.Phase.Writing";
                 changed = true;
             }
         }
@@ -159,7 +159,7 @@ public sealed class EsptoolProgressParser
             // 한 파일 완료 → 다음 파일로. 퍼센트는 리셋.
             if (_index < _sizes.Length) _index++;
             _percent = 0;
-            _phase = _index >= _sizes.Length ? "검증/마무리" : "쓰는 중";
+            _phase = _index >= _sizes.Length ? "Flash.Phase.Verifying" : "Flash.Phase.Writing";
             changed = true;
         }
         else if (UpdatePhase(line))
@@ -183,17 +183,17 @@ public sealed class EsptoolProgressParser
     {
         string? phase = line switch
         {
-            var l when l.Contains("Connecting", StringComparison.OrdinalIgnoreCase) => "연결 중",
-            var l when l.Contains("Chip is", StringComparison.OrdinalIgnoreCase) => "칩 확인",
+            var l when l.Contains("Connecting", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.Connecting",
+            var l when l.Contains("Chip is", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.ChipCheck",
             var l when l.Contains("Uploading stub", StringComparison.OrdinalIgnoreCase)
-                       || l.Contains("Running stub", StringComparison.OrdinalIgnoreCase) => "스텁 로딩",
-            var l when l.Contains("Changing baud", StringComparison.OrdinalIgnoreCase) => "속도 변경",
-            var l when l.Contains("Configuring flash size", StringComparison.OrdinalIgnoreCase) => "플래시 설정",
+                       || l.Contains("Running stub", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.Stub",
+            var l when l.Contains("Changing baud", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.Baud",
+            var l when l.Contains("Configuring flash size", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.Configure",
             var l when l.Contains("Erasing", StringComparison.OrdinalIgnoreCase)
-                       || l.Contains("will be erased", StringComparison.OrdinalIgnoreCase) => "지우는 중",
-            var l when l.Contains("Hash of data verified", StringComparison.OrdinalIgnoreCase) => "검증됨",
-            var l when l.Contains("Leaving", StringComparison.OrdinalIgnoreCase) => "마무리",
-            var l when l.Contains("resetting", StringComparison.OrdinalIgnoreCase) => "리셋",
+                       || l.Contains("will be erased", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.Erasing",
+            var l when l.Contains("Hash of data verified", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.Verified",
+            var l when l.Contains("Leaving", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.Finishing",
+            var l when l.Contains("resetting", StringComparison.OrdinalIgnoreCase) => "Flash.Phase.Resetting",
             _ => null,
         };
 
