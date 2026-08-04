@@ -29,6 +29,7 @@ public partial class App : Application
 
         // 저장된 테마 적용. App.xaml 은 다크 팔레트를 병합해 두므로 라이트일 때만 실제로 덮어쓴다.
         if (state.Theme != AppTheme.Dark) Theme.Apply(state.Theme);
+        Loc.SetLanguage(state.Language); // 표시 언어 복원(기본 한국어)
 
         // 저장 명령은 창 좌표 같은 휘발성 상태(state.json)와 분리된 사용자 저작 파일이다(팀 공유 = 이 파일 복사).
         var commands = new CommandStore(Path.Combine(AppState.Dir, "commands.json"));

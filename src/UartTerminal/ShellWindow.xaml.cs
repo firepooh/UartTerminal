@@ -717,6 +717,28 @@ public partial class ShellWindow : Window
     {
         MenuThemeDark.IsChecked = Theme.Current == AppTheme.Dark;
         MenuThemeLight.IsChecked = Theme.Current == AppTheme.Light;
+        MenuLangKo.IsChecked = Loc.Language == AppLanguage.Korean;
+        MenuLangEn.IsChecked = Loc.Language == AppLanguage.English;
+    }
+
+    /// <summary>
+    /// 언어 전환. 재시작하면 시리얼 연결과 MCP 서버가 끊기므로, 문자열을 인덱서 바인딩으로 두고
+    /// 알림 한 번으로 화면을 갈아끼운다(연결 유지). 코드에서 만든 문자열은 Loc.Changed 를 받는 쪽이 다시 만든다.
+    /// </summary>
+    private void Language_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag } || !Enum.TryParse<AppLanguage>(tag, out var lang))
+            return;
+
+        Loc.SetLanguage(lang);
+        _state.Language = lang;
+        _state.Save();
+
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+        {
+            w.SyncThemeChrome();
+            w.RefreshChrome();   // 상태바/제목처럼 코드가 만든 문자열 갱신
+        }
     }
 
     private void Timestamps_Click(object sender, RoutedEventArgs e)

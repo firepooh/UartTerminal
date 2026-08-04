@@ -40,6 +40,10 @@ public sealed class AppState
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AppTheme Theme { get; set; } = AppTheme.Dark;
 
+    /// <summary>표시 언어(한국어/English). 전역 설정 — 재시작 없이 즉시 적용된다.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AppLanguage Language { get; set; } = AppLanguage.Korean;
+
     /// <summary>마지막으로 플래시한 펌웨어 패키지(zip) 경로. 반복 작업이 대부분이라 다음에 바로 불러온다.</summary>
     public string? LastFlashZip { get; set; }
 
