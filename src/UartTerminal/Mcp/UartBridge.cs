@@ -148,7 +148,13 @@ public sealed class UartBridge
 
     // ── 세션 수명주기(UI 스레드에서 호출) ───────────────────────────────────────
 
-    /// <summary>새 세션을 연결하고 수신 tee 를 링버퍼에 구독. 재연결 시 링버퍼는 초기화.</summary>
+    /// <summary>
+    /// 새 세션을 연결하고 수신 tee 를 링버퍼에 구독.
+    /// <b>링버퍼는 지우지 않는다</b> — 오픈 성공이 확정된 뒤 <see cref="ResetRing"/> 로 지운다.
+    /// 여기서 지웠더니 <i>실패한</i> 오픈도 버퍼를 비웠고, 자동 재연결이 1.5초마다 재시도하므로
+    /// 장치 분리 직전의 패닉 로그(AI 가 읽어야 할 것)가 첫 재시도에서 사라졌다.
+    /// 커서까지 0 으로 돌아가 <c>uart_status</c> 의 유실 신호(dropped_bytes)도 남지 않았다.
+    /// </summary>
     public void AttachSession(ISerialSession session)
     {
         lock (_gate)
@@ -156,12 +162,17 @@ public sealed class UartBridge
             DetachLocked();
             _session = session;
             _portName = session.PortName;
-            _ring.Clear();
             Action<ReadOnlyMemory<byte>> handler = OnRx;
             _rxHandler = handler;
             session.DataReceived += handler;
         }
         RaiseStateChanged();
+    }
+
+    /// <summary>오픈 성공이 확정된 뒤 링버퍼를 초기화(커서도 0). 실패한 오픈에서는 호출하지 않는다.</summary>
+    public void ResetRing()
+    {
+        lock (_gate) _ring.Clear();
     }
 
     /// <summary>세션 분리(장치 제거/사용자 종료). 링버퍼 내용은 마지막 상태로 유지.</summary>
@@ -435,7 +446,7 @@ public sealed class UartBridge
             return new ResetResult { Ok = false, Mode = mode, Error = "canceled" };
         }
 
-        _engine.Buffer.AppendMetaLine(bootloader ? "[AI→] 부트로더 진입(IO0=LOW)" : "[AI→] 하드웨어 리셋(EN 펄스)");
+        _engine.Buffer.AppendMetaLine(Loc.S(bootloader ? "Doc.AiBootloader" : "Doc.AiHardReset"));
         return new ResetResult { Ok = true, Mode = mode, Dtr = s.DtrEnabled, Rts = s.RtsEnabled };
     }
 

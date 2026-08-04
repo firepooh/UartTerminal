@@ -19,6 +19,14 @@ internal sealed class TolerantNullableEnumConverter<T> : JsonConverter<T?> where
         if (reader.TokenType == JsonTokenType.String &&
             Enum.TryParse<T>(reader.GetString(), ignoreCase: true, out var value))
             return value;
+
+        // 객체/배열은 <b>반드시 끝까지 소비</b>해야 한다. 리더를 그 자리에 두고 null 을 돌려주면
+        // System.Text.Json 이 "converter read too much or not enough" 예외를 던지고,
+        // 그게 파싱 실패로 번져 sessions.json 전체가 .corrupt-* 로 격리된다 —
+        // 이 클래스가 막으려던 바로 그 결과다("newlineTx": ["Cr"] 같은 손편집 하나로 재현).
+        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
+            reader.Skip();
+
         return null;
     }
 

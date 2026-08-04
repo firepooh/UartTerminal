@@ -72,12 +72,12 @@ public partial class UartDocumentView : UserControl
     {
         get
         {
-            if (string.IsNullOrEmpty(_portName)) return "(새 연결)";
-            if (_conn is null) return $"{_portName} [끊김]";
+            if (string.IsNullOrEmpty(_portName)) return Loc.S("Doc.TitleNew");
+            if (_conn is null) return Loc.F("Doc.TitleDisconnected", _portName);
             if (_conn.IsConnected) return _portName;
-            if (_conn.IsPortReleased) return $"{_portName} [AI 양보]";
-            if (_conn.IsReconnecting) return $"{_portName} [재연결 중…]";
-            return $"{_portName} [끊김]";
+            if (_conn.IsPortReleased) return Loc.F("Doc.TitleReleased", _portName);
+            if (_conn.IsReconnecting) return Loc.F("Doc.TitleReconnecting", _portName);
+            return Loc.F("Doc.TitleDisconnected", _portName);
         }
     }
 
@@ -488,7 +488,7 @@ public partial class UartDocumentView : UserControl
         {
             ChipHost.Children.Add(new TextBlock
             {
-                Text = "저장된 명령이 없습니다 — 입력창에 명령을 쓰고 [+ 저장]",
+                Text = Loc.S("Doc.NoCommands"),
                 Foreground = (Brush)FindResource("TextFaint"),
                 FontSize = 11.5,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -524,10 +524,8 @@ public partial class UartDocumentView : UserControl
     private static string ChipTooltip(SavedCommand cmd)
     {
         if (cmd.IsFolder)
-            return $"{cmd.Name} — 하위 명령 {cmd.Items!.Count}개 (클릭해서 선택)";
-        return cmd.Confirm
-            ? $"{cmd.Text}\n(전송 전 확인 · Ctrl+클릭: 입력창에 채우기)"
-            : $"{cmd.Text}\n(Ctrl+클릭: 입력창에 채우기)";
+            return Loc.F("Doc.FolderTip", cmd.Name, cmd.Items!.Count);
+        return Loc.F(cmd.Confirm ? "Doc.ChipTipConfirm" : "Doc.ChipTip", cmd.Text);
     }
 
     /// <summary>폴더 칩 클릭: 하위 명령 목록을 컨텍스트 메뉴로 띄워 고르게 한다(예: reset → sw/hw/wdt).</summary>
@@ -576,7 +574,7 @@ public partial class UartDocumentView : UserControl
         {
             // 기본 버튼을 취소로 둔다 — 스트레이 Enter 로 위험 명령(restart/erase)이 나가면 안 된다.
             var r = MessageBox.Show(OwnerWindow,
-                $"이 명령을 전송할까요?\n\n{cmd.Text}", "UartTerminal",
+                Loc.F("Doc.CommandConfirm", cmd.Text), "UartTerminal",
                 MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
             if (r != MessageBoxResult.OK) return;
         }
@@ -598,7 +596,7 @@ public partial class UartDocumentView : UserControl
         _commands.Load();
         if (!_commands.Add(new SavedCommand { Name = text, Text = text }, group))
         {
-            SetStatus(_commands.LastError ?? Loc.S("Doc.CommandSaveFailed"));
+            SetStatus(Loc.FormatOrNull(_commands.LastError) ?? Loc.S("Doc.CommandSaveFailed"));
             return;
         }
         SetStatus(group is null ? Loc.F("Doc.CommandSaved", text) : Loc.F("Doc.CommandSavedInGroup", text, group));
@@ -639,7 +637,7 @@ public partial class UartDocumentView : UserControl
             CommandGroup = group,
         }))
         {
-            SetStatus(_sessions.LastError ?? Loc.S("Doc.SessionSaveFailed"));
+            SetStatus(Loc.FormatOrNull(_sessions.LastError) ?? Loc.S("Doc.SessionSaveFailed"));
             return;
         }
         SetStatus(Loc.F("Doc.SessionSaved", name, _portName, _params.BaudRate, reset + nl));
@@ -705,8 +703,8 @@ public partial class UartDocumentView : UserControl
         string port = string.IsNullOrEmpty(_portName) ? "log" : _portName;
         var dlg = new Microsoft.Win32.SaveFileDialog
         {
-            Title = "버퍼 로그 저장",
-            Filter = "텍스트 파일 (*.txt)|*.txt|모든 파일 (*.*)|*.*",
+            Title = Loc.S("Doc.LogSaveTitle"),
+            Filter = Loc.S("Doc.LogFilter"),
             FileName = $"UartTerminal-{port}-{stamp}.txt",
         };
         if (dlg.ShowDialog(OwnerWindow) != true) return;
@@ -759,6 +757,19 @@ public partial class UartDocumentView : UserControl
     }
 
     public void FocusTerminal() => _view?.Focus();
+
+    /// <summary>
+    /// 언어가 바뀐 뒤 <b>코드가 조립한</b> 문자열을 다시 만든다(제목·메트릭·칩 바·툴팁).
+    /// XAML 의 <c>{loc:Str}</c> 는 인덱서 바인딩이라 자동으로 갱신되지만, 여기서 문장을 만들어
+    /// 필드에 담아 두는 것들은 알림을 받아야 한다 — <c>Loc.Changed</c> 에 구독자가 하나도 없어서
+    /// 그 문장들이 옛 언어로 남아 있었다(주석은 이 방식을 전제로 쓰여 있었는데 배선이 빠졌다).
+    /// </summary>
+    public void RefreshLocalizedText()
+    {
+        RaiseTitle();
+        RefreshMetrics();
+        if (CommandBar.Visibility == Visibility.Visible) RebuildCommandChips();
+    }
 
     /// <summary>라인별 수신 타임스탬프 표시 토글(전역 설정).</summary>
     public void SetTimestamps(bool on) { if (_view is not null) _view.ShowTimestamps = on; }
@@ -975,7 +986,7 @@ public partial class UartDocumentView : UserControl
     {
         _view?.SetSearch(_findHits, _findIndex);
         FindCount.Text = _findHits.Count == 0
-            ? (FindBox.Text.Length == 0 ? "" : "없음")
+            ? (FindBox.Text.Length == 0 ? "" : Loc.S("Doc.FindNoMatch"))
             : $"{_findIndex + 1}/{_findHits.Count}";
         if (scroll && _findIndex >= 0) _view?.ScrollLineIntoView(_findHits[_findIndex].AbsLine);
     }
@@ -1015,6 +1026,11 @@ public partial class UartDocumentView : UserControl
         _commands.Changed -= OnCommandsChanged; // 전역 스토어 구독 해지(닫힌 문서가 갱신을 붙잡지 않게)
         _reconnectTimer?.Stop();
         _watchdogTimer?.Stop();
+        _zoomTimer?.Stop();
+        // 렌더 타이머(60Hz)와 Theme.Changed 구독을 끊는다. 이게 없으면 Dispatcher 가 타이머를
+        // 통해 이 뷰 → 문서 → 엔진/브리지/세션 그래프 전체를 영구히 붙잡는다(탭을 닫아도).
+        _view?.Shutdown();
+        ViewHost.Child = null;
         _conn?.CloseDocument();
         try { _mcpServer?.Stop(); } catch { }
     }
@@ -1040,10 +1056,10 @@ public partial class UartDocumentView : UserControl
         bool nlDefault = _nlRx == ReceiveNewline.CrLf && _nlTx == TransmitNewline.Cr;
         string nl = nlDefault ? "" : $"  ·  NL↓{_nlRx.Label()} ↑{_nlTx.Label()}";
         // 이 탭이 '열 때 리셋'인지 — 세션마다 다른 값이라 켜져 있을 때 상태바에 남긴다.
-        string rst = _resetOnOpen ? "  ·  열 때 리셋" : "";
+        string rst = _resetOnOpen ? "  ·  " + Loc.S("Doc.MetricsResetOnOpen") : "";
         MetricsMessage = IsConnected
             ? $"{_portName}  {_params.Summary()}{rst}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}  ·  UTF-8"
-            : $"(연결 안 됨){rst}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}";
+            : $"{Loc.S("Doc.MetricsNotConnected")}{rst}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}";
         MetricsChanged?.Invoke(MetricsMessage);
     }
 

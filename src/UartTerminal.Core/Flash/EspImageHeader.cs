@@ -102,7 +102,7 @@ public static class EspImageHeader
         EspChip.Esp32C6 => "ESP32-C6",
         EspChip.Esp32H2 => "ESP32-H2",
         EspChip.Esp32P4 => "ESP32-P4",
-        _ => "알 수 없음",
+        _ => "Unknown",   // 칩 이름은 고유명사 — 번역하지 않는다
     };
 
     /// <summary>esptool <c>--chip</c> 인자 이름.</summary>

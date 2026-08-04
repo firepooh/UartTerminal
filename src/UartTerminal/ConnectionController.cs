@@ -118,6 +118,7 @@ public sealed class ConnectionController
         _session = session;
         _connected = true;
         _mcpReleased = false; // 어떤 경로로든 열림에 성공하면 'AI 양보' 상태 해제
+        _bridge.ResetRing();  // 오픈 성공이 확정된 뒤에만 — 실패한 재시도가 로그를 지우지 않게
         _engine.ResetParsing();
         DiagLog.Info($"연결됨: {_portName()}");
         _notify();

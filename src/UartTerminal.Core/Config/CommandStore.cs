@@ -79,7 +79,7 @@ public sealed class CommandStore
     public const int MaxTextLength = 2000;
 
     /// <summary>그룹이 하나도 없는 파일을 승격할 때 쓰는 기본 그룹 이름.</summary>
-    public const string DefaultGroupName = "기본";
+    public const string DefaultGroupName = "기본";   // loc:data — commands.json 에 저장되는 그룹 이름
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -142,7 +142,7 @@ public sealed class CommandStore
     public bool IsReadOnly { get; private set; }
 
     /// <summary>마지막 Load/저장에서 사용자에게 알려야 하는 사유. 성공 시 null.</summary>
-    public string? LastError { get; private set; }
+    public LocMessage? LastError { get; private set; }
 
     /// <summary>목록이 바뀔 때(로드/편집 확정) 발생. 열린 모든 창의 칩 바가 이를 구독해 갱신한다.</summary>
     public event Action? Changed;
@@ -170,7 +170,7 @@ public sealed class CommandStore
             // 읽기 실패(잠김/권한). 파일 내용을 모르는 상태이므로 저장을 잠가 사용자 데이터를 보호한다.
             _groups = new List<CommandGroup>();
             IsReadOnly = true;
-            LastError = $"명령 파일을 열 수 없습니다({ex.GetType().Name}). 이번 실행에서는 저장하지 않습니다: {_path}";
+            LastError = LocMessage.Of("Cmd.Err.CannotOpen", ex.GetType().Name, _path);
             RaiseChanged();
             return;
         }
@@ -178,11 +178,11 @@ public sealed class CommandStore
         try
         {
             var file = JsonSerializer.Deserialize<CommandFile>(json)
-                       ?? throw new JsonException("빈 문서");
+                       ?? throw new JsonException("empty document");
             if (file.SchemaVersion > SupportedSchemaVersion)
             {
                 IsReadOnly = true;
-                LastError = $"명령 파일이 최신 버전(v{file.SchemaVersion})에서 만들어졌습니다. 읽기 전용으로 엽니다.";
+                LastError = LocMessage.Of("Cmd.Err.NewerSchema", file.SchemaVersion);
             }
 
             if (file.Groups is { Count: > 0 })
@@ -205,7 +205,7 @@ public sealed class CommandStore
         catch (JsonException ex)
         {
             _groups = new List<CommandGroup>();
-            LastError = $"명령 파일이 손상되었습니다: {ex.Message}";
+            LastError = LocMessage.Of("Cmd.Err.Corrupt", ex.Message);
             PreserveCorrupt();
         }
         catch (Exception ex)
@@ -214,7 +214,7 @@ public sealed class CommandStore
             // 예외를 밖으로 내보내지 않는다(App 시작 경로에서 던지면 창 하나 없이 앱이 죽는다).
             _groups = new List<CommandGroup>();
             IsReadOnly = true;
-            LastError = $"명령 파일을 해석할 수 없습니다({ex.GetType().Name}). 이번 실행에서는 저장하지 않습니다: {_path}";
+            LastError = LocMessage.Of("Cmd.Err.Unreadable", ex.GetType().Name, _path);
         }
 
         RaiseChanged();
@@ -228,7 +228,7 @@ public sealed class CommandStore
     {
         if (IsReadOnly)
         {
-            LastError ??= "명령 파일이 읽기 전용 상태여서 저장하지 않았습니다.";
+            LastError ??= LocMessage.Of("Cmd.Err.ReadOnly");
             return false;
         }
 
@@ -249,12 +249,12 @@ public sealed class CommandStore
         // 새 명령이 버려졌는데도 "저장됨"으로 보고된다.
         if (target is not null && target.Commands.Count >= MaxCommands)
         {
-            LastError = $"그룹 '{target.Name}' 의 명령이 최대 {MaxCommands}개입니다 — [명령 > 저장 명령 편집]에서 정리하세요.";
+            LastError = LocMessage.Of("Cmd.Err.GroupFull", target.Name, MaxCommands);
             return false;
         }
         if (target is null && _groups.Count >= MaxGroups)
         {
-            LastError = $"명령 그룹이 최대 {MaxGroups}개입니다.";
+            LastError = LocMessage.Of("Cmd.Err.TooManyGroups", MaxGroups);
             return false;
         }
 
@@ -287,7 +287,7 @@ public sealed class CommandStore
     {
         if (IsReadOnly)
         {
-            LastError ??= "명령 파일이 읽기 전용 상태여서 저장하지 않았습니다.";
+            LastError ??= LocMessage.Of("Cmd.Err.ReadOnly");
             return false;
         }
 
@@ -314,7 +314,7 @@ public sealed class CommandStore
         }
         catch (Exception ex)
         {
-            LastError = $"명령 파일 저장 실패: {ex.Message}";
+            LastError = LocMessage.Of("Cmd.Err.SaveFailed", ex.Message);
             return false;
         }
     }
@@ -341,7 +341,7 @@ public sealed class CommandStore
 
                 string fname = OneLine(c.Name);
                 if (fname.Length == 0) fname = OneLine(c.Text);
-                if (fname.Length == 0) fname = "(폴더)";
+                if (fname.Length == 0) fname = "(폴더)";   // loc:data — 파일에 저장되는 이름
                 if (fname.Length > MaxNameLength) fname = fname[..MaxNameLength];
 
                 list.Add(new SavedCommand { Name = fname, Text = "", Confirm = c.Confirm, Items = subs });
@@ -402,7 +402,8 @@ public sealed class CommandStore
         {
             string dest = $"{_path}.corrupt-{DateTime.Now:yyyyMMdd-HHmmss}";
             File.Move(_path, dest, overwrite: true);
-            LastError += $" 원본을 {Path.GetFileName(dest)} 로 보관했습니다.";
+            LastError = LocMessage.Of("Cmd.Err.CorruptPreserved",
+                LastError?.Args.FirstOrDefault() ?? "", Path.GetFileName(dest));
         }
         catch
         {

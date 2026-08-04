@@ -119,7 +119,7 @@ public partial class PortSelectDialog : Window
 
         if (!_sessions.Remove(s))
         {
-            MessageBox.Show(this, _sessions.LastError ?? Loc.S("Sess.DeleteFailed"),
+            MessageBox.Show(this, Loc.FormatOrNull(_sessions.LastError) ?? Loc.S("Sess.DeleteFailed"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }

@@ -35,6 +35,14 @@ public sealed class Loc : INotifyPropertyChanged
     /// <summary>XAML 바인딩 진입점 — <c>{Binding [키]}</c>.</summary>
     public string this[string key] => S(key);
 
+    /// <summary>
+    /// 코드로 만드는 컨트롤용 바인딩. <c>Header = Loc.S(key)</c> 처럼 <b>대입</b>하면 그 시점 언어로
+    /// 굳어 버리므로(탭 컨텍스트 메뉴·툴팁에서 실제로 그랬다), <c>SetBinding</c> 으로 걸어야
+    /// 언어 전환을 따라온다. XAML 의 <c>{loc:Str …}</c> 와 같은 바인딩을 만든다.
+    /// </summary>
+    public static Binding Bind(string key) =>
+        new($"[{key}]") { Source = Current, Mode = BindingMode.OneWay };
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>현재 언어의 문자열. 없으면 <c>[키]</c>.</summary>
@@ -74,8 +82,15 @@ public sealed class Loc : INotifyPropertyChanged
     }
 
     /// <summary>Core 가 돌려준 메시지(키 + 인자)를 현재 언어 문장으로 조립한다.</summary>
-    public static string Format(UartTerminal.Core.Flash.FlashMessage message) =>
+    public static string Format(UartTerminal.Core.LocMessage message) =>
         F(message.Key, message.Args.Cast<object?>().ToArray());
+
+    /// <summary>
+    /// null 을 그대로 흘리는 조립(스토어의 <c>LastError</c> 용).
+    /// 호출부가 <c>Loc.FormatOrNull(store.LastError) ?? Loc.S("…폴백")</c> 로 쓸 수 있게 한다.
+    /// </summary>
+    public static string? FormatOrNull(UartTerminal.Core.LocMessage? message) =>
+        message is null ? null : Format(message);
 
     /// <summary>번역 누락 점검용(테스트/진단). 값이 빈 키 목록.</summary>
     public static IReadOnlyList<string> MissingTranslations() =>
@@ -175,7 +190,13 @@ public sealed class Loc : INotifyPropertyChanged
         // ── 상태바 / 탭 ──
         ["Status.Starting"] = ("시작 중…", "Starting…"),
         ["Status.McpOff"] = ("MCP: 꺼짐", "MCP: off"),
+        ["Status.McpOn"] = ("MCP: 켜짐 ({0})", "MCP: on ({0})"),
+        ["Status.McpOnReadOnly"] = ("MCP: 켜짐 (읽기 전용, {0})", "MCP: on (read-only, {0})"),
         ["Tip.CloseTab"] = ("탭 닫기", "Close tab"),
+        // 탭 우클릭 메뉴. 메뉴바와 같은 동작이라 접근키(_) 없는 짧은 문구를 따로 둔다.
+        ["Ctx.Detach"] = ("새 창으로 분리", "Detach to New Window"),
+        ["Ctx.Merge"] = ("메인 창으로 합치기", "Merge into Main Window"),
+        ["Ctx.CloseTab"] = ("탭 닫기", "Close Tab"),
 
         // ── 대화상자 ──
         ["Common.Ok"] = ("확인", "OK"),
@@ -315,7 +336,6 @@ public sealed class Loc : INotifyPropertyChanged
         ["Flash.Tool.NotFoundHelp"] = ("esptool 실행 파일이 없어 플래시할 수 없습니다.\n· ESP-IDF 가 설치된 PC 라면 자동으로 찾습니다.\n· 아니면 esptool 공식 릴리스(standalone)를 받아 앱 폴더의 tools\\esptool\\ 에 두거나 state.json 의 esptoolPath 에 경로를 적으세요.", "Cannot flash without an esptool executable.\n· On a PC with ESP-IDF installed it is found automatically.\n· Otherwise download the official standalone esptool release and place it in tools\\esptool\\ next to the app, or set esptoolPath in state.json."),
         ["Flash.Msg.OpenFailed"] = ("패키지를 열지 못했습니다: {0}", "Could not open the package: {0}"),
         ["Flash.Msg.ExtractMissing"] = ("해제된 파일을 찾을 수 없습니다: {0}", "Extracted file not found: {0}"),
-        ["Flash.Msg.NoPortTitle"] = ("UartTerminal", "UartTerminal"),
         ["Flash.Msg.NoPort"] = ("먼저 포트에 연결하세요.\n플래시는 현재 탭의 포트를 사용합니다.", "Connect to a port first.\nFlashing uses the port of the current tab."),
         ["Flash.Status.NoPort"] = ("플래시할 포트가 없습니다 — 먼저 연결하세요(Alt+N)", "No port to flash — connect first (Alt+N)"),
         ["Flash.Prefix.Warn"] = ("경고: {0}", "Warning: {0}"),
@@ -345,7 +365,6 @@ public sealed class Loc : INotifyPropertyChanged
         ["Conn.ReconnectCanceledWaiting"] = ("재연결 취소됨 — 자동 재연결 대기 계속 ({0})", "Reconnect canceled — still waiting to auto-reconnect ({0})"),
         ["Conn.ReconnectCanceled"] = ("재연결 취소됨", "Reconnect canceled"),
         ["Conn.PortChangedMcp"] = ("포트 변경 — MCP 재등록 필요: [MCP] 메뉴 > 등록 명령 복사 ({0})", "Port changed — re-register MCP: [MCP] menu > Copy registration command ({0})"),
-        ["Conn.OpenFailedTitle"] = ("UartTerminal", "UartTerminal"),
         ["Conn.InUseBody"] = ("{0} 을(를) 열 수 없습니다.\n다른 프로그램(또는 다른 창/탭)이 사용 중일 수 있습니다.", "Cannot open {0}.\nAnother program (or another window/tab) may be using it."),
         ["Conn.OpenFailedBody"] = ("{0} 연결 실패:\n{1}", "Failed to connect {0}:\n{1}"),
         ["Doc.NotConnectedInput"] = ("연결되지 않음 — 입력 전송 불가", "Not connected — cannot send input"),
@@ -370,6 +389,9 @@ public sealed class Loc : INotifyPropertyChanged
         ["Doc.FlashRelease"] = ("플래시를 위해 포트 양보 — {0}", "Released the port for flashing — {0}"),
         ["Doc.FlashReopenWait"] = ("재연결 대기 — {0} 아직 사용 중", "Waiting to reconnect — {0} is still in use"),
         ["Doc.PasteConfirm"] = ("여러 줄을 붙여넣습니다. 전송할까요?", "This will paste multiple lines. Send them?"),
+        // 위험 명령(restart/erase 등) 승인문. 이것만 한국어로 남아 있으면 영어 사용자가
+        // 무엇을 승인하는지 못 읽고 보내게 된다 — 이 묶음에서 유일한 안전 항목이다.
+        ["Doc.CommandConfirm"] = ("이 명령을 전송할까요?\n\n{0}", "Send this command?\n\n{0}"),
         ["Doc.ResetOnOpenOn"] = ("열 때 보드 리셋: 켜짐 — 다음 연결부터 적용(지금 리셋은 Alt+R)", "Reset board on open: on — applies from the next connection (press Alt+R to reset now)"),
         ["Doc.ResetOnOpenOff"] = ("열 때 보드 리셋: 꺼짐", "Reset board on open: off"),
         ["Board.HardReset"] = ("하드웨어 리셋", "Hardware reset"),
@@ -405,6 +427,56 @@ public sealed class Loc : INotifyPropertyChanged
         ["Nl.RxLf"] = ("LF  (CR 무시)", "LF  (ignore CR)"),
         ["Nl.RxCr"] = ("CR  (LF 무시)", "CR  (ignore LF)"),
         ["Nl.RxAuto"] = ("AUTO  (CR·LF 모두)", "AUTO  (CR and LF)"),
+
+        // ── Core 스토어 오류(키 + 인자) ──
+        ["Sess.Err.CannotOpen"] = ("세션 파일을 열 수 없습니다({0}). 이번 실행에서는 저장하지 않습니다: {1}", "Cannot open the sessions file ({0}). Nothing will be saved this run: {1}"),
+        ["Sess.Err.NewerSchema"] = ("세션 파일이 최신 버전(v{0})에서 만들어졌습니다. 읽기 전용으로 엽니다.", "The sessions file was written by a newer version (v{0}). Opening read-only."),
+        ["Sess.Err.Corrupt"] = ("세션 파일이 손상되었습니다: {0}", "The sessions file is corrupt: {0}"),
+        ["Sess.Err.CorruptPreserved"] = ("세션 파일이 손상되었습니다: {0} 원본은 {1} 로 보관했습니다.", "The sessions file is corrupt: {0} The original was kept as {1}."),
+        ["Sess.Err.Unreadable"] = ("세션 파일을 해석할 수 없습니다({0}). 이번 실행에서는 저장하지 않습니다: {1}", "Cannot parse the sessions file ({0}). Nothing will be saved this run: {1}"),
+        ["Sess.Err.ReadOnly"] = ("세션 파일이 읽기 전용 상태여서 저장하지 않았습니다.", "The sessions file is read-only, so nothing was saved."),
+        ["Sess.Err.TooMany"] = ("저장된 세션이 최대 {0}개입니다 — 목록에서 삭제 후 다시 저장하세요.", "At most {0} sessions can be stored — delete one and save again."),
+        ["Sess.Err.SaveFailed"] = ("세션 파일 저장 실패: {0}", "Could not save the sessions file: {0}"),
+        ["Cmd.Err.CannotOpen"] = ("명령 파일을 열 수 없습니다({0}). 이번 실행에서는 저장하지 않습니다: {1}", "Cannot open the commands file ({0}). Nothing will be saved this run: {1}"),
+        ["Cmd.Err.NewerSchema"] = ("명령 파일이 최신 버전(v{0})에서 만들어졌습니다. 읽기 전용으로 엽니다.", "The commands file was written by a newer version (v{0}). Opening read-only."),
+        ["Cmd.Err.Corrupt"] = ("명령 파일이 손상되었습니다: {0}", "The commands file is corrupt: {0}"),
+        ["Cmd.Err.CorruptPreserved"] = ("명령 파일이 손상되었습니다: {0} 원본은 {1} 로 보관했습니다.", "The commands file is corrupt: {0} The original was kept as {1}."),
+        ["Cmd.Err.Unreadable"] = ("명령 파일을 해석할 수 없습니다({0}). 이번 실행에서는 저장하지 않습니다: {1}", "Cannot parse the commands file ({0}). Nothing will be saved this run: {1}"),
+        ["Cmd.Err.ReadOnly"] = ("명령 파일이 읽기 전용 상태여서 저장하지 않았습니다.", "The commands file is read-only, so nothing was saved."),
+        ["Cmd.Err.GroupFull"] = ("그룹 '{0}' 의 명령이 최대 {1}개입니다 — [명령 > 저장 명령 편집]에서 정리하세요.", "Group '{0}' already has the maximum of {1} commands — tidy it up in [Command > Edit Saved Commands]."),
+        ["Cmd.Err.TooManyGroups"] = ("명령 그룹이 최대 {0}개입니다.", "At most {0} command groups are allowed."),
+        ["Cmd.Err.SaveFailed"] = ("명령 파일 저장 실패: {0}", "Could not save the commands file: {0}"),
+        ["Flash.Err.CannotStart"] = ("프로세스를 시작할 수 없습니다.", "Could not start the process."),
+        ["Flash.Err.Canceled"] = ("사용자가 취소했습니다.", "Canceled by the user."),
+        ["Flash.Err.ExitCode"] = ("esptool 종료 코드 {0}", "esptool exit code {0}"),
+        ["Flash.ChipSource.Unknown"] = ("판별 불가", "could not determine"),
+        ["Flash.ChipSource.Header"] = ("{0} 헤더(chip_id)", "{0} header (chip_id)"),
+        ["Flash.ChipSource.UserPicked"] = ("사용자 지정", "chosen by user"),
+        ["Flash.ChipSource.ArgsFile"] = ("flasher_args.json", "flasher_args.json"),
+        ["Flash.Err.StartFailed"] = ("esptool 을 시작하지 못했습니다: {0}", "Could not start esptool: {0}"),
+        // ── 코드가 만드는 화면 문자열 ──
+        ["Doc.TitleNew"] = ("(새 연결)", "(new connection)"),
+        ["Doc.TitleDisconnected"] = ("{0} [끊김]", "{0} [disconnected]"),
+        ["Doc.TitleReleased"] = ("{0} [AI 양보]", "{0} [yielded to AI]"),
+        ["Doc.TitleReconnecting"] = ("{0} [재연결 중…]", "{0} [reconnecting…]"),
+        ["Doc.NoCommands"] = ("저장된 명령이 없습니다 — 입력창에 명령을 쓰고 [+ 저장]", "No saved commands — type one below and press [+ Save]"),
+        ["Doc.FolderTip"] = ("{0} — 하위 명령 {1}개 (클릭해서 선택)", "{0} — {1} sub-command(s) (click to pick)"),
+        ["Doc.ChipTipConfirm"] = ("{0}\n(전송 전 확인 · Ctrl+클릭: 입력창에 채우기)",
+                                  "{0}\n(confirms before sending · Ctrl+click: fill the input box)"),
+        ["Doc.ChipTip"] = ("{0}\n(Ctrl+클릭: 입력창에 채우기)",
+                           "{0}\n(Ctrl+click: fill the input box)"),
+        ["Doc.FindNoMatch"] = ("없음", "none"),
+        ["Doc.MetricsResetOnOpen"] = ("열 때 리셋", "reset on open"),
+        ["Doc.MetricsNotConnected"] = ("(연결 안 됨)", "(not connected)"),
+        ["Doc.AiHardReset"] = ("[AI→] 하드웨어 리셋(EN 펄스)", "[AI→] hardware reset (EN pulse)"),
+        ["Doc.AiBootloader"] = ("[AI→] 부트로더 진입(IO0=LOW)", "[AI→] enter bootloader (IO0=LOW)"),
+        ["About.Version"] = ("버전 {0}", "Version {0}"),
+        ["App.CrashBody"] = ("예기치 못한 오류가 발생했지만 계속 실행합니다.\n\n{0}: {1}\n\n자세한 내용: {2}", "An unexpected error occurred, but the app will keep running.\n\n{0}: {1}\n\nDetails: {2}"),
+        ["Cmd.NewFolder"] = ("(새 폴더)", "(new folder)"),
+        ["Cmd.NewCommand"] = ("(새 명령)", "(new command)"),
+        ["Cmd.Header"] = ("명령", "Commands"),
+        ["Cmd.HeaderOf"] = ("명령 — {0}", "Commands — {0}"),
+        ["Cmd.ConfirmDropEmpty"] = ("전송 문자열이 비어 있는 명령 또는 하위가 없는 폴더 {0}개는 저장되지 않습니다. 계속할까요?", "{0} item(s) with an empty command text or an empty folder will not be saved. Continue?"),
     };
 }
 

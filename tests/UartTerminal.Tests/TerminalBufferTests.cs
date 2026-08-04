@@ -37,7 +37,47 @@ public class TerminalBufferTests
 
         Assert.Equal(1, b.LineCount);
         Assert.Equal("", b.GetLine(0).Text());
-        Assert.Equal(0, b.TrimmedCount);
+    }
+
+    /// <summary>
+    /// 절대 라인 번호는 <b>Clear 후에도 단조 증가</b>해야 한다. 예전에는 <c>_trimmedCount = 0</c> 으로
+    /// 되돌려 번호를 재사용했고, [버퍼 지우기] 는 검색 결과(절대 번호로 저장됨)를 지우지 않으므로
+    /// 하이라이트가 엉뚱한 줄에 남았다. "트림에도 안정" 이라는 불변식 자체가 깨져 있었다.
+    /// </summary>
+    [Fact]
+    public void Clear_KeepsAbsoluteLineNumbersMonotonic()
+    {
+        var b = new TerminalBuffer(1000);
+        Print(b, "line1"); b.LineFeed();
+        Print(b, "line2"); b.LineFeed();
+        long before = b.TrimmedCount + b.LineCount;   // 다음에 쓰일 절대 번호
+
+        b.Clear();
+
+        Assert.True(b.TrimmedCount >= before - 1,
+            $"Clear 후 절대 번호가 되돌아갔습니다: TrimmedCount={b.TrimmedCount}, 이전 최대={before}");
+    }
+
+    /// <summary>
+    /// 셀 총량 상한이 실제로 버퍼를 자른다. 줄 수 상한만 있던 동안에는 긴 줄이 섞이면
+    /// (개행 모드 불일치 등) 메모리가 사실상 묶이지 않았다.
+    /// </summary>
+    [Fact]
+    public void TotalCellBudget_TrimsEvenWhenLineCountIsUnderLimit()
+    {
+        var b = new TerminalBuffer(1_000_000);   // 줄 수 상한은 사실상 없음
+        var chunk = new string('x', TerminalBuffer.MaxLineCells);
+
+        // 총량 상한의 3배를 넣는다
+        int rounds = (int)(TerminalBuffer.MaxTotalCells / TerminalBuffer.MaxLineCells) * 3;
+        for (int i = 0; i < rounds; i++) { Print(b, chunk); b.LineFeed(); }
+
+        long cells = 0;
+        for (int i = 0; i < b.LineCount; i++) cells += b.GetLine(i).Count;
+
+        Assert.True(cells <= TerminalBuffer.MaxTotalCells + TerminalBuffer.MaxLineCells,
+            $"보관 셀 {cells:N0} 이 총량 상한 {TerminalBuffer.MaxTotalCells:N0} 을 넘었습니다");
+        Assert.True(b.TrimmedCount > 0, "총량 초과인데도 아무 줄도 버리지 않았습니다");
     }
 
     [Theory]

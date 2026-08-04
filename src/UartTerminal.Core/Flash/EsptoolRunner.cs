@@ -10,7 +10,7 @@ public sealed record EsptoolRunResult
     public int ExitCode { get; init; }
     public bool Canceled { get; init; }
     public string Output { get; init; } = "";
-    public string? Error { get; init; }
+    public LocMessage? Error { get; init; }
 }
 
 /// <summary>
@@ -71,11 +71,15 @@ public sealed class EsptoolRunner
         try
         {
             if (!proc.Start())
-                return new EsptoolRunResult { Ok = false, ExitCode = -1, Error = "프로세스를 시작할 수 없습니다." };
+                return new EsptoolRunResult { Ok = false, ExitCode = -1, Error = LocMessage.Of("Flash.Err.CannotStart") };
         }
         catch (Exception ex)
         {
-            return new EsptoolRunResult { Ok = false, ExitCode = -1, Error = ex.Message };
+            return new EsptoolRunResult
+            {
+                Ok = false, ExitCode = -1,
+                Error = LocMessage.Of("Flash.Err.StartFailed", ex.Message),
+            };
         }
 
         var pump = Task.WhenAll(
@@ -106,7 +110,8 @@ public sealed class EsptoolRunner
             ExitCode = exit,
             Canceled = canceled,
             Output = all.ToString(),
-            Error = canceled ? "사용자가 취소했습니다." : exit == 0 ? null : $"esptool 종료 코드 {exit}",
+            Error = canceled ? LocMessage.Of("Flash.Err.Canceled")
+                  : exit == 0 ? null : LocMessage.Of("Flash.Err.ExitCode", exit),
         };
     }
 

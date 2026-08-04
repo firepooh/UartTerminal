@@ -54,7 +54,8 @@ public static class FlashExtractor
             // Zip Slip: 대상 폴더 밖으로 나가는 경로는 거부.
             if (!target.StartsWith(destFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(target, destFull, StringComparison.OrdinalIgnoreCase))
-                throw new IOException($"zip 항목이 대상 폴더를 벗어납니다: {entry.FullName}");
+                // 기술적 보안 가드 — 정상 zip 에서는 발생하지 않는다. 호출부가 번역된 줄로 감싼다.
+                throw new IOException($"zip entry escapes the target folder: {entry.FullName}");
 
             string? dir = Path.GetDirectoryName(target);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
@@ -80,7 +81,7 @@ public static class FlashExtractor
         bool rooted = norm.StartsWith('/') || (norm.Length > 1 && norm[1] == ':');
         bool escapes = norm.Split('/').Any(seg => seg == "..");
         if (rooted || escapes)
-            throw new IOException($"zip 항목이 대상 폴더를 벗어납니다: {fullName}");
+            throw new IOException($"zip entry escapes the target folder: {fullName}");
     }
 
     private static string Sanitize(string name)

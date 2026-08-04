@@ -54,14 +54,35 @@ public class UartBridgeTests
         Assert.False(b.Status().Connected);
     }
 
+    /// <summary>
+    /// <see cref="UartBridge.AttachSession"/> 은 링버퍼를 <b>보존</b>한다.
+    /// 예전에는 여기서 지웠는데, ConnectionController 가 <c>session.Open()</c> <i>전에</i> Attach 하므로
+    /// <b>실패한 오픈도 버퍼를 비웠다</b> — 자동 재연결이 1.5초마다 재시도하니 장치 분리 직전의
+    /// 패닉 로그가 첫 재시도에서 사라졌다. 초기화는 오픈 성공 후 <see cref="UartBridge.ResetRing"/> 가 한다.
+    /// </summary>
     [Fact]
-    public void Reattach_ClearsRingBuffer()
+    public void Attach_PreservesRingBuffer_SoFailedOpenCannotEraseLog()
+    {
+        var b = NewBridge();
+        var a = new FakeSerialSession(); a.Open(); b.AttachSession(a);
+        a.EmitData(Encoding.ASCII.GetBytes("panic: StoreProhibited"));
+
+        var c = new FakeSerialSession(); c.Open(); b.AttachSession(c);
+
+        var r = b.Read(cursor: null, maxBytes: 100, stripAnsi: true);
+        Assert.Contains("panic", r.Data);
+    }
+
+    /// <summary>오픈 성공이 확정된 뒤에는 초기화된다(커서도 0).</summary>
+    [Fact]
+    public void ResetRing_ClearsBuffer()
     {
         var b = NewBridge();
         var a = new FakeSerialSession(); a.Open(); b.AttachSession(a);
         a.EmitData(Encoding.ASCII.GetBytes("old"));
 
-        var c = new FakeSerialSession(); c.Open(); b.AttachSession(c); // 재연결 시 링버퍼 초기화
+        b.ResetRing();
+
         var r = b.Read(cursor: null, maxBytes: 100, stripAnsi: true);
         Assert.Equal("", r.Data);
     }

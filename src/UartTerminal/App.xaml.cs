@@ -28,6 +28,8 @@ public partial class App : Application
         DiagLog.Capture = state.DiagCapture; // 진단 캡처 설정 복원
 
         // 저장된 테마 적용. App.xaml 은 다크 팔레트를 병합해 두므로 라이트일 때만 실제로 덮어쓴다.
+        // (시작 시점 적용은 확실히 동작한다 — 컨트롤이 이 뒤에 만들어진다.
+        //  실행 중 전환의 한계는 Theme.Apply 주석 참고.)
         if (state.Theme != AppTheme.Dark) Theme.Apply(state.Theme);
         Loc.SetLanguage(state.Language); // 표시 언어 복원(기본 한국어)
 
@@ -38,7 +40,7 @@ public partial class App : Application
         try
         {
             commands.Load();
-            if (commands.LastError is { } err) DiagLog.Warn(err);
+            if (commands.LastError is { } err) DiagLog.Warn(err.ToString());
         }
         catch (Exception ex)
         {
@@ -47,7 +49,7 @@ public partial class App : Application
         try
         {
             sessions.Load();
-            if (sessions.LastError is { } err) DiagLog.Warn(err);
+            if (sessions.LastError is { } err) DiagLog.Warn(err.ToString());
         }
         catch (Exception ex)
         {
@@ -65,8 +67,8 @@ public partial class App : Application
         try
         {
             MessageBox.Show(
-                $"예기치 못한 오류가 발생했지만 계속 실행합니다.\n\n{e.Exception.GetType().Name}: {e.Exception.Message}\n\n" +
-                @"자세한 내용: %LOCALAPPDATA%\UartTerminal\diag.log",
+                Loc.F("App.CrashBody", e.Exception.GetType().Name, e.Exception.Message,
+                      @"%LOCALAPPDATA%\UartTerminal\diag.log"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch { /* 알림 실패는 무시 */ }

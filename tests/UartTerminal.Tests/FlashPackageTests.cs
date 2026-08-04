@@ -99,7 +99,9 @@ public sealed class FlashPackageTests : IDisposable
 
         // zip 에는 칩 정보가 없다 — 헤더 chip_id=9 로만 알 수 있다.
         Assert.Equal(EspChip.Esp32S3, pkg.Chip);
-        Assert.Contains("bootloader.bin", pkg.ChipSource);
+        // Core 는 문장 대신 키+인자를 돌려준다 — 문구를 다듬어도 이 테스트가 깨지지 않는다.
+        Assert.Equal("Flash.ChipSource.Header", pkg.ChipSource.Key);
+        Assert.Contains("bootloader.bin", pkg.ChipSource.Args);
         Assert.Equal("ESP32-S3", pkg.Chip.DisplayName());
         Assert.Equal("esp32s3", pkg.Chip.EsptoolName());
     }
@@ -139,7 +141,7 @@ public sealed class FlashPackageTests : IDisposable
         var pkg = Analyze(MakeRealisticZip(), over: EspChip.Esp32);
 
         Assert.Equal(EspChip.Esp32, pkg.Chip);              // 사용자 지정이 최종
-        Assert.Equal("사용자 지정", pkg.ChipSource);
+        Assert.Equal("Flash.ChipSource.UserPicked", pkg.ChipSource.Key);
         Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.ChipMismatch");
         // ESP32 의 부트로더는 0x1000 인데 패키지는 0x0 → 별도 경고
         Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.BootloaderOffset" && w.Args.Contains("0x1000"));
@@ -377,7 +379,8 @@ public sealed class FlashPackageTests : IDisposable
         }
 
         var ex = Assert.Throws<IOException>(() => FlashExtractor.Extract(zip, Path.Combine(_dir, "out2")));
-        Assert.Contains("벗어납니다", ex.Message);
+        // 기술적 보안 가드라 예외 문구는 영어 고정(정상 zip 에서는 발생하지 않는다).
+        Assert.Contains("escapes the target folder", ex.Message);
         Assert.False(File.Exists(Path.Combine(_dir, "evil.bin")));
     }
 

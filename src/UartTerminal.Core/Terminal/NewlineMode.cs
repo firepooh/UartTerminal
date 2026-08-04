@@ -66,7 +66,7 @@ public static class NewlineModes
     {
         ReceiveNewline.Cr => "CR",
         ReceiveNewline.Lf => "LF",
-        ReceiveNewline.Auto => "자동",
+        ReceiveNewline.Auto => "AUTO",   // 언어 중립(메뉴 문구도 "AUTO — …")
         _ => "CR+LF",
     };
 }

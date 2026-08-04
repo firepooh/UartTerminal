@@ -75,6 +75,8 @@ public partial class ShellWindow : Window
         PreviewMouseWheel += OnPreviewMouseWheel;
         Loaded += OnLoaded;
         Closing += OnClosing;
+        // 정적 이벤트 구독 — OnClosing 에서 반드시 해지한다(창이 닫혀도 살아남으면 누수).
+        Loc.Changed += OnLanguageChanged;
 
         Tabs.PreviewMouseLeftButtonDown += Tabs_DragDown;
         Tabs.PreviewMouseMove += Tabs_DragMove;
@@ -174,9 +176,9 @@ public partial class ShellWindow : Window
         {
             Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = Loc.S("Tip.CloseTab"),
             Style = (Style)FindResource("TabCloseButton"),
         };
+        close.SetBinding(ToolTipProperty, Loc.Bind("Tip.CloseTab")); // 대입하면 탭 생성 시 언어로 굳는다
         close.Click += (_, _) => CloseTab(ti);
         DockPanel.SetDock(close, Dock.Right);
 
@@ -196,12 +198,16 @@ public partial class ShellWindow : Window
         panel.Children.Add(dot);
         panel.Children.Add(text);
 
+        // Header 는 바인딩으로 걸어 언어 전환을 따라오게 한다(대입하면 그 시점 언어로 굳는다).
         var cm = new ContextMenu();
-        var miDetach = new MenuItem { Header = "새 창으로 분리" };
+        var miDetach = new MenuItem();
+        miDetach.SetBinding(MenuItem.HeaderProperty, Loc.Bind("Ctx.Detach"));
         miDetach.Click += (_, _) => DetachTab(ti);
-        var miMerge = new MenuItem { Header = "메인 창으로 합치기" };
+        var miMerge = new MenuItem();
+        miMerge.SetBinding(MenuItem.HeaderProperty, Loc.Bind("Ctx.Merge"));
         miMerge.Click += (_, _) => MergeTab(ti);
-        var miClose = new MenuItem { Header = "탭 닫기" };
+        var miClose = new MenuItem();
+        miClose.SetBinding(MenuItem.HeaderProperty, Loc.Bind("Ctx.CloseTab"));
         miClose.Click += (_, _) => CloseTab(ti);
         cm.Items.Add(miDetach);
         cm.Items.Add(miMerge);
@@ -529,18 +535,18 @@ public partial class ShellWindow : Window
         MenuMcpEnabled.IsChecked = doc?.McpEnabled ?? false;
         MenuMcpReadOnly.IsChecked = doc?.McpReadOnly ?? false;
 
+        // 색은 테마에서 읽는다. 예전에는 여기서 new SolidColorBrush(0xD7BA7D) 처럼 코드에 박아
+        // 라이트 테마에서 1.8:1 이 되어 '읽기 전용' 안전 표시가 상태바에서 사라졌다.
         if (doc is null || !doc.McpEnabled)
         {
             McpStatusText.Text = Loc.S("Status.McpOff");
-            McpStatusText.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
+            McpStatusText.Foreground = Theme.Brush("TextFaint");
         }
         else
         {
             string pipe = McpPipeServer.PipeNameFor(doc.PortName);
-            McpStatusText.Text = doc.McpReadOnly ? $"MCP: 켜짐 (읽기 전용, {pipe})" : $"MCP: 켜짐 ({pipe})";
-            McpStatusText.Foreground = new SolidColorBrush(doc.McpReadOnly
-                ? Color.FromRgb(0xD7, 0xBA, 0x7D)
-                : Color.FromRgb(0x6A, 0x99, 0x55));
+            McpStatusText.Text = Loc.F(doc.McpReadOnly ? "Status.McpOnReadOnly" : "Status.McpOn", pipe);
+            McpStatusText.Foreground = Theme.Brush(doc.McpReadOnly ? "Amber" : "Green");
         }
     }
 
@@ -730,15 +736,23 @@ public partial class ShellWindow : Window
         if (sender is not MenuItem { Tag: string tag } || !Enum.TryParse<AppLanguage>(tag, out var lang))
             return;
 
-        Loc.SetLanguage(lang);
+        Loc.SetLanguage(lang);   // 각 창이 Loc.Changed 를 구독해 스스로 갱신한다
         _state.Language = lang;
         _state.Save();
 
         foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
-        {
-            w.SyncThemeChrome();
-            w.RefreshChrome();   // 상태바/제목처럼 코드가 만든 문자열 갱신
-        }
+            w.SyncThemeChrome();  // 메뉴 체크 표시(라디오)는 상태 동기화라 별도
+    }
+
+    /// <summary>
+    /// 언어 전환 알림. XAML 바인딩은 스스로 갱신되지만 <b>코드가 조립해 보관한</b> 문자열
+    /// (탭 제목·상태바·메트릭·칩 툴팁)은 다시 만들어야 한다.
+    /// 이 구독이 빠져 있어서 <c>Loc.Changed</c> 는 발생만 하고 받는 곳이 하나도 없었다.
+    /// </summary>
+    private void OnLanguageChanged()
+    {
+        foreach (var d in AllDocs()) d.RefreshLocalizedText();
+        RefreshChrome();
     }
 
     private void Timestamps_Click(object sender, RoutedEventArgs e)
@@ -887,6 +901,8 @@ public partial class ShellWindow : Window
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        Loc.Changed -= OnLanguageChanged;   // 생성자의 += 와 짝(정적 이벤트 → 창을 붙잡는다)
+
         foreach (var ti in Tabs.Items.OfType<TabItem>().ToList())
         {
             DetachTabHooks(ti);

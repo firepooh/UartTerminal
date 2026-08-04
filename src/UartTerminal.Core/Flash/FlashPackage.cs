@@ -23,7 +23,7 @@ public sealed record FlashItem
     public IReadOnlyList<string> Candidates { get; init; } = Array.Empty<string>();
 
     /// <summary>이 줄에 대한 설명/주의(UI 툴팁·회색 글씨). 문장이 아니라 번역 키 + 인자다.</summary>
-    public FlashMessage? Note { get; init; }
+    public LocMessage? Note { get; init; }
 
     public string OffsetText => $"0x{Offset:X}";
 }
@@ -36,7 +36,7 @@ public sealed record FlashPackage
     public EspChip Chip { get; init; } = EspChip.Unknown;
 
     /// <summary>칩을 무엇으로 판단했는지(사용자에게 근거를 보여주기 위함).</summary>
-    public string ChipSource { get; init; } = "판별 불가";
+    public LocMessage ChipSource { get; init; } = LocMessage.Of("Flash.ChipSource.Unknown");
 
     /// <summary>bootloader 헤더에서 읽은 SPI 설정(감지값). 기본 동작은 '바이너리 그대로(keep)'.</summary>
     public EspImageInfo? Detected { get; init; }
@@ -46,10 +46,10 @@ public sealed record FlashPackage
     public IReadOnlyList<FlashItem> Items { get; init; } = Array.Empty<FlashItem>();
 
     /// <summary>진행은 가능하지만 사용자가 알아야 하는 것(번역 키 + 인자 — 문장 조립은 UI 담당).</summary>
-    public IReadOnlyList<FlashMessage> Warnings { get; init; } = Array.Empty<FlashMessage>();
+    public IReadOnlyList<LocMessage> Warnings { get; init; } = Array.Empty<LocMessage>();
 
     /// <summary>이대로는 플래시하면 안 되는 것.</summary>
-    public IReadOnlyList<FlashMessage> Errors { get; init; } = Array.Empty<FlashMessage>();
+    public IReadOnlyList<LocMessage> Errors { get; init; } = Array.Empty<LocMessage>();
 
     public bool IsUsable => Errors.Count == 0 && Items.Any(i => i.FileName is not null);
 }
@@ -136,8 +136,8 @@ public static class FlashPackageAnalyzer
 
     public static FlashPackage Analyze(IFlashSource source, string sourcePath = "", EspChip chipOverride = EspChip.Unknown)
     {
-        var warnings = new List<FlashMessage>();
-        var errors = new List<FlashMessage>();
+        var warnings = new List<LocMessage>();
+        var errors = new List<LocMessage>();
 
         var files = source.Files
             .Where(f => !IsMetaFile(f.Name))
@@ -151,16 +151,16 @@ public static class FlashPackageAnalyzer
         EspImageInfo? detected = bootloaderName is null ? null : ReadHeader(source, bootloaderName);
 
         var chip = EspChip.Unknown;
-        string chipSource = "판별 불가";
+        var chipSource = LocMessage.Of("Flash.ChipSource.Unknown");
         if (detected is { Chip: not EspChip.Unknown } d)
         {
             chip = d.Chip;
-            chipSource = $"{bootloaderName} 헤더(chip_id)";
+            chipSource = LocMessage.Of("Flash.ChipSource.Header", bootloaderName);
         }
         else if (args.Chip != EspChip.Unknown)
         {
             chip = args.Chip;
-            chipSource = "flasher_args.json";
+            chipSource = LocMessage.Of("Flash.ChipSource.ArgsFile");
         }
 
         // ── 3) 항목 만들기 ───────────────────────────────────────────────────
@@ -173,39 +173,39 @@ public static class FlashPackageAnalyzer
         // (후보로 노출된 사본은 사용자가 목록에서 바로 고를 수 있으므로 경고가 아니다)
         var offered = items.SelectMany(i => i.Candidates).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var leftover in files.Where(f => IsBin(f.Name) && !used.Contains(f.Name) && !offered.Contains(f.Name)))
-            warnings.Add(FlashMessage.Of("Flash.Warn.UnknownLocation", leftover.Name));
+            warnings.Add(LocMessage.Of("Flash.Warn.UnknownLocation", leftover.Name));
 
         // ── 4) 검증 ──────────────────────────────────────────────────────────
         if (args.Entries.Count == 0 && items.Count == 0)
-            errors.Add(FlashMessage.Of("Flash.Err.NoFiles"));
+            errors.Add(LocMessage.Of("Flash.Err.NoFiles"));
 
         foreach (var dup in items.Where(i => i.FileName is not null)
                                  .GroupBy(i => i.Offset).Where(g => g.Count() > 1))
         {
-            errors.Add(FlashMessage.Of("Flash.Err.DuplicateOffset",
+            errors.Add(LocMessage.Of("Flash.Err.DuplicateOffset",
                 $"0x{dup.Key:X}", dup.Count(), string.Join(", ", dup.Select(i => i.FileName))));
         }
 
         foreach (var empty in items.Where(i => i.FileName is not null && i.Size == 0))
-            errors.Add(FlashMessage.Of("Flash.Err.EmptyFile", empty.FileName));
+            errors.Add(LocMessage.Of("Flash.Err.EmptyFile", empty.FileName));
 
         if (chipOverride != EspChip.Unknown && chip != EspChip.Unknown && chipOverride != chip)
         {
-            warnings.Add(FlashMessage.Of("Flash.Warn.ChipMismatch",
+            warnings.Add(LocMessage.Of("Flash.Warn.ChipMismatch",
                 chipOverride.DisplayName(), chip.DisplayName()));
         }
         if (chipOverride != EspChip.Unknown)
         {
             chip = chipOverride;
-            chipSource = "사용자 지정";
+            chipSource = LocMessage.Of("Flash.ChipSource.UserPicked");
         }
 
         if (chip == EspChip.Unknown)
-            warnings.Add(FlashMessage.Of("Flash.Warn.ChipUnknown"));
+            warnings.Add(LocMessage.Of("Flash.Warn.ChipUnknown"));
         else if (items.FirstOrDefault(i => i.Role == "bootloader") is { FileName: not null } bl
                  && chip.BootloaderOffset() is { } expected && bl.Offset != expected)
         {
-            warnings.Add(FlashMessage.Of("Flash.Warn.BootloaderOffset",
+            warnings.Add(LocMessage.Of("Flash.Warn.BootloaderOffset",
                 chip.DisplayName(), $"0x{expected:X}", $"0x{bl.Offset:X}"));
         }
 
@@ -224,7 +224,7 @@ public static class FlashPackageAnalyzer
 
     // ── 인자 파일 ────────────────────────────────────────────────────────────
 
-    private static FlashArgs ReadArgs(IFlashSource source, List<FlashMessage> warnings)
+    private static FlashArgs ReadArgs(IFlashSource source, List<LocMessage> warnings)
     {
         foreach (string name in FlashArgsFile.CandidateNames)
         {
@@ -239,17 +239,17 @@ public static class FlashPackageAnalyzer
             }
             catch (Exception ex)
             {
-                warnings.Add(FlashMessage.Of("Flash.Warn.ArgsReadFailed", hit.Name, ex.Message));
+                warnings.Add(LocMessage.Of("Flash.Warn.ArgsReadFailed", hit.Name, ex.Message));
             }
         }
-        warnings.Add(FlashMessage.Of("Flash.Warn.NoArgsFile"));
+        warnings.Add(LocMessage.Of("Flash.Warn.NoArgsFile"));
         return FlashArgs.Empty;
     }
 
     // ── 항목 구성 ────────────────────────────────────────────────────────────
 
     private static List<FlashItem> BuildFromArgs(FlashArgs args, List<(string Name, long Size)> files,
-                                                 HashSet<string> used, List<FlashMessage> warnings)
+                                                 HashSet<string> used, List<LocMessage> warnings)
     {
         var items = new List<FlashItem>();
         foreach (var entry in args.Entries)
@@ -260,7 +260,7 @@ public static class FlashPackageAnalyzer
             var hit = files.FirstOrDefault(f => string.Equals(f.Name, entry.FileName, StringComparison.OrdinalIgnoreCase));
 
             var candidates = Array.Empty<string>() as IReadOnlyList<string>;
-            FlashMessage? note = null;
+            LocMessage? note = null;
 
             if (hit.Name is null)
             {
@@ -269,8 +269,8 @@ public static class FlashPackageAnalyzer
                 if (byRole.Count == 1)
                 {
                     hit = files.First(f => f.Name == byRole[0]);
-                    note = FlashMessage.Of("Flash.Note.Replaced", entry.FileName, hit.Name);
-                    warnings.Add(FlashMessage.Of("Flash.Warn.ArgsRenamed",
+                    note = LocMessage.Of("Flash.Note.Replaced", entry.FileName, hit.Name);
+                    warnings.Add(LocMessage.Of("Flash.Warn.ArgsRenamed",
                         $"0x{entry.Offset:X}", entry.FileName, hit.Name));
                 }
                 else if (byRole.Count > 1)
@@ -278,16 +278,16 @@ public static class FlashPackageAnalyzer
                     candidates = byRole;
                     string best = PreferredCandidate(byRole);
                     hit = files.First(f => f.Name == best);
-                    note = FlashMessage.Of("Flash.Note.Candidates", byRole.Count);
+                    note = LocMessage.Of("Flash.Note.Candidates", byRole.Count);
                     // args 가 가리키는 이름을 못 찾았다는 사실을 반드시 함께 알린다 — 사용자가 상황을 이해해야
                     // 후보 중 무엇을 골라야 할지 판단할 수 있다.
-                    warnings.Add(FlashMessage.Of("Flash.Warn.ArgsCandidates",
+                    warnings.Add(LocMessage.Of("Flash.Warn.ArgsCandidates",
                         $"0x{entry.Offset:X}", entry.FileName, byRole.Count,
                         string.Join(", ", byRole), best));
                 }
                 else
                 {
-                    warnings.Add(FlashMessage.Of("Flash.Warn.FileMissing", $"0x{entry.Offset:X}", entry.FileName));
+                    warnings.Add(LocMessage.Of("Flash.Warn.FileMissing", $"0x{entry.Offset:X}", entry.FileName));
                 }
             }
 
@@ -301,7 +301,7 @@ public static class FlashPackageAnalyzer
                 Size = hit.Name is null ? 0 : hit.Size,
                 Selected = hit.Name is not null && DefaultSelected(role),
                 Candidates = candidates,
-                Note = note ?? (hit.Name is null ? FlashMessage.Of("Flash.Note.Missing")
+                Note = note ?? (hit.Name is null ? LocMessage.Of("Flash.Note.Missing")
                                                  : DefaultSelected(role) ? null : UncheckedNote(role)),
             });
         }
@@ -310,7 +310,7 @@ public static class FlashPackageAnalyzer
 
     /// <summary>인자 파일이 없을 때: 파일명 관례로 오프셋을 추정한다(값은 사용자가 확인해야 한다).</summary>
     private static List<FlashItem> BuildFromConventions(List<(string Name, long Size)> files,
-                                                        HashSet<string> used, EspChip chip, List<FlashMessage> warnings)
+                                                        HashSet<string> used, EspChip chip, List<LocMessage> warnings)
     {
         var items = new List<FlashItem>();
         void Add(string role, uint offset)
@@ -328,7 +328,7 @@ public static class FlashPackageAnalyzer
                 Size = f.Size,
                 Selected = DefaultSelected(role),
                 Candidates = cands.Count > 1 ? cands : Array.Empty<string>(),
-                Note = FlashMessage.Of("Flash.Note.EstimatedOffset"),
+                Note = LocMessage.Of("Flash.Note.EstimatedOffset"),
             });
         }
 
@@ -393,7 +393,7 @@ public static class FlashPackageAnalyzer
     public static bool DefaultSelected(string role) => role is "app" or "otadata";
 
     /// <summary>기본 해제된 줄에 이유를 남긴다 — 왜 안 켜져 있는지 알아야 켤 수 있다.</summary>
-    private static FlashMessage UncheckedNote(string role) => FlashMessage.Of(role switch
+    private static LocMessage UncheckedNote(string role) => LocMessage.Of(role switch
     {
         "bootloader" or "partition-table" => "Flash.Note.UncheckedConfig",
         "storage" => "Flash.Note.UncheckedData",

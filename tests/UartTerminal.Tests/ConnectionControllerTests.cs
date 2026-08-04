@@ -21,11 +21,12 @@ public class ConnectionControllerTests
         public bool AutoReconnect = true;
         public string Port = "COM8";
         public readonly ConnectionController Ctl;
+        public readonly UartBridge Bridge;
 
         public Harness()
         {
             var engine = new TerminalEngine(new UTF8Encoding(false));
-            var bridge = new UartBridge(engine);
+            var bridge = Bridge = new UartBridge(engine);
             Ctl = new ConnectionController(
                 engine, bridge,
                 factory: () => { var f = new FakeSerialSession(Port) { OpenMode = NextMode }; Created.Add(f); return f; },
@@ -55,6 +56,42 @@ public class ConnectionControllerTests
         var h = new Harness { NextMode = FakeOpenMode.InUse };
         Assert.Equal(OpenOutcome.InUse, h.Ctl.Open());
         Assert.False(h.Ctl.IsConnected);
+    }
+
+    /// <summary>
+    /// 실패한 오픈이 MCP 링버퍼를 지우면 안 된다. 장치가 분리되면 자동 재연결이 1.5초마다
+    /// Open 을 재시도하는데(esptool 이 포트를 쥔 동안 계속 InUse), Attach 가 무조건 버퍼를 지우던 탓에
+    /// <b>분리 직전의 패닉 로그가 첫 재시도에서 사라졌다</b> — AI 가 읽어야 할 바로 그 데이터다.
+    /// </summary>
+    [Fact]
+    public void FailedReopen_DoesNotEraseRingBuffer()
+    {
+        var h = new Harness();
+        Assert.Equal(OpenOutcome.Success, h.Ctl.Open());
+        h.Last.EmitData(Encoding.ASCII.GetBytes("panic: LoadProhibited\n"));
+        h.Last.SimulateClosed(SerialCloseReason.DeviceRemoved);
+
+        h.NextMode = FakeOpenMode.InUse;          // 외부 도구가 포트를 쥐고 있다
+        h.Ctl.ReconnectTick(portExists: true);    // 재시도 → 실패
+        h.Ctl.ReconnectTick(portExists: true);    // 한 번 더
+
+        var r = h.Bridge.Read(cursor: null, maxBytes: 200, stripAnsi: true);
+        Assert.Contains("panic", r.Data);
+    }
+
+    /// <summary>오픈이 성공하면 링버퍼는 새 세션 기준으로 초기화된다(기존 계약 유지).</summary>
+    [Fact]
+    public void SuccessfulReopen_ResetsRingBuffer()
+    {
+        var h = new Harness();
+        h.Ctl.Open();
+        h.Last.EmitData(Encoding.ASCII.GetBytes("stale\n"));
+        h.Last.SimulateClosed(SerialCloseReason.DeviceRemoved);
+
+        h.Ctl.ReconnectTick(portExists: true);    // 성공
+
+        var r = h.Bridge.Read(cursor: null, maxBytes: 200, stripAnsi: true);
+        Assert.Equal("", r.Data);
     }
 
     // ── 종료 사유별 판단 ─────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ public partial class AboutDialog : Window
     public AboutDialog()
     {
         InitializeComponent();
-        VersionText.Text = $"버전 {AppVersion}";
+        VersionText.Text = Loc.F("About.Version", AppVersion);
         RuntimeText.Text = $".NET {Environment.Version}  ·  {RuntimeInformation.ProcessArchitecture}";
     }
 

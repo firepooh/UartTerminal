@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
+using UartTerminal.Core;
 using UartTerminal.Core.Flash;
 
 namespace UartTerminal;
@@ -33,7 +34,7 @@ public partial class FlashDialog : Window
         public IReadOnlyDictionary<string, long> Sizes { get; init; } = new Dictionary<string, long>();
 
         /// <summary>Core 가 준 번역 키 + 인자. 표시 문장은 <see cref="NoteText"/> 가 현재 언어로 만든다.</summary>
-        public FlashMessage? Note { get; init; }
+        public LocMessage? Note { get; init; }
 
         public string NoteText => Note is null ? "" : Loc.Format(Note);
 
@@ -409,7 +410,7 @@ public partial class FlashDialog : Window
             {
                 SetProgressText(result.Canceled ? "Flash.Phase.Stopped" : "Flash.Phase.Failed", Progress.Value);
                 Log("");
-                Log(result.Error ?? Loc.S("Flash.Log.Failed"));
+                Log(Loc.FormatOrNull(result.Error) ?? Loc.S("Flash.Log.Failed"));
             }
         }
         catch (OperationCanceledException)

@@ -82,14 +82,41 @@
     <SolidColorBrush x:Key="PromptActive"        Color="{StaticResource C.Green}"/>
     <SolidColorBrush x:Key="PromptIdle"          Color="{StaticResource C.GreenBright}"/>
 
+    <!-- 오버레이(찾기 바·줌 표시기) 배경 — 밝은 패널 + 거의 불투명 -->
+    <SolidColorBrush x:Key="OverlayBg" Color="#F5F6F8FA"/>
+
     <!-- 터미널 렌더러: 흰 배경 + 어두운 글자. 선택/검색 하이라이트도 밝은 배경용으로 바꾼다 -->
     <Color x:Key="C.TermFg">#FF1F2328</Color>
     <Color x:Key="C.TermBg">#FFFFFFFF</Color>
     <Color x:Key="C.TermCursor">#FF1A7F37</Color>
-    <Color x:Key="C.TermSelection">#FF9AA4AF</Color>
+    <!-- 선택 영역은 글자 위에 겹치므로 반투명(알파) — 불투명이면 글자를 덮는다 -->
+    <Color x:Key="C.TermSelection">#590969DA</Color>
     <Color x:Key="C.TermTimestamp">#FF6B747E</Color>
     <Color x:Key="C.TermSearchMatch">#FFFFF1A8</Color>
     <Color x:Key="C.TermSearchCurrent">#FFFFC93C</Color>
     <Color x:Key="C.TermMeta">#FF6639BA</Color>
+
+    <!-- ===== ANSI 16색 (라이트) =====
+         다크 값을 그대로 쓰면 흰 배경에서 초록 2.16:1 · 노랑 1.70:1 · bright white 1.00:1 로
+         ESP-IDF 로그가 안 읽힌다. 채도 높은 색을 눌러 전부 4.5:1 이상으로 맞췄다
+         (측정: scratchpad/pick-ansi.py — 16/16 통과, 최저 red 5.36:1).
+         bright(8~15)는 흰 배경에서 '더 밝게' 가 아니라 '더 진하게' 가 두드러진다
+         (예외: bright black 은 원래 흐린 회색이 의도된 용도). -->
+    <Color x:Key="C.Ansi0">#FF24292F</Color>
+    <Color x:Key="C.Ansi1">#FFCF222E</Color>
+    <Color x:Key="C.Ansi2">#FF116329</Color>
+    <Color x:Key="C.Ansi3">#FF7D4E00</Color>
+    <Color x:Key="C.Ansi4">#FF0550AE</Color>
+    <Color x:Key="C.Ansi5">#FF6639BA</Color>
+    <Color x:Key="C.Ansi6">#FF136061</Color>
+    <Color x:Key="C.Ansi7">#FF424A53</Color>
+    <Color x:Key="C.Ansi8">#FF57606A</Color>
+    <Color x:Key="C.Ansi9">#FFA40E26</Color>
+    <Color x:Key="C.Ansi10">#FF0A5A22</Color>
+    <Color x:Key="C.Ansi11">#FF6B4400</Color>
+    <Color x:Key="C.Ansi12">#FF033D8B</Color>
+    <Color x:Key="C.Ansi13">#FF512A97</Color>
+    <Color x:Key="C.Ansi14">#FF0F5257</Color>
+    <Color x:Key="C.Ansi15">#FF24292F</Color>
 
 </ResourceDictionary>

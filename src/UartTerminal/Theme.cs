@@ -64,10 +64,23 @@ public static class Theme
     public static event Action? Changed;
 
     /// <summary>
-    /// 테마를 바꾼다. <b>사전을 교체하지 않고 팔레트 값만 덮어쓴다</b> —
-    /// 사전 교체나 DynamicResource 는 이미 렌더된 컨트롤에 반영되지 않는 것을 실험으로 확인했다.
-    /// 브러시는 같은 인스턴스의 <c>Color</c> 만 바꾸므로, StaticResource 로 브러시를 가져간
-    /// 컨트롤(앱 XAML 200여 곳)도 손대지 않고 즉시 따라온다.
+    /// 테마를 바꾼다. 사전을 교체하지 않고 <b>팔레트 값만 덮어쓴다</b>.
+    ///
+    /// <b>측정으로 확인한 한계(2026-08-04)</b> — 아래 '브러시 인스턴스의 Color 만 바꾼다' 경로는
+    /// <b>실제로 한 번도 실행되지 않는다</b>. WPF 는 BAML 로 읽은 ResourceDictionary 의
+    /// <see cref="System.Windows.Freezable"/> 값을 자동으로 Freeze 하고, <b>사전에 새로 넣는 값도
+    /// 즉시 다시 Freeze 한다</b>(38개 전부 확인 — 변경 가능한 복제본으로 갈아 끼워도 되읽으면 frozen).
+    /// 그래서 항상 아래쪽 <c>live[key] = next</c> (사전 값 교체)로 흐르고, 진단 로그에
+    /// "브러시가 frozen 이라…" 경고 38줄이 매번 남는다.
+    ///
+    /// 그 결과 실행 중 테마 전환이 <b>어디에 먹고 어디에 안 먹는지가 갈린다</b>:
+    ///  · 쓰는 순간 조회하는 코드(<see cref="Brush"/>·<see cref="Color"/>·<see cref="ColorOr"/>,
+    ///    터미널 렌더러)는 새 값을 읽으므로 <b>따라온다</b>.
+    ///  · XAML 의 <c>{StaticResource}</c> 는 로드 시점에 값이 박히므로 <b>따라오지 않는다</b>
+    ///    (스타일 setter 값도 마찬가지).
+    ///
+    /// 제대로 고치려면 브러시 참조를 <c>{DynamicResource}</c> 로 바꿔야 한다(앱 XAML 200여 곳,
+    /// 기계적 치환). 사전 값 교체는 DynamicResource 에는 정상적으로 전파된다.
     /// </summary>
     public static void Apply(AppTheme theme)
     {

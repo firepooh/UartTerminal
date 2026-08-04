@@ -10,6 +10,28 @@ public sealed class TerminalBuffer : ITerminalSink
     public const int TabStop = 8;
     private const int CursorForwardCap = 4096; // linenoise 등의 대량 CUF로부터 메모리 보호
 
+    /// <summary>
+    /// 논리 라인 하나의 최대 셀 수. 넘으면 강제로 줄을 바꾼다.
+    ///
+    /// 상한이 없던 동안에는 <b>개행이 오지 않는 스트림에서 한 줄이 무한히 자랐다</b> —
+    /// 수신 개행 모드가 장치와 어긋난 경우(Rx=CR 인데 장치는 LF 만 보냄), 잘못된 baud 로 열어
+    /// 임의 바이트가 들어오는 경우, 바이너리 스트림. 측정값: 8MB 입력 → 한 줄 7,000,000셀 ·
+    /// 힙 112MB(입력의 14배). <see cref="_maxLines"/> 는 줄 <i>수</i>만 제한하므로 소용이 없었다.
+    /// 강제 개행을 넣으면 스크롤백 상한이 다시 총량을 제한한다(최악 = maxLines × 이 값).
+    /// </summary>
+    public const int MaxLineCells = CursorForwardCap;
+
+    /// <summary>
+    /// 보관하는 셀 총량 상한(≈ 이 값 × 16바이트). 줄 수 상한만으로는 메모리가 묶이지 않는다 —
+    /// <see cref="MaxLineCells"/> 를 넣은 뒤에도 8MB 입력이 1,709줄 × 4,096셀로 흩어져 힙 94MB 를 썼다
+    /// (최악 = maxLines × MaxLineCells = 4천만 셀 ≈ 650MB). 총량으로 잘라야 실제로 묶인다.
+    /// 평범한 로그(줄당 60~120자)로는 10,000줄을 다 채워도 이 값에 닿지 않으므로 체감되지 않는다.
+    /// </summary>
+    public const long MaxTotalCells = 4_000_000;   // ≈ 64MB
+
+    /// <summary>확정된(더 이상 자라지 않는) 라인들의 셀 수 합. 총량 상한 판단용.</summary>
+    private long _closedCells;
+
     private readonly object _sync = new();
     private readonly List<LogicalLine> _lines = new();
     private readonly int _maxLines;
@@ -48,12 +70,18 @@ public sealed class TerminalBuffer : ITerminalSink
 
     public void Print(char ch, CellAttributes attr)
     {
+        // 커서 기준으로 판단한다 — CR 로 되돌아가 덮어쓰는 중(진행률 표시 등)에는 줄이 자라지 않으므로
+        // 강제 개행을 하면 안 된다. 새 셀을 덧붙이려는 순간에만 상한이 걸린다.
+        if (_current.Cursor >= MaxLineCells)
+            LineFeed();
         _current.Print(ch, attr);
         Bump();
     }
 
     public void LineFeed()
     {
+        // 방금 닫힌 라인은 이제 자라지 않는다 → 총량 집계에 반영한다.
+        _closedCells += _current.Count;
         _current = new LogicalLine();
         _lines.Add(_current);
         TrimIfNeeded();
@@ -174,10 +202,13 @@ public sealed class TerminalBuffer : ITerminalSink
     {
         lock (_sync)
         {
+            // 절대 라인 번호는 단조 증가를 유지한다 — 0 으로 되돌리면 번호가 재사용되어
+            // 검색 하이라이트(절대 번호로 저장)가 엉뚱한 줄에 남았다.
+            _trimmedCount += _lines.Count;
             _lines.Clear();
             _current = new LogicalLine();
             _lines.Add(_current);
-            _trimmedCount = 0;
+            _closedCells = 0;
             Bump();
         }
     }
@@ -196,13 +227,36 @@ public sealed class TerminalBuffer : ITerminalSink
         }
     }
 
+    /// <summary>
+    /// 앞에서부터 라인을 버려 <b>줄 수</b>와 <b>셀 총량</b> 두 상한을 모두 지킨다.
+    /// 현재(열린) 라인은 항상 남긴다.
+    /// </summary>
     private void TrimIfNeeded()
     {
         int over = _lines.Count - _maxLines;
         if (over > 0)
+            Drop(over);
+
+        // 셀 총량 초과 — 긴 줄이 섞이면 줄 수 상한보다 이쪽이 먼저 걸린다.
+        // 버릴 개수만 먼저 세고(집계는 Drop 이 담당) 현재(열린) 라인은 항상 남긴다.
+        int n = 0;
+        long freed = 0;
+        while (_closedCells - freed > MaxTotalCells && n < _lines.Count - 1)
         {
-            _lines.RemoveRange(0, over);
-            _trimmedCount += over;
+            freed += _lines[n].Count;
+            n++;
         }
+        if (n > 0)
+            Drop(n);
+    }
+
+    /// <summary>앞에서 <paramref name="count"/> 줄을 버리고 절대 라인 번호·셀 집계를 맞춘다.</summary>
+    private void Drop(int count)
+    {
+        for (int i = 0; i < count; i++)
+            _closedCells -= _lines[i].Count;
+        if (_closedCells < 0) _closedCells = 0;   // 방어(열린 라인이 섞이는 경우)
+        _lines.RemoveRange(0, count);
+        _trimmedCount += count;
     }
 }

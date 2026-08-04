@@ -49,7 +49,8 @@ public sealed record SessionProfile
 
     /// <summary>목록 표시용: "모터보드 — COM24 · 115200 · 리셋". 파생 값이므로 파일에 저장하지 않는다.</summary>
     [JsonIgnore]
-    public string Display => ResetOnOpen ? $"{Name} — {Port} · {Baud} · 리셋" : $"{Name} — {Port} · {Baud}";
+    // 언어 중립 표기 — Core 는 문장을 만들지 않는다. ⟳ = 열 때 보드 리셋.
+    public string Display => ResetOnOpen ? $"{Name} — {Port} · {Baud} · ⟳" : $"{Name} — {Port} · {Baud}";
 
     /// <summary>UI 자동화/스크린리더가 읽는 이름(레코드 기본 ToString 은 타입/필드 덤프라 부적합).</summary>
     public override string ToString() => Display;
@@ -93,7 +94,7 @@ public sealed class SessionStore
     public bool IsReadOnly { get; private set; }
 
     /// <summary>마지막 Load/저장에서 사용자에게 알려야 하는 사유. 성공 시 null.</summary>
-    public string? LastError { get; private set; }
+    public LocMessage? LastError { get; private set; }
 
     public event Action? Changed;
 
@@ -119,7 +120,7 @@ public sealed class SessionStore
             // 내용을 모르는 파일을 덮어쓰지 않도록 저장을 잠근다.
             _items = new List<SessionProfile>();
             IsReadOnly = true;
-            LastError = $"세션 파일을 열 수 없습니다({ex.GetType().Name}). 이번 실행에서는 저장하지 않습니다: {_path}";
+            LastError = LocMessage.Of("Sess.Err.CannotOpen", ex.GetType().Name, _path);
             RaiseChanged();
             return;
         }
@@ -127,11 +128,11 @@ public sealed class SessionStore
         try
         {
             var file = JsonSerializer.Deserialize<SessionFile>(json)
-                       ?? throw new JsonException("빈 문서");
+                       ?? throw new JsonException("empty document");
             if (file.SchemaVersion > SupportedSchemaVersion)
             {
                 IsReadOnly = true;
-                LastError = $"세션 파일이 최신 버전(v{file.SchemaVersion})에서 만들어졌습니다. 읽기 전용으로 엽니다.";
+                LastError = LocMessage.Of("Sess.Err.NewerSchema", file.SchemaVersion);
             }
             // "sessions": null 이면 System.Text.Json 이 초기화값을 null 로 덮어쓴다 → 빈 목록으로 취급.
             _items = Sanitize(file.Sessions ?? new List<SessionProfile>());
@@ -139,14 +140,14 @@ public sealed class SessionStore
         catch (JsonException ex)
         {
             _items = new List<SessionProfile>();
-            LastError = $"세션 파일이 손상되었습니다: {ex.Message}";
+            LastError = LocMessage.Of("Sess.Err.Corrupt", ex.Message);
             PreserveCorrupt();
         }
         catch (Exception ex)
         {
             _items = new List<SessionProfile>();
             IsReadOnly = true;
-            LastError = $"세션 파일을 해석할 수 없습니다({ex.GetType().Name}). 이번 실행에서는 저장하지 않습니다: {_path}";
+            LastError = LocMessage.Of("Sess.Err.Unreadable", ex.GetType().Name, _path);
         }
 
         RaiseChanged();
@@ -157,7 +158,7 @@ public sealed class SessionStore
     {
         if (IsReadOnly)
         {
-            LastError ??= "세션 파일이 읽기 전용 상태여서 저장하지 않았습니다.";
+            LastError ??= LocMessage.Of("Sess.Err.ReadOnly");
             return false;
         }
 
@@ -185,7 +186,7 @@ public sealed class SessionStore
         {
             if (list.Count >= MaxSessions)
             {
-                LastError = $"저장된 세션이 최대 {MaxSessions}개입니다 — 목록에서 삭제 후 다시 저장하세요.";
+                LastError = LocMessage.Of("Sess.Err.TooMany", MaxSessions);
                 return false;
             }
             list.Add(item);
@@ -204,7 +205,7 @@ public sealed class SessionStore
     {
         if (IsReadOnly)
         {
-            LastError ??= "세션 파일이 읽기 전용 상태여서 저장하지 않았습니다.";
+            LastError ??= LocMessage.Of("Sess.Err.ReadOnly");
             return false;
         }
 
@@ -226,7 +227,7 @@ public sealed class SessionStore
         }
         catch (Exception ex)
         {
-            LastError = $"세션 파일 저장 실패: {ex.Message}";
+            LastError = LocMessage.Of("Sess.Err.SaveFailed", ex.Message);
             return false;
         }
     }
@@ -277,7 +278,9 @@ public sealed class SessionStore
         {
             string dest = $"{_path}.corrupt-{DateTime.Now:yyyyMMdd-HHmmss}";
             File.Move(_path, dest, overwrite: true);
-            LastError += $" 원본을 {Path.GetFileName(dest)} 로 보관했습니다.";
+            // 손상 메시지에 "원본을 어디로 보관했는지"까지 담은 키로 교체(문장 이어붙이기 대신).
+            LastError = LocMessage.Of("Sess.Err.CorruptPreserved",
+                LastError?.Args.FirstOrDefault() ?? "", Path.GetFileName(dest));
         }
         catch { }
     }

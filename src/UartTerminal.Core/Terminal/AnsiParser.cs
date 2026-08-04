@@ -31,6 +31,22 @@ public sealed class AnsiParser
     private bool _hasCurParam;
     private bool _privatePrefix; // '?'
 
+    /// <summary>
+    /// CSI 파라미터 개수 상한. 실제 시퀀스는 5개를 넘지 않는다(38;2;r;g;b 가 최대).
+    /// 상한이 없던 동안 <c>ESC[</c> 뒤에 세미콜론이 계속 오면 리스트가 무한히 자랐다
+    /// (측정: 세미콜론 400만개 → 힙 16.6MB). 잘못된 baud 의 임의 바이트로도 도달할 수 있다.
+    /// </summary>
+    public const int MaxParams = 32;
+
+    /// <summary>
+    /// OSC 문자열 최대 길이. 종료자(BEL/ST)가 오지 않으면 그 뒤 <b>모든 출력이 사라졌다</b> —
+    /// 색 없는 평문 로그에서는 다음 ESC 도 오지 않으므로 재연결 전까지 화면이 영구히 멈췄다
+    /// (측정: 5MB 를 전부 삼킴). 실제 OSC(창 제목 등)는 수백 바이트를 넘지 않는다.
+    /// </summary>
+    private const int MaxOscLength = 1024;
+
+    private int _oscLength;
+
     /// <summary>DSR 응답 등 터미널→호스트 송신이 필요할 때 호출(엔진이 시리얼 TX로 연결).</summary>
     public Action<ReadOnlyMemory<byte>>? Respond { get; set; }
 
@@ -41,12 +57,19 @@ public sealed class AnsiParser
 
     public CellAttributes CurrentAttributes => _attr;
 
+    /// <summary>
+    /// 현재 수집 중인 CSI 파라미터 개수(진단·테스트용). 항상 <see cref="MaxParams"/> 이하여야 한다 —
+    /// 상한이 없던 동안 <c>ESC[</c> 뒤 세미콜론만으로 리스트가 무한히 자랐다.
+    /// </summary>
+    public int PendingParameterCount => _params.Count;
+
     /// <summary>재연결 등에서 상태 초기화.</summary>
     public void Reset()
     {
         _state = State.Ground;
         _attr = CellAttributes.Default;
         _lastNewline = '\0';
+        _oscLength = 0;
         ResetParams();
     }
 
@@ -140,7 +163,7 @@ public sealed class AnsiParser
         switch (ch)
         {
             case '[': ResetParams(); _state = State.Csi; return;
-            case ']': _state = State.Osc; return;
+            case ']': _oscLength = 0; _state = State.Osc; return;
             case '(': case ')': case '*': case '+':
                 _state = State.EscapeIntermediate; return; // 문자셋 지정: 다음 한 글자 소비
             case 'c': // RIS: 속성만 리셋(화면 전체 리셋은 로그 모델에서 과함)
@@ -168,7 +191,8 @@ public sealed class AnsiParser
         }
         if (ch == ';')
         {
-            _params.Add(_hasCurParam ? _curParam : 0);
+            if (_params.Count < MaxParams)
+                _params.Add(_hasCurParam ? _curParam : 0);
             _curParam = 0;
             _hasCurParam = false;
             return;
@@ -187,7 +211,7 @@ public sealed class AnsiParser
         if (ch >= 0x40 && ch <= 0x7E)
         {
             // 최종 바이트 → 디스패치
-            if (_hasCurParam || _params.Count > 0)
+            if ((_hasCurParam || _params.Count > 0) && _params.Count < MaxParams)
                 _params.Add(_hasCurParam ? _curParam : 0);
             DispatchCsi(ch);
             _state = State.Ground;
@@ -307,7 +331,23 @@ public sealed class AnsiParser
         // OSC(예: 창 제목 설정)는 내용을 무시하고 종료자만 감지: BEL 또는 ST(ESC \)
         if (ch == BEL) { _state = State.Ground; return; }
         if (ch == ESC) { _state = State.OscEsc; return; }
-        // 그 외 문자는 소비
+
+        // 탈출구 두 개 — 없으면 종료자가 오지 않는 OSC 하나가 이후 모든 출력을 삼킨다.
+        //  1) 개행/CAN/SUB 는 OSC 를 끝낸다(xterm 도 C0 제어에서 중단한다). 개행은 다시 처리해
+        //     로그 한 줄이 통째로 사라지지 않게 한다.
+        if (ch == '\n' || ch == '\r' || ch == '\x18' || ch == '\x1A')
+        {
+            _state = State.Ground;
+            _oscLength = 0;
+            Ground(ch);
+            return;
+        }
+        //  2) 길이 상한 — 이진 쓰레기에는 개행조차 없을 수 있다.
+        if (++_oscLength > MaxOscLength)
+        {
+            _state = State.Ground;
+            _oscLength = 0;
+        }
     }
 
     private void OscEsc(char ch)

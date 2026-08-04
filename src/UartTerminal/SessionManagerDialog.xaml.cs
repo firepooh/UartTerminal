@@ -148,7 +148,7 @@ public partial class SessionManagerDialog : Window
 
         sessions.Load();
         if (sessions.LastError is { } err)
-            MessageBox.Show(owner, err, "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(owner, Loc.Format(err), "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
 
         _open = true;
         try
@@ -269,7 +269,7 @@ public partial class SessionManagerDialog : Window
         if (!_sessions.ReplaceAll(items))
         {
             // 실패 시 창을 닫지 않는다(편집 내용을 잃지 않게).
-            MessageBox.Show(this, _sessions.LastError ?? Loc.S("Sess.SaveFailed"),
+            MessageBox.Show(this, Loc.FormatOrNull(_sessions.LastError) ?? Loc.S("Sess.SaveFailed"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }

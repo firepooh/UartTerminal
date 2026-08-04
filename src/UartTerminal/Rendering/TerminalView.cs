@@ -58,11 +58,14 @@ public sealed class TerminalView : FrameworkElement
     }
 
     private static readonly string[] PrimaryFonts = { "Cascadia Code", "Cascadia Mono", "D2Coding", "Consolas", "Courier New" };
-    private static readonly string[] FallbackFonts = { "Malgun Gothic", "맑은 고딕", "Gulim", "굴림" };
+    private static readonly string[] FallbackFonts =
+        { "Malgun Gothic", "맑은 고딕", "Gulim", "굴림" };   // loc:data — 폰트 패밀리 이름
 
     private readonly TerminalBuffer _buffer;
-    // readonly 아님 — 테마 전환 시 새 팔레트로 교체한다(OnThemeChanged).
-    private TerminalPalette _palette = TerminalPalette.Dark;
+    // readonly 아님 — 매 프레임 시작에 현재 팔레트를 다시 잡는다(OnRender).
+    // 예전에는 여기에 스냅샷을 굳히고 Theme.Changed 로만 갱신했는데, 구독이 Unloaded 에서
+    // 끊긴 뒤 재구독되지 않아 탭을 한 번 전환하면 그 터미널이 옛 테마 색으로 남았다.
+    private TerminalPalette _palette = TerminalPalette.Current;
     private readonly ConditionalWeakTable<LogicalLine, WrapEntry> _wrapCache = new();
     private readonly Dictionary<uint, SolidColorBrush> _brushes = new();
     private readonly DispatcherTimer _timer;
@@ -194,16 +197,36 @@ public sealed class TerminalView : FrameworkElement
         };
         _timer.Start();
 
-        // 테마가 바뀌면 팔레트를 다시 읽어 그린다. 렌더러는 GlyphRun/Pen 에 Color 를 직접 쓰므로
-        // 브러시 인스턴스 교체만으로는 갱신되지 않는다(스타일과 달리 자동 반영이 없다).
+        // 테마가 바뀌면 다시 그린다(색 자체는 OnRender 가 매 프레임 현재 팔레트에서 읽는다).
+        // 렌더러는 GlyphRun/Pen 에 Color 를 직접 쓰므로 브러시 인스턴스 교체만으로는 갱신되지 않는다.
+        // 해지는 Unloaded 가 아니라 Shutdown() 에서 한다 — Unloaded 는 탭 전환마다 발생하는데
+        // 재구독 경로가 없어서, 한 번 비활성이 된 탭이 이후 테마 전환을 영구히 놓쳤다.
         Theme.Changed += OnThemeChanged;
-        Unloaded += (_, _) => Theme.Changed -= OnThemeChanged;
     }
 
     private void OnThemeChanged()
     {
-        _palette = TerminalPalette.Dark;
+        _brushes.Clear();  // 캐시된 SolidColorBrush 는 옛 테마 색이다
         _forceRender = true;
+    }
+
+    /// <summary>
+    /// 탭/문서가 닫힐 때 호출(소유자: <c>UartDocumentView.CloseDocument</c>).
+    /// 렌더 타이머와 정적 이벤트 구독을 끊는다 — 실행 중인 <see cref="DispatcherTimer"/> 는
+    /// Dispatcher 가 강하게 참조하므로, 멈추지 않으면 이 뷰와 버퍼·문서 그래프가 영구히 살아남고
+    /// 닫힌 탭이 계속 60Hz 로 스냅샷을 만든다.
+    /// </summary>
+    public void Shutdown()
+    {
+        _timer.Stop();
+        _autoScrollTimer?.Stop();
+        Theme.Changed -= OnThemeChanged;
+        ScrollMetricsChanged = null;
+        AutoCopyRequested = null;
+        PasteRequested = null;
+        _brushes.Clear();
+        _searchLines.Clear();
+        _visible = Array.Empty<VisRow>();
     }
 
     public double FontSize
@@ -274,6 +297,9 @@ public sealed class TerminalView : FrameworkElement
 
     protected override void OnRender(DrawingContext dc)
     {
+        // 현재 테마의 팔레트를 매 프레임 잡는다(참조 1회 — 이벤트 구독 대칭에 의존하지 않는다).
+        _palette = TerminalPalette.Current;
+
         var metrics = EnsureMetrics();
         double w = ActualWidth, h = ActualHeight;
         dc.DrawRectangle(GetBrush(_palette.DefaultBackground), null, new Rect(0, 0, w, h));
@@ -321,10 +347,25 @@ public sealed class TerminalView : FrameworkElement
         }
         catch (Exception ex)
         {
-            // 렌더 파이프라인 예외가 앱을 종료시키지 않도록 방어
-            UartTerminal.DiagLog.Exception("OnRender", ex);
+            // 렌더 파이프라인 예외가 앱을 종료시키지 않도록 방어.
+            // 재시도 상태를 반드시 여기서 정리한다 — 성공 경로의 `_forceRender = false` 를
+            // 건너뛰면 16ms 타이머가 같은 예외를 초당 60회 재현하고, 매번 동기 파일 로그를
+            // UI 스레드에서 써서 앱이 멈추고 diag.log 롤링으로 원인(첫 예외)까지 지워졌다.
+            _forceRender = false;
+            _lastRevision = _buffer.Revision;
+
+            // 같은 예외의 반복은 한 번만 기록한다(증거 보존).
+            string sig = $"{ex.GetType().Name}:{ex.Message}";
+            if (sig != _lastRenderErrorSig)
+            {
+                _lastRenderErrorSig = sig;
+                UartTerminal.DiagLog.Exception("OnRender", ex);
+            }
         }
     }
+
+    /// <summary>직전 렌더 예외의 서명. 같은 예외를 매 프레임 기록해 진단 로그를 덮어쓰지 않기 위한 것.</summary>
+    private string? _lastRenderErrorSig;
 
     private void RenderRow(DrawingContext dc, FontMetrics m, in VisRow row, double y,
                            (long Line, int Cell) selMin, (long Line, int Cell) selMax)

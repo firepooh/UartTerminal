@@ -87,14 +87,43 @@
     <SolidColorBrush x:Key="PromptActive"        Color="{StaticResource C.GreenBright}"/>
     <SolidColorBrush x:Key="PromptIdle"          Color="{StaticResource C.Green}"/>
 
-    <!-- 터미널 렌더러(색만; ANSI 16색 팔레트는 표준값이라 코드에 둔다) -->
+    <!-- 오버레이(찾기 바·줌 표시기) 배경. 반투명이라 Color 가 아닌 브러시로 둔다.
+         예전에는 XAML 에 #F20B0F16 을 직접 박아 라이트 테마에서 검은 알약이 남았다. -->
+    <SolidColorBrush x:Key="OverlayBg" Color="#F20B0F16"/>
+
+    <!-- 터미널 렌더러 -->
     <Color x:Key="C.TermFg">#FFE6EDF5</Color>
     <Color x:Key="C.TermBg">#FF0D1117</Color>
     <Color x:Key="C.TermCursor">#FF3FB950</Color>
-    <Color x:Key="C.TermSelection">#FF6E7A8A</Color>
+    <!-- 선택 영역은 글자 위에 겹치므로 반투명(알파 0x66)이어야 한다 -->
+    <Color x:Key="C.TermSelection">#662F81F7</Color>
     <Color x:Key="C.TermTimestamp">#FF8B97A8</Color>
     <Color x:Key="C.TermSearchMatch">#FF4B4612</Color>
     <Color x:Key="C.TermSearchCurrent">#FF8A6600</Color>
     <Color x:Key="C.TermMeta">#FFBC8CFF</Color>
+
+    <!-- ===== ANSI 16색 =====
+         원래 "표준값이라 코드에 둔다"(TerminalPalette.Ansi16)였는데, 그래서 테마를 따라오지 않았다.
+         흰 배경에서 초록 2.16:1 · 노랑 1.70:1 · 흰색 1.26:1 로 ESP-IDF 로그가 읽히지 않았다
+         (16색 중 11개가 4.5:1 미달). 실제 터미널들이 라이트/다크용 팔레트를 따로 갖는 이유다.
+         다크는 xterm 표준을 유지하되 red 만 올렸다 — #CD0000 은 3.24:1 로
+         ESP_LOGE(가장 중요한 줄)가 16색 중 최저 대비였다. bold 승격(red→bright red)이
+         더 밝아지도록 bright red 도 함께 올린다. 두 값 모두 GitHub 계열. -->
+    <Color x:Key="C.Ansi0">#FF000000</Color>
+    <Color x:Key="C.Ansi1">#FFE5534B</Color>
+    <Color x:Key="C.Ansi2">#FF00CD00</Color>
+    <Color x:Key="C.Ansi3">#FFCDCD00</Color>
+    <Color x:Key="C.Ansi4">#FF2472C8</Color>
+    <Color x:Key="C.Ansi5">#FFCD00CD</Color>
+    <Color x:Key="C.Ansi6">#FF00CDCD</Color>
+    <Color x:Key="C.Ansi7">#FFE5E5E5</Color>
+    <Color x:Key="C.Ansi8">#FF7F7F7F</Color>
+    <Color x:Key="C.Ansi9">#FFFF7B72</Color>
+    <Color x:Key="C.Ansi10">#FF00FF00</Color>
+    <Color x:Key="C.Ansi11">#FFFFFF00</Color>
+    <Color x:Key="C.Ansi12">#FF5C5CFF</Color>
+    <Color x:Key="C.Ansi13">#FFFF00FF</Color>
+    <Color x:Key="C.Ansi14">#FF00FFFF</Color>
+    <Color x:Key="C.Ansi15">#FFFFFFFF</Color>
 
 </ResourceDictionary>

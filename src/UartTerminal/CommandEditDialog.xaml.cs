@@ -36,7 +36,7 @@ public partial class CommandEditDialog : Window
         /// <summary>폴더의 하위 항목인지(들여쓰기 표시 + 이동 범위 제한에 사용).</summary>
         public bool IsChild { get; set; }
 
-        public string Display => _name.Length > 0 ? _name : (_text.Length > 0 ? _text : IsFolder ? "(새 폴더)" : "(새 명령)");
+        public string Display => _name.Length > 0 ? _name : (_text.Length > 0 ? _text : IsFolder ? Loc.S("Cmd.NewFolder") : Loc.S("Cmd.NewCommand"));
         public string Glyph => IsFolder ? "▾" : (IsChild ? "└" : "•");
         public Thickness Indent => new(IsChild ? 16 : 0, 0, 0, 0);
         public Visibility ConfirmMark => _confirm ? Visibility.Visible : Visibility.Collapsed;
@@ -107,7 +107,7 @@ public partial class CommandEditDialog : Window
 
         store.Load();
         if (store.LastError is { } err)
-            MessageBox.Show(owner, err, "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(owner, Loc.Format(err), "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
 
         _open = true;
         try
@@ -129,7 +129,7 @@ public partial class CommandEditDialog : Window
     {
         _current = GroupList.SelectedItem as GroupRow;
         CmdList.ItemsSource = _current?.Rows;
-        CmdHeader.Text = _current is null ? "명령" : $"명령 — {_current.Name}";
+        CmdHeader.Text = _current is null ? Loc.S("Cmd.Header") : Loc.F("Cmd.HeaderOf", _current.Name);
         if (_current is { Rows.Count: > 0 }) CmdList.SelectedIndex = 0;
         UpdateButtons();
     }
@@ -162,7 +162,7 @@ public partial class CommandEditDialog : Window
         GroupList.ItemsSource = null;
         GroupList.ItemsSource = _groups;
         GroupList.SelectedIndex = i;
-        CmdHeader.Text = $"명령 — {_current.Name}";
+        CmdHeader.Text = Loc.F("Cmd.HeaderOf", _current.Name);
     }
 
     private void DeleteGroup_Click(object sender, RoutedEventArgs e)
@@ -509,7 +509,7 @@ public partial class CommandEditDialog : Window
         if (dropped > 0)
         {
             var ask = MessageBox.Show(this,
-                $"전송 문자열이 비어 있는 명령 또는 하위가 없는 폴더 {dropped}개는 저장되지 않습니다. 계속할까요?",
+                Loc.F("Cmd.ConfirmDropEmpty", dropped),
                 "UartTerminal", MessageBoxButton.OKCancel, MessageBoxImage.Question);
             if (ask != MessageBoxResult.OK) return;
         }
@@ -518,7 +518,7 @@ public partial class CommandEditDialog : Window
         if (!_store.ReplaceAllGroups(groups))
         {
             // 실패 시 창을 닫지 않는다(편집 내용을 잃지 않게).
-            MessageBox.Show(this, _store.LastError ?? Loc.S("Cmd.SaveFailed"),
+            MessageBox.Show(this, Loc.FormatOrNull(_store.LastError) ?? Loc.S("Cmd.SaveFailed"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }

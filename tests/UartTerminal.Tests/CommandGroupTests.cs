@@ -284,8 +284,9 @@ public sealed class CommandGroupTests : IDisposable
     {
         var on = new SessionProfile { Name = "A", Port = "COM4", Baud = 115200, ResetOnOpen = true };
         var off = new SessionProfile { Name = "B", Port = "COM4", Baud = 115200 };
-        Assert.Contains("리셋", on.Display);
-        Assert.DoesNotContain("리셋", off.Display);
+        // Display 는 Core 가 만드는 표시 문자열이라 언어 중립 기호를 쓴다(⟳ = 열 때 보드 리셋).
+        Assert.Contains("⟳", on.Display);
+        Assert.DoesNotContain("⟳", off.Display);
     }
 
     // ── 개행 규약(세션별 접속 속성 · null = 지정 없음) ──────────────────────────

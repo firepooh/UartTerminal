@@ -9,11 +9,15 @@ namespace UartTerminal.Rendering;
 /// </summary>
 public sealed class TerminalPalette
 {
-    // xterm 계열 표준 16색
-    private static readonly Color[] Ansi16 =
+    /// <summary>
+    /// 테마가 없을 때(단위 테스트/디자이너) 쓰는 xterm 계열 기본값.
+    /// <b>실제 색은 팔레트의 C.Ansi0~15 에서 읽는다</b> — 이 배열을 유일한 출처로 두었더니
+    /// 라이트 테마에서 초록 2.16:1 · 노랑 1.70:1 로 ESP-IDF 로그가 읽히지 않았다.
+    /// </summary>
+    private static readonly Color[] AnsiFallback =
     {
         Color.FromRgb(0x00, 0x00, 0x00), // 0 black
-        Color.FromRgb(0xCD, 0x00, 0x00), // 1 red
+        Color.FromRgb(0xE5, 0x53, 0x4B), // 1 red
         Color.FromRgb(0x00, 0xCD, 0x00), // 2 green
         Color.FromRgb(0xCD, 0xCD, 0x00), // 3 yellow
         Color.FromRgb(0x24, 0x72, 0xC8), // 4 blue (약간 밝게: 가독성)
@@ -21,7 +25,7 @@ public sealed class TerminalPalette
         Color.FromRgb(0x00, 0xCD, 0xCD), // 6 cyan
         Color.FromRgb(0xE5, 0xE5, 0xE5), // 7 white
         Color.FromRgb(0x7F, 0x7F, 0x7F), // 8 bright black (gray)
-        Color.FromRgb(0xFF, 0x00, 0x00), // 9 bright red
+        Color.FromRgb(0xFF, 0x7B, 0x72), // 9 bright red
         Color.FromRgb(0x00, 0xFF, 0x00), // 10 bright green
         Color.FromRgb(0xFF, 0xFF, 0x00), // 11 bright yellow
         Color.FromRgb(0x5C, 0x5C, 0xFF), // 12 bright blue
@@ -30,18 +34,33 @@ public sealed class TerminalPalette
         Color.FromRgb(0xFF, 0xFF, 0xFF), // 15 bright white
     };
 
+    /// <summary>이 팔레트 인스턴스가 쓸 ANSI 16색. 생성 시 현재 테마에서 읽어 굳힌다(Reload 로 갱신).</summary>
+    private readonly Color[] _ansi = ReadAnsi();
+
+    private static Color[] ReadAnsi()
+    {
+        var a = new Color[16];
+        for (int i = 0; i < 16; i++)
+            a[i] = Theme.ColorOr($"C.Ansi{i}", AnsiFallback[i]);
+        return a;
+    }
+
     // 기본색은 테마에서 읽는다(코드에 복사해 두면 테마를 바꿔도 화면이 안 따라온다).
     // 테마가 없을 때(단위 테스트 등)는 GitHub-dark 값으로 떨어진다.
     public Color DefaultForeground { get; init; } = Theme.ColorOr("C.TermFg", Color.FromRgb(0xE6, 0xED, 0xF5));
     public Color DefaultBackground { get; init; } = Theme.ColorOr("C.TermBg", Color.FromRgb(0x0D, 0x11, 0x17));
-    public Color SelectionBackground { get; init; } = Color.FromArgb(0x66, 0x2F, 0x81, 0xF7);
+    public Color SelectionBackground { get; init; } =
+        Theme.ColorOr("C.TermSelection", Color.FromArgb(0x66, 0x2F, 0x81, 0xF7));
     public Color CursorColor { get; init; } = Theme.ColorOr("C.TermCursor", Color.FromRgb(0x3F, 0xB9, 0x50));
 
-    /// <summary>현재 테마 기준 팔레트. 테마를 바꾸면 다시 만들어야 한다(<see cref="Reload"/>).</summary>
-    public static TerminalPalette Dark { get; private set; } = new();
+    /// <summary>
+    /// 현재 테마 기준 팔레트. 테마를 바꾸면 <see cref="Reload"/> 가 새 인스턴스로 교체한다.
+    /// (예전 이름은 <c>Dark</c> 였는데 라이트 테마에서도 이 프로퍼티를 쓰기 때문에 오해를 샀다.)
+    /// </summary>
+    public static TerminalPalette Current { get; private set; } = new();
 
-    /// <summary>테마 전환 후 기본색을 다시 읽는다.</summary>
-    public static void Reload() => Dark = new TerminalPalette();
+    /// <summary>테마 전환 후 기본색·ANSI 16색을 다시 읽는다.</summary>
+    public static void Reload() => Current = new TerminalPalette();
 
     /// <summary>전경색 해석. bold 이고 팔레트 0~7이면 bright(8~15)로 승격(일반 터미널 동작).</summary>
     public Color ResolveForeground(in CellAttributes attr)
@@ -76,8 +95,8 @@ public sealed class TerminalPalette
     {
         if (brightenIfBold && index < 8)
             index += 8;
-        if (index >= 0 && index < Ansi16.Length)
-            return Ansi16[index];
+        if (index >= 0 && index < _ansi.Length)
+            return _ansi[index];
         // 256색/미지원 인덱스 근사(향후 256색 확장 여지): 기본 전경색으로.
         return DefaultForeground;
     }
