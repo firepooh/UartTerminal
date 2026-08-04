@@ -25,6 +25,9 @@ public sealed class AppState
     /// <summary>진단 캡처(RX/TX 덤프 → diag.log). 문제 추적용, 기본 꺼짐.</summary>
     public bool DiagCapture { get; set; }
 
+    /// <summary>라인별 수신 타임스탬프 표시. 모든 창/탭 공통 전역 설정, 기본 꺼짐.</summary>
+    public bool ShowTimestamps { get; set; }
+
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }

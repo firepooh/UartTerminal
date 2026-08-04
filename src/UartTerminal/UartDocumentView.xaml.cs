@@ -186,7 +186,7 @@ public partial class UartDocumentView : UserControl
         _mcpServer = new McpPipeServer(_bridge, _portName);
         RaiseMcpState();
 
-        _view = new TerminalView(_engine.Buffer) { FontSize = _state.FontSize };
+        _view = new TerminalView(_engine.Buffer) { FontSize = _state.FontSize, ShowTimestamps = _state.ShowTimestamps };
         _view.ScrollMetricsChanged += OnScrollMetrics;
         _view.AutoCopyRequested += TrySetClipboard;
         _view.PasteRequested += DoPaste;
@@ -744,6 +744,9 @@ public partial class UartDocumentView : UserControl
     }
 
     public void FocusTerminal() => _view?.Focus();
+
+    /// <summary>라인별 수신 타임스탬프 표시 토글(전역 설정).</summary>
+    public void SetTimestamps(bool on) { if (_view is not null) _view.ShowTimestamps = on; }
 
     // ── MCP ─────────────────────────────────────────────────────────────────────
 

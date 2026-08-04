@@ -28,6 +28,9 @@ public sealed class LogicalLine
     /// <summary>열린 라인의 커서 셀 인덱스(라인 내 편집/커서 렌더용). 확정된 라인에서는 의미 없음.</summary>
     public int Cursor { get; private set; }
 
+    /// <summary>이 라인의 첫 문자가 도착한 로컬 시각(타임스탬프 표시용). 내용이 없으면 null.</summary>
+    public DateTime? Timestamp { get; private set; }
+
     public LogicalLine(LineType type = LineType.Normal)
     {
         _cells = new List<Cell>();
@@ -68,6 +71,7 @@ public sealed class LogicalLine
     /// <summary>커서 위치에 문자를 쓰고 커서를 전진(덮어쓰기 또는 확장).</summary>
     public void Print(char ch, CellAttributes attr)
     {
+        Timestamp ??= DateTime.Now; // 첫 문자 도착 시각(한 번만) — 타임스탬프 표시용
         var cell = new Cell(ch, attr);
         if (Cursor < _cells.Count)
             _cells[Cursor] = cell;

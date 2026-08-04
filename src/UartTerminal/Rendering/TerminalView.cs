@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
@@ -33,9 +34,10 @@ public sealed class TerminalView : FrameworkElement
         public readonly int StartColumn;  // 논리 라인 내 이 행의 시작 열(전각 폭 반영)
         public readonly LineType Type;
         public readonly Cell[] Cells;     // [StartCell, StartCell+Cells.Length)
-        public VisRow(long absLine, int startCell, int startColumn, LineType type, Cell[] cells)
+        public readonly DateTime? Stamp;  // 논리 라인의 수신 시각(첫 시각 행에서만 그림)
+        public VisRow(long absLine, int startCell, int startColumn, LineType type, Cell[] cells, DateTime? stamp)
         {
-            AbsLine = absLine; StartCell = startCell; StartColumn = startColumn; Type = type; Cells = cells;
+            AbsLine = absLine; StartCell = startCell; StartColumn = startColumn; Type = type; Cells = cells; Stamp = stamp;
         }
     }
 
@@ -92,6 +94,20 @@ public sealed class TerminalView : FrameworkElement
     private DispatcherTimer? _autoScrollTimer;
     private int _autoScrollDir;    // -1=위, +1=아래, 0=정지
     private Point _lastDragPoint;  // 최근 드래그 좌표(자동 스크롤 시 열 위치 유지용)
+
+    // 타임스탬프 gutter(수신 시각 표시). 켜지면 왼쪽에 고정폭 gutter 를 확보하고 콘텐츠를 그만큼 오른쪽으로 민다
+    // (콘텐츠는 TranslateTransform 으로 이동 → 선택/커서/wrap 좌표계는 그대로, HitTest 만 gutter 보정).
+    private bool _showTimestamps;
+    private double _tsGutter;                 // 현재 프레임의 gutter 픽셀 폭(0=꺼짐)
+    private const int TsGutterChars = 13;     // "HH:mm:ss.fff " 폭(문자)
+    private Typeface? _tsTypeface;
+    private static readonly Color TsColor = Color.FromRgb(0x6E, 0x7A, 0x8A);
+
+    public bool ShowTimestamps
+    {
+        get => _showTimestamps;
+        set { if (_showTimestamps == value) return; _showTimestamps = value; _forceRender = true; }
+    }
 
     public event Action<ScrollMetrics>? ScrollMetricsChanged;
 
@@ -197,7 +213,8 @@ public sealed class TerminalView : FrameworkElement
         if (metrics is null || w <= 0 || h <= 0)
             return;
 
-        _columns = Math.Max(1, (int)(w / metrics.CellWidth));
+        _tsGutter = _showTimestamps ? TsGutterChars * metrics.CellWidth : 0;
+        _columns = Math.Max(1, (int)((w - _tsGutter) / metrics.CellWidth));
         _rows = Math.Max(1, (int)(h / metrics.CellHeight));
 
         try
@@ -212,14 +229,22 @@ public sealed class TerminalView : FrameworkElement
                 (selMin, selMax) = NormalizeSelection();
             }
 
-            for (int r = 0; r < _visible.Length; r++)
-            {
-                double y = r * metrics.CellHeight;
-                RenderRow(dc, metrics, _visible[r], y, selMin, selMax);
-            }
+            // 타임스탬프는 변환 밖(gutter)에 그린다 — 콘텐츠 좌표계를 건드리지 않는다.
+            if (_tsGutter > 0) DrawTimestamps(dc, metrics);
 
-            if (_followTail)
-                DrawCursor(dc, metrics, snap.CursorAbs, snap.CursorCol);
+            bool pushed = false;
+            if (_tsGutter > 0) { dc.PushTransform(new TranslateTransform(_tsGutter, 0)); pushed = true; }
+            try
+            {
+                for (int r = 0; r < _visible.Length; r++)
+                {
+                    double y = r * metrics.CellHeight;
+                    RenderRow(dc, metrics, _visible[r], y, selMin, selMax);
+                }
+                if (_followTail)
+                    DrawCursor(dc, metrics, snap.CursorAbs, snap.CursorCol);
+            }
+            finally { if (pushed) dc.Pop(); } // push/pop 균형 보장(DrawingContext.Close 검증 통과)
 
             // 개정 번호는 스냅샷과 동일 락 구간에서 캡처됨 → 락 밖 재읽기로 인한 stale(누락) 방지
             _lastRevision = snap.Revision;
@@ -346,6 +371,24 @@ public sealed class TerminalView : FrameworkElement
         }
     }
 
+    /// <summary>각 논리 라인의 첫 시각 행 앞 gutter 에 수신 시각(HH:mm:ss.fff)을 흐린 색으로 그린다.</summary>
+    private void DrawTimestamps(DrawingContext dc, FontMetrics m)
+    {
+        _tsTypeface ??= new Typeface(new FontFamily("Cascadia Mono, Consolas, monospace"),
+            FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        var brush = GetBrush(TsColor);
+        for (int r = 0; r < _visible.Length; r++)
+        {
+            var row = _visible[r];
+            if (row.StartCell != 0 || row.Stamp is not { } ts) continue; // 래핑 연속 행/빈 라인은 건너뜀
+            var ft = new FormattedText(
+                ts.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture),
+                CultureInfo.InvariantCulture, FlowDirection.LeftToRight, _tsTypeface,
+                m.FontSize, brush, m.PixelsPerDip);
+            dc.DrawText(ft, new Point(2, r * m.CellHeight + (m.CellHeight - ft.Height) / 2));
+        }
+    }
+
     // ── 래핑 캐시 ──────────────────────────────────────────────────────────────
 
     private int[] GetWrapStarts(LogicalLine line, int cols) =>
@@ -453,7 +496,7 @@ public sealed class TerminalView : FrameworkElement
         for (int i = 0; i < start; i++)
             startColumn += CharWidth.Width(line[i].Ch);
 
-        return new VisRow(abs, start, startColumn, line.Type, cells);
+        return new VisRow(abs, start, startColumn, line.Type, cells, line.Timestamp);
     }
 
     // ── 스크롤 앵커 이동(락 보유 전제) ──────────────────────────────────────────
@@ -655,7 +698,7 @@ public sealed class TerminalView : FrameworkElement
         int r = (int)(p.Y / m.CellHeight);
         r = Math.Clamp(r, 0, _visible.Length - 1);
         var vr = _visible[r];
-        int targetCol = vr.StartColumn + Math.Max(0, (int)(p.X / m.CellWidth));
+        int targetCol = vr.StartColumn + Math.Max(0, (int)((p.X - _tsGutter) / m.CellWidth)); // gutter 보정
 
         // 행 내 셀 인덱스로 변환(폭은 원시값 — 렌더/wrap과 동일 기준)
         int col = vr.StartColumn;

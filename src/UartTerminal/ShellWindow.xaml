@@ -116,6 +116,8 @@
                 <MenuItem Header="폰트 크게" InputGestureText="Ctrl++" Click="FontLarger_Click"/>
                 <MenuItem Header="폰트 작게" InputGestureText="Ctrl+-" Click="FontSmaller_Click"/>
                 <Separator/>
+                <MenuItem x:Name="MenuTimestamps" Header="타임스탬프 표시" IsCheckable="True" Click="Timestamps_Click"/>
+                <Separator/>
                 <MenuItem x:Name="MenuSplitSingle" Header="단일 화면" IsCheckable="True" Click="SplitSingle_Click"/>
                 <MenuItem x:Name="MenuSplitV" Header="좌우 분할" IsCheckable="True" Click="SplitV_Click"/>
                 <MenuItem x:Name="MenuSplitH" Header="상하 분할" IsCheckable="True" Click="SplitH_Click"/>

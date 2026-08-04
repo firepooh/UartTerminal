@@ -94,6 +94,7 @@ public partial class ShellWindow : Window
         MenuAutoReconnect.IsChecked = _state.AutoReconnect;
         MenuCommandBar.IsChecked = _state.ShowCommandBar;
         MenuDiagCapture.IsChecked = _state.DiagCapture;
+        MenuTimestamps.IsChecked = _state.ShowTimestamps;
         if (_isPrimary)
         {
             RestoreWindowBounds();
@@ -608,6 +609,19 @@ public partial class ShellWindow : Window
     }
     private void FontLarger_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(+1);
     private void FontSmaller_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(-1);
+
+    private void Timestamps_Click(object sender, RoutedEventArgs e)
+    {
+        bool on = MenuTimestamps.IsChecked;
+        _state.ShowTimestamps = on;
+        _state.Save();
+        // 전역 설정 — 모든 창/탭과 메뉴 체크 동기화(명령 바/자동 재연결과 같은 방침).
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+        {
+            w.MenuTimestamps.IsChecked = on;
+            foreach (var d in w.AllDocs()) d.SetTimestamps(on);
+        }
+    }
 
     /// <summary>툴바 아이콘/메뉴의 IsChecked 를 현재 레이아웃과 동기화(라디오 동작).</summary>
     private void SyncSplitChrome()
