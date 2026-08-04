@@ -1,6 +1,10 @@
+using System.IO;
 using UartTerminal.Core.Serial;
 
 namespace UartTerminal.Tests;
+
+/// <summary>가짜 세션의 Open() 결과 시뮬레이션.</summary>
+internal enum FakeOpenMode { Success, InUse, Failed }
 
 /// <summary>
 /// 테스트용 가짜 시리얼 세션. 실제 포트 없이 <see cref="ISerialSession"/> 계약을 흉내내
@@ -17,6 +21,9 @@ internal sealed class FakeSerialSession : ISerialSession
     /// <summary>Enqueue 로 들어온 송신 바이트(검증용).</summary>
     public List<byte[]> Sent { get; } = new();
 
+    /// <summary>Open() 이 성공/사용중(InUse)/실패(Failed) 중 무엇을 흉내낼지.</summary>
+    public FakeOpenMode OpenMode { get; set; } = FakeOpenMode.Success;
+
     public event Action<ReadOnlyMemory<byte>>? DataReceived;
     public event Action<SerialCloseReason>? Closed;
 
@@ -26,7 +33,15 @@ internal sealed class FakeSerialSession : ISerialSession
         Params = new SerialConnectionParams { BaudRate = baud };
     }
 
-    public void Open() => IsOpen = true;
+    public void Open()
+    {
+        switch (OpenMode)
+        {
+            case FakeOpenMode.InUse: throw new UnauthorizedAccessException("port in use");
+            case FakeOpenMode.Failed: throw new IOException("open failed");
+            default: IsOpen = true; break;
+        }
+    }
 
     public void Enqueue(ReadOnlyMemory<byte> data) => Sent.Add(data.ToArray());
 

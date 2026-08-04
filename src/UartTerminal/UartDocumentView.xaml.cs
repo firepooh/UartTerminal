@@ -32,18 +32,13 @@ public partial class UartDocumentView : UserControl
 
     private TerminalEngine? _engine;
     private TerminalView? _view;
-    private ISerialSession? _session;
+    private ConnectionController? _conn; // 연결 수명주기 상태머신(UI 비의존) — 세션/재연결/양보 관리
     private UartBridge? _bridge;
     private McpPipeServer? _mcpServer;
     private string _portName = "";
-    private bool _connected;
 
-    // 자동 재연결(USB 재접속 감시)
+    // 자동 재연결 폴링 타이머: 대기 '상태'는 컨트롤러가 소유하고, 실제 DispatcherTimer 는 호스트가 돌린다.
     private DispatcherTimer? _reconnectTimer;
-    private bool _reconnectPending;
-    private string? _lastOpenError;
-    private bool _closed; // 문서가 닫힘/폐기됨 — 지연된 Closed 콜백의 재무장을 차단
-    private bool _mcpReleased; // AI(MCP)가 외부 작업(플래싱 등)을 위해 포트를 양보한 상태
 
     private readonly List<string> _history = new();
     private int _historyIndex;
@@ -55,22 +50,27 @@ public partial class UartDocumentView : UserControl
     public event Action? McpStateChanged;
 
     public string PortName => _portName;
-    public bool IsConnected => _connected;
-    public bool IsReconnecting => _reconnectPending;
-    public bool IsPortReleased => _mcpReleased;
+    public bool IsConnected => _conn?.IsConnected ?? false;
+    public bool IsReconnecting => _conn?.IsReconnecting ?? false;
+    public bool IsPortReleased => _conn?.IsPortReleased ?? false;
     public bool McpEnabled => _bridge?.Enabled ?? false;
     public bool McpReadOnly => _bridge?.ReadOnly ?? false;
     public string StatusMessage { get; private set; } = "";
     public string MetricsMessage { get; private set; } = "";
 
     /// <summary>탭 헤더용 제목(포트 + 연결 상태).</summary>
-    public string Title =>
-        string.IsNullOrEmpty(_portName)
-            ? "(새 연결)"
-            : _connected ? _portName
-            : _mcpReleased ? $"{_portName} [AI 양보]"
-            : _reconnectPending ? $"{_portName} [재연결 중…]"
-            : $"{_portName} [끊김]";
+    public string Title
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_portName)) return "(새 연결)";
+            if (_conn is null) return $"{_portName} [끊김]";
+            if (_conn.IsConnected) return _portName;
+            if (_conn.IsPortReleased) return $"{_portName} [AI 양보]";
+            if (_conn.IsReconnecting) return $"{_portName} [재연결 중…]";
+            return $"{_portName} [끊김]";
+        }
+    }
 
     public UartDocumentView(AppState state, CommandStore commands, SessionStore sessions)
     {
@@ -121,14 +121,13 @@ public partial class UartDocumentView : UserControl
         {
             // 취소는 아무것도 바꾸지 않아야 한다. 특히 진행 중인 자동 재연결 대기를 죽이면
             // USB 를 다시 꽂아도 되살아나지 않는다(사용자가 직접 재연결해야 함).
-            SetStatus(_reconnectPending
+            SetStatus((_conn?.IsReconnecting ?? false)
                 ? $"재연결 취소됨 — 자동 재연결 대기 계속 ({_portName})"
                 : "재연결 취소됨");
             return;
         }
 
-        StopAutoReconnect(); // 사용자가 직접 재연결을 확정 — 이제 자동 대기는 종료
-        CloseCurrentSession();
+        CloseCurrentSession(); // OpenSession→OpenUserInitiated 이 자동 재연결 대기를 종료한다
 
         if (_engine is null)
         {
@@ -151,38 +150,36 @@ public partial class UartDocumentView : UserControl
         _state.Save();
     }
 
-    public void Disconnect()
-    {
-        StopAutoReconnect();
-        // 상태를 '즉시' 정리해 _session 을 비운다. 이렇게 하면 이미 큐잉된(지연된) DeviceRemoved 콜백이
-        // 낡은 세션의 것이 되어 OnSessionClosed 가드에서 무시된다(사용자 해제 후 원치 않는 자동 재연결 방지).
-        var s = _session;
-        _session = null;
-        _connected = false;
-        _mcpReleased = false; // 사용자가 직접 해제 — 'AI 양보'가 아니라 '끊김' 상태로
-        _bridge?.DetachSession();
-        RaiseTitle();
-        RefreshMetrics();
-        SetStatus("연결 해제됨");
-        if (s is not null) { try { s.Close(); } catch { } }
-    }
+    public void Disconnect() => _conn?.Disconnect();
 
     private void EnsureEngine()
     {
         if (_engine is not null) return;
 
         _engine = new TerminalEngine(new UTF8Encoding(false), maxLines: 10_000);
+        _bridge = new UartBridge(_engine);
+
+        // 연결 수명주기(세션/재연결/양보/지연콜백 무력화)는 UI 비의존 컨트롤러가 소유.
+        // 호스트는 세션 생성 팩토리·UI 마샬링(post)·상태 알림(notify)·상태바만 배선한다.
+        _conn = new ConnectionController(
+            _engine, _bridge,
+            factory: () => new SerialPortSession(_portName, _params),
+            portName: () => _portName,
+            post: a => Dispatcher.BeginInvoke(a),
+            autoReconnect: () => _state.AutoReconnect,
+            notify: OnConnStateChanged,
+            status: SetStatus);
+
         _engine.Respond = mem => // DSR 등 응답 → TX
         {
             if (DiagLog.Capture) DiagLog.Trace($"TX(resp)[{mem.Length}] {DiagLog.Escape(mem.Span)}");
-            _session?.Enqueue(mem);
+            _conn.Enqueue(mem);
         };
 
-        _bridge = new UartBridge(_engine);
         // uart_close/uart_open 은 MCP 서버 스레드에서 호출되므로 UI 스레드로 마샬링해 포트를 닫고/연다.
         _bridge.SetPortController(
-            () => Dispatcher.InvokeAsync(McpReleasePort).Task,
-            () => Dispatcher.InvokeAsync(McpReopenPort).Task);
+            () => Dispatcher.InvokeAsync(_conn.McpRelease).Task,
+            () => Dispatcher.InvokeAsync(_conn.McpReopen).Task);
         _mcpServer = new McpPipeServer(_bridge, _portName);
         RaiseMcpState();
 
@@ -193,63 +190,10 @@ public partial class UartDocumentView : UserControl
         ViewHost.Child = _view;
     }
 
-    private enum OpenOutcome { Success, InUse, Failed }
-
-    /// <summary>세션 오픈 핵심(조용함: 상태 메시지/팝업/포커스 없음). 성공 시 _session/_connected 설정.</summary>
-    private OpenOutcome TryOpenSessionCore()
-    {
-        var session = new SerialPortSession(_portName, _params);
-        void OnClosedLocal(SerialCloseReason reason) => OnSessionClosed(session, reason);
-        session.DataReceived += OnDataReceived;
-        session.Closed += OnClosedLocal;
-        _bridge?.AttachSession(session);
-        try
-        {
-            session.Open();
-        }
-        catch (UnauthorizedAccessException)
-        {
-            DiscardFailedSession(session, OnClosedLocal);
-            DiagLog.Warn($"포트 사용 중: {_portName}");
-            RaiseTitle();
-            return OpenOutcome.InUse;
-        }
-        catch (Exception ex)
-        {
-            DiscardFailedSession(session, OnClosedLocal);
-            DiagLog.Exception("OpenSession", ex);
-            _lastOpenError = ex.Message;
-            RaiseTitle();
-            return OpenOutcome.Failed;
-        }
-
-        _session = session;
-        _connected = true;
-        _mcpReleased = false; // 어떤 경로로든 열림에 성공하면 'AI 양보' 상태 해제
-        _engine!.ResetParsing();
-        DiagLog.Info($"연결됨: {_portName} ({_params.Summary()})");
-        RaiseTitle();
-        RefreshMetrics();
-        return OpenOutcome.Success;
-    }
-
-    /// <summary>오픈 실패 세션 정리. Closed 구독을 먼저 끊어 Dispose 시 OnSessionClosed 오발화를 막는다.</summary>
-    private void DiscardFailedSession(SerialPortSession session, Action<SerialCloseReason> onClosed)
-    {
-        session.Closed -= onClosed;
-        session.DataReceived -= OnDataReceived;
-        _connected = false;
-        _bridge?.DetachSession();
-        try { session.Dispose(); } catch { }
-        RefreshMetrics(); // 실패(InUse/Failed) 전이 시 하단 메트릭도 '(연결 안 됨)'으로 갱신
-    }
-
-    /// <summary>사용자 개시 연결(성공 시 포커스, 실패 시 팝업). 진행 중 자동 재연결은 종료.</summary>
+    /// <summary>사용자 개시 연결(성공 시 포커스, 실패 시 팝업). 실제 상태 전이는 컨트롤러가 담당.</summary>
     private void OpenSession()
     {
-        StopAutoReconnect();
-        _mcpReleased = false; // 사용자 개시 연결 — 실패(InUse/Failed)해도 'AI 양보' 상태가 남지 않게
-        switch (TryOpenSessionCore())
+        switch (_conn!.OpenUserInitiated())
         {
             case OpenOutcome.Success:
                 SetStatus($"연결됨: {_portName}");
@@ -262,135 +206,41 @@ public partial class UartDocumentView : UserControl
                     "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
                 break;
             default:
-                SetStatus($"연결 실패: {_lastOpenError}");
-                MessageBox.Show(OwnerWindow, $"{_portName} 연결 실패:\n{_lastOpenError}",
+                SetStatus($"연결 실패: {_conn.LastOpenError}");
+                MessageBox.Show(OwnerWindow, $"{_portName} 연결 실패:\n{_conn.LastOpenError}",
                     "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
                 break;
         }
     }
 
-    // ── 자동 재연결(USB 재접속 감시) ─────────────────────────────────────────────
-    // 장치 분리(DeviceRemoved) 후 같은 포트명이 다시 나타나는지 1.5초 주기로 폴링하다가
-    // 나타나면 조용히 재오픈한다. 사용자 종료(UserClosed)에는 동작하지 않는다.
-    // 참고: 재접속 시 OS 가 다른 COM 번호를 배정하면(드묾) 원래 이름으로는 감지되지 않는다.
+    // ── 자동 재연결 폴링 타이머(대기 '상태'는 컨트롤러, 실제 타이머는 호스트) ──────
+    // 컨트롤러가 IsReconnecting 을 켜면(장치 분리) 1.5초 주기로 tick 하며 포트 존재를 확인해 재오픈 시도.
 
-    private void StartAutoReconnect()
+    /// <summary>컨트롤러 상태 변경 알림 → 재연결 타이머 동기화 + 제목/메트릭 갱신.</summary>
+    private void OnConnStateChanged()
     {
-        if (_closed) return;
-        _reconnectPending = true;
-        if (_reconnectTimer is null)
+        if (_conn is { IsReconnecting: true })
         {
-            _reconnectTimer = new DispatcherTimer(DispatcherPriority.Background)
+            if (_reconnectTimer is null)
             {
-                Interval = TimeSpan.FromMilliseconds(1500)
-            };
-            _reconnectTimer.Tick += ReconnectTick;
-        }
-        _reconnectTimer.Start();
-        RaiseTitle();
-        SetStatus($"장치 분리됨 — 자동 재연결 대기 중… ({_portName})");
-        DiagLog.Info($"자동 재연결 대기 시작: {_portName}");
-    }
-
-    private void StopAutoReconnect()
-    {
-        if (!_reconnectPending && _reconnectTimer is null) return;
-        bool was = _reconnectPending;
-        _reconnectPending = false;
-        _reconnectTimer?.Stop();
-        if (was) RaiseTitle();
-    }
-
-    /// <summary>설정에서 자동 재연결을 끌 때 진행 중인 대기를 취소.</summary>
-    public void CancelAutoReconnect()
-    {
-        if (!_reconnectPending) return;
-        StopAutoReconnect();
-        SetStatus("자동 재연결 꺼짐 — Alt+N 또는 [터미널>재연결]");
-    }
-
-    private void ReconnectTick(object? sender, EventArgs e)
-    {
-        // 전역 설정(_state.AutoReconnect)을 매 틱 재확인 — 다른 창에서 토글을 꺼도 다음 틱에 스스로 종료.
-        if (_closed || !_reconnectPending || !_state.AutoReconnect || _connected
-            || string.IsNullOrEmpty(_portName) || _engine is null)
-        {
-            StopAutoReconnect();
-            return;
-        }
-
-        if (!PortEnumerator.PortExists(_portName))
-            return; // 아직 안 나타남 — 계속 대기
-
-        switch (TryOpenSessionCore())
-        {
-            case OpenOutcome.Success:
-                StopAutoReconnect();
-                SetStatus($"자동 재연결됨: {_portName}");
-                DiagLog.Info($"자동 재연결됨: {_portName}");
-                break;
-            case OpenOutcome.InUse:
-                SetStatus($"재연결 대기 중… ({_portName} 사용 중)");
-                break;
-            default:
-                SetStatus($"재연결 대기 중… ({_portName} 준비 중)");
-                break;
-        }
-    }
-
-    private void OnDataReceived(ReadOnlyMemory<byte> data)
-    {
-        if (DiagLog.Capture) DiagLog.Trace($"RX[{data.Length}] {DiagLog.Escape(data.Span)}");
-        try { _engine!.Receive(data.Span); }
-        catch (Exception ex) { DiagLog.Exception("Receive", ex); }
-    }
-
-    private void OnSessionClosed(ISerialSession closed, SerialCloseReason reason)
-    {
-        Dispatcher.BeginInvoke(() =>
-        {
-            // 이 콜백이 '현재' 활성 세션의 것이 아니면(교체/사용자 해제/문서 폐기) 낡은 콜백이므로 무시.
-            // 특히 USB 분리 시 Closed 는 DisposePortSafely(최대 1.5s) 이후 발생해 지연되므로,
-            // 그 사이 사용자가 닫기/해제한 경우 여기서 재무장(StartAutoReconnect)을 반드시 차단해야 한다.
-            if (_closed || !ReferenceEquals(closed, _session))
-                return;
-
-            _connected = false;
-            _session = null;
-            _bridge?.DetachSession();
-            RaiseTitle();
-            RefreshMetrics();
-            switch (reason)
-            {
-                case SerialCloseReason.DeviceRemoved:
-                    DiagLog.Warn($"장치 분리됨: {_portName}");
-                    if (_state.AutoReconnect && !string.IsNullOrEmpty(_portName) && _engine is not null)
-                        StartAutoReconnect();
-                    else
-                        SetStatus("장치 분리됨 — Alt+N 또는 [터미널>재연결]");
-                    break;
-                case SerialCloseReason.UserClosed:
-                    StopAutoReconnect();
-                    SetStatus("연결 해제됨");
-                    break;
-                default:
-                    SetStatus("연결 종료(오류)");
-                    break;
+                _reconnectTimer = new DispatcherTimer(DispatcherPriority.Background)
+                { Interval = TimeSpan.FromMilliseconds(1500) };
+                _reconnectTimer.Tick += (_, _) => _conn?.ReconnectTick(PortEnumerator.PortExists(_portName));
             }
-        });
-    }
-
-    private void CloseCurrentSession()
-    {
-        var s = _session;
-        if (s is null) return;
-        _session = null;
-        _connected = false;
-        _bridge?.DetachSession();
-        try { s.Close(); } catch { }
+            if (!_reconnectTimer.IsEnabled) _reconnectTimer.Start();
+        }
+        else
+        {
+            _reconnectTimer?.Stop();
+        }
         RaiseTitle();
         RefreshMetrics();
     }
+
+    /// <summary>설정에서 자동 재연결을 끌 때 진행 중인 대기를 취소.</summary>
+    public void CancelAutoReconnect() => _conn?.CancelAutoReconnect();
+
+    private void CloseCurrentSession() => _conn?.CloseCurrentSession();
 
     private void RebuildMcpForPort()
     {
@@ -411,7 +261,7 @@ public partial class UartDocumentView : UserControl
 
     private void OnPreviewTextInput(object? sender, TextCompositionEventArgs e)
     {
-        if (!_connected || string.IsNullOrEmpty(e.Text)) return;
+        if (!IsConnected || string.IsNullOrEmpty(e.Text)) return;
         if (_view is null || !_view.IsKeyboardFocusWithin) return; // 메인 뷰 포커스일 때만 type-through
         Send(_txEncoding.GetBytes(e.Text));
         e.Handled = true;
@@ -439,7 +289,7 @@ public partial class UartDocumentView : UserControl
         if (mods == ModifierKeys.Control && (e.Key == Key.OemMinus || e.Key == Key.Subtract))
         { AdjustFont(-1); e.Handled = true; return; }
 
-        if (!_connected) return;
+        if (!IsConnected) return;
 
         var bytes = KeyMap.Map(e.Key, mods);
         if (bytes is not null)
@@ -452,7 +302,7 @@ public partial class UartDocumentView : UserControl
     private void Send(byte[] data)
     {
         if (DiagLog.Capture) DiagLog.Trace($"TX[{data.Length}] {DiagLog.Escape(data)}");
-        _session?.Enqueue(data);
+        _conn?.Enqueue(data);
         _view?.ScrollToEnd();
     }
 
@@ -480,7 +330,7 @@ public partial class UartDocumentView : UserControl
 
     private void SendInputLine()
     {
-        if (!_connected) { SetStatus("연결되지 않음 — 입력 전송 불가"); return; }
+        if (!IsConnected) { SetStatus("연결되지 않음 — 입력 전송 불가"); return; }
         SendLine(InputBox.Text);
         InputBox.Clear();
     }
@@ -567,7 +417,7 @@ public partial class UartDocumentView : UserControl
             return;
         }
 
-        if (!_connected) { SetStatus("연결되지 않음 — 명령 전송 불가"); return; }
+        if (!IsConnected) { SetStatus("연결되지 않음 — 명령 전송 불가"); return; }
 
         if (cmd.Confirm)
         {
@@ -647,7 +497,7 @@ public partial class UartDocumentView : UserControl
 
     private void DoPaste()
     {
-        if (!_connected) return;
+        if (!IsConnected) return;
         string text;
         try { text = Clipboard.GetText(); }
         catch { return; }
@@ -863,80 +713,15 @@ public partial class UartDocumentView : UserControl
         SetStatus("MCP 등록 명령을 클립보드에 복사했습니다");
     }
 
-    // ── MCP 포트 제어(uart_close / uart_open) ────────────────────────────────────
-    // AI 가 외부 도구(esptool 등)에 포트를 양보/재점유하는 경로. UartBridge 델리게이트가
-    // Dispatcher 로 마샬링해 아래 두 메서드를 항상 UI 스레드에서 실행한다.
-
-    /// <summary>AI(MCP)가 외부 작업(플래싱 등)을 위해 포트를 양보. 자동 재연결을 억제하고 세션을 닫는다.</summary>
-    private PortActionResult McpReleasePort()
-    {
-        if (_closed || _engine is null || string.IsNullOrEmpty(_portName))
-            return new PortActionResult { Ok = false, Port = _portName, State = "error", Error = "no_port" };
-
-        StopAutoReconnect(); // AI 가 명시적으로 닫음 — USB 감시 폴링이 포트를 도로 잡지 않게 중단
-        var s = _session;
-        // _session 을 먼저 비워 지연된 Closed 콜백이 낡은 것이 되어 OnSessionClosed 가드에서 무시되게 한다
-        // (Disconnect 와 동일 방침 — 사용자 해제·장치 분리 콜백이 자동 재연결을 재무장하는 것 방지).
-        _session = null;
-        _connected = false;
-        bool wasOpen = s is not null;
-        _mcpReleased = true;
-        _bridge?.DetachSession();
-        RaiseTitle();
-        RefreshMetrics();
-        SetStatus($"AI가 포트 양보 — 외부 작업 대기 중… ({_portName})");
-        DiagLog.Info($"MCP 포트 양보(uart_close): {_portName}");
-        if (s is not null) { try { s.Close(); } catch { } } // 실제 포트 핸들 해제(외부 도구가 열 수 있도록)
-
-        return new PortActionResult
-        {
-            Ok = true,
-            Connected = false,
-            Port = _portName,
-            State = wasOpen ? "closed" : "already_closed",
-        };
-    }
-
-    /// <summary>AI(MCP)가 양보했던(또는 끊긴) 포트를 다시 연다(외부 작업 종료 후).</summary>
-    private PortActionResult McpReopenPort()
-    {
-        if (_closed || _engine is null || string.IsNullOrEmpty(_portName))
-            return new PortActionResult { Ok = false, Port = _portName, State = "error", Error = "no_port" };
-
-        if (_connected)
-        {
-            _mcpReleased = false;
-            return new PortActionResult { Ok = true, Connected = true, Port = _portName, State = "already_open" };
-        }
-
-        switch (TryOpenSessionCore()) // 성공 시 내부에서 _mcpReleased=false 처리
-        {
-            case OpenOutcome.Success:
-                StopAutoReconnect(); // 장치 분리 후 대기 중이었다면 함께 종료
-                SetStatus($"AI가 포트 재연결(uart_open): {_portName}");
-                DiagLog.Info($"MCP 포트 재연결(uart_open): {_portName}");
-                return new PortActionResult { Ok = true, Connected = true, Port = _portName, State = "open" };
-            case OpenOutcome.InUse:
-                SetStatus($"재연결 대기 — {_portName} 아직 사용 중(외부 작업 진행 중?)");
-                return new PortActionResult { Ok = false, Connected = false, Port = _portName, State = "in_use", Error = "in_use" };
-            default:
-                SetStatus($"재연결 실패: {_lastOpenError}");
-                return new PortActionResult { Ok = false, Connected = false, Port = _portName, State = "error", Error = _lastOpenError ?? "open_failed" };
-        }
-    }
-
     // ── 정리 ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>탭/창이 닫힐 때 세션·MCP 정리.</summary>
+    /// <summary>탭/창이 닫힐 때 세션·MCP 정리. 세션 폐기·지연콜백 차단은 컨트롤러가 담당.</summary>
     public void CloseDocument()
     {
-        _closed = true; // 이후 도착하는 지연 Closed 콜백의 재무장을 차단
         _commands.Changed -= OnCommandsChanged; // 전역 스토어 구독 해지(닫힌 문서가 갱신을 붙잡지 않게)
-        StopAutoReconnect();
-        var s = _session;
-        _session = null;
+        _reconnectTimer?.Stop();
+        _conn?.CloseDocument();
         try { _mcpServer?.Stop(); } catch { }
-        if (s is not null) { try { s.Close(); } catch { } }
     }
 
     // ── 스크롤바/상태/이벤트 ─────────────────────────────────────────────────────
@@ -954,7 +739,7 @@ public partial class UartDocumentView : UserControl
     private void RefreshMetrics()
     {
         string font = _view is null ? "" : $"  ·  {_view.FontSize:0.#}pt";
-        MetricsMessage = _connected
+        MetricsMessage = IsConnected
             ? $"{_portName}  {_params.Summary()}  ·  {_view?.Columns}×{_view?.Rows}{font}  ·  UTF-8"
             : $"(연결 안 됨)  ·  {_view?.Columns}×{_view?.Rows}{font}";
         MetricsChanged?.Invoke(MetricsMessage);
