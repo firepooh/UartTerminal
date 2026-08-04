@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write   # 태그 푸시 시 Release 생성용
 
+env:
+  # 배포본에 넣는 esptool standalone 버전(고정 — 재현 가능한 빌드).
+  # 앱은 v4/v5 CLI 문법 차이를 스스로 판별하므로 올려도 동작한다.
+  ESPTOOL_VERSION: v5.3.1
+
 jobs:
   build:
     runs-on: windows-latest
@@ -35,6 +40,14 @@ jobs:
 
       - name: Test
         run: dotnet test tests/UartTerminal.Tests/UartTerminal.Tests.csproj -c Release
+
+      # ── 플래시 기능용 esptool(standalone) ──
+      # ESP-IDF 가 없는 PC 에서도 [보드 > 펌웨어 플래시] 가 동작하도록 배포본에 넣는다.
+      # 저장소에는 커밋하지 않고(수십 MB) 빌드 때 공식 릴리스에서 받아 esptool.exe 만 추출한다.
+      # GPL-2.0 고지는 THIRD-PARTY-NOTICES.md 로 함께 배포한다.
+      - name: Fetch esptool
+        shell: pwsh
+        run: ./tools/fetch-esptool.ps1 -Version ${{ env.ESPTOOL_VERSION }}
 
       # ── 프레임워크 의존(작음, 실행 PC 에 .NET 10 Desktop Runtime 필요) ──
       - name: Publish app (framework-dependent)
@@ -66,16 +79,34 @@ jobs:
           -p:Version=${{ steps.ver.outputs.version }}
           -o sc/relay
 
-      # 앱 + MCP 릴레이 exe 를 한 zip 으로 묶는다(MCP 사용 시 릴레이가 앱 옆에 있어야 함)
+      # 앱 + MCP 릴레이 + esptool 을 한 zip 으로 묶는다.
+      #  - 릴레이는 MCP 사용 시 앱 옆에 있어야 한다.
+      #  - esptool 은 tools\esptool\ 구조를 유지해야 앱이 찾는다 → 파일 나열이 아니라 스테이징 폴더를 압축한다.
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory dist | Out-Null
-          Compress-Archive -Path fdd/app/UartTerminal.exe, fdd/relay/UartTerminal.McpRelay.exe `
-            -DestinationPath dist/UartTerminal-win-x64.zip
-          Compress-Archive -Path sc/app/UartTerminal.exe, sc/relay/UartTerminal.McpRelay.exe `
-            -DestinationPath dist/UartTerminal-win-x64-standalone.zip
+
+          function New-Stage([string]$name, [string]$appDir, [string]$relayDir) {
+            $stage = "stage/$name"
+            New-Item -ItemType Directory "$stage/tools/esptool" -Force | Out-Null
+            Copy-Item "$appDir/UartTerminal.exe" $stage
+            Copy-Item "$relayDir/UartTerminal.McpRelay.exe" $stage
+            Copy-Item 'tools/esptool/esptool.exe' "$stage/tools/esptool/"
+            Copy-Item 'THIRD-PARTY-NOTICES.md' $stage
+            Compress-Archive -Path "$stage/*" -DestinationPath "dist/$name.zip"
+          }
+
+          New-Stage 'UartTerminal-win-x64' 'fdd/app' 'fdd/relay'
+          New-Stage 'UartTerminal-win-x64-standalone' 'sc/app' 'sc/relay'
+
+          Write-Host '--- 배포 zip ---'
           Get-ChildItem dist | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+          Write-Host '--- zip 내용(framework-dependent) ---'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $z = [System.IO.Compression.ZipFile]::OpenRead("$pwd/dist/UartTerminal-win-x64.zip")
+          try { $z.Entries | ForEach-Object { '{0,-46} {1,8:N1} KB' -f $_.FullName, ($_.Length/1KB) } }
+          finally { $z.Dispose() }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -90,7 +121,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >
           gh release create '${{ github.ref_name }}'
-          'dist/UartTerminal-win-x64.zip#UartTerminal (win-x64, .NET 10 Desktop Runtime 필요)'
-          'dist/UartTerminal-win-x64-standalone.zip#UartTerminal standalone (런타임 포함)'
+          'dist/UartTerminal-win-x64.zip#UartTerminal (win-x64, .NET 10 Desktop Runtime 필요 · esptool 포함)'
+          'dist/UartTerminal-win-x64-standalone.zip#UartTerminal standalone (런타임 + esptool 포함)'
           --title 'UartTerminal ${{ github.ref_name }}'
           --generate-notes

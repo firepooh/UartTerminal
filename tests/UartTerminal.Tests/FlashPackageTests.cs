@@ -192,15 +192,28 @@ public sealed class FlashPackageTests : IDisposable
     // ── 기본 선택 정책 ──────────────────────────────────────────────────────
 
     [Fact]
-    public void Storage_IsUncheckedByDefault_ToProtectDeviceData()
+    public void OnlyAppAndOtadata_AreCheckedByDefault()
     {
+        // 일상 작업은 앱 갱신이다. bootloader/partition-table 은 구성이 바뀔 때만,
+        // storage 는 장치 데이터를 덮으므로 사용자가 직접 켜야 한다.
         var pkg = Analyze(MakeRealisticZip());
 
-        Assert.True(pkg.Items.Single(i => i.Role == "bootloader").Selected);
-        Assert.True(pkg.Items.Single(i => i.Role == "partition-table").Selected);
-        Assert.True(pkg.Items.Single(i => i.Role == "otadata").Selected);
         Assert.True(pkg.Items.Single(i => i.Role == "app").Selected);
-        Assert.False(pkg.Items.Single(i => i.Role == "storage").Selected); // 장치 데이터 보호
+        Assert.True(pkg.Items.Single(i => i.Role == "otadata").Selected);
+        Assert.False(pkg.Items.Single(i => i.Role == "bootloader").Selected);
+        Assert.False(pkg.Items.Single(i => i.Role == "partition-table").Selected);
+        Assert.False(pkg.Items.Single(i => i.Role == "storage").Selected);
+    }
+
+    [Fact]
+    public void UncheckedRows_ExplainWhy()
+    {
+        // 왜 안 켜져 있는지 알아야 켤 수 있다.
+        var pkg = Analyze(MakeRealisticZip());
+
+        Assert.Contains("구성이 바뀌면", pkg.Items.Single(i => i.Role == "bootloader").Note);
+        Assert.Contains("데이터 보호", pkg.Items.Single(i => i.Role == "storage").Note);
+        Assert.Null(pkg.Items.Single(i => i.Role == "otadata").Note);   // 켜진 줄은 조용히
     }
 
     // ── 검증(오류/경고) ─────────────────────────────────────────────────────

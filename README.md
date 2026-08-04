@@ -105,8 +105,18 @@ ESP32 개발보드는 USB-시리얼의 **DTR→IO0, RTS→EN** 이 트랜지스�
 ```
 
 v4 와 v5 의 문법 차이(`write_flash`↔`write-flash`, `--flash_mode`↔`--flash-mode`)는 `esptool version`
-으로 판별해 분기한다. ESP-IDF 가 없는 PC 는 [esptool 릴리스](https://github.com/espressif/esptool/releases)의
-standalone 바이너리(GPL-2.0)를 2번 위치에 두거나 1번에 경로를 적으면 된다.
+으로 판별해 분기한다(v5 실물로 옵션명 확인).
+
+**배포본에는 esptool 을 포함한다** — ESP-IDF 없는 PC 에서도 바로 동작해야 하므로, 릴리스 zip 안에
+`tools\esptool\esptool.exe` 로 넣는다(공식 릴리스 zip 61MB 중 `esptool.exe` 만 추출 = 약 13.7MB).
+바이너리는 **저장소에 커밋하지 않고** 빌드 때 받는다:
+
+```bash
+./tools/fetch-esptool.ps1          # 개발 PC 에서 필요할 때(-Version 으로 버전 지정)
+```
+
+esptool 은 GPL-2.0+ 이므로 배포 시 출처·소스 위치를 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
+로 함께 배포한다. 번들을 원하지 않으면 `tools\esptool\` 을 지우면 되고, 그 경우 위 3·4번(설치본/PATH)으로 넘어간다.
 
 **zip 해석에서 실제로 부딪히는 것들** (모두 자동 처리 + 회귀 테스트로 고정)
 
@@ -117,7 +127,10 @@ standalone 바이너리(GPL-2.0)를 2번 위치에 두거나 1번에 경로를 �
 | 같은 앱의 사본이 여럿(`OD420.bin` / `OD420-4.0.1724.229.bin`) | 그 줄만 콤보로 노출, **버전 붙은 쪽**을 기본 선택 |
 | zip 에 칩 정보가 없음 | `bootloader.bin` 헤더의 `chip_id` 로 확정(필요할 때만 수동 override) |
 | 같은 오프셋에 두 파일 / 빈 파일 | 오류로 차단 |
-| `storage` 등 데이터 파티션 | **기본 해제** — 자동으로 덮으면 장치별 데이터(캘리브레이션 등)가 날아간다 |
+
+**기본 체크는 `app` + `otadata` 둘뿐이다.** 일상 작업이 앱 갱신이고, `bootloader`·`partition-table` 은
+구성이 바뀔 때만 다시 굽고, `storage` 는 장치별 데이터(캘리브레이션 등)를 덮어쓴다.
+해제된 줄에는 이유를 적어 둔다(`구성이 바뀌면 체크` / `데이터 보호`) — 필요하면 사용자가 켠다.
 
 **SPI 설정**은 기본이 `keep`(바이너리 그대로) — Flash Download Tool 의 `DoNotChgBin` 과 같은 동작이라
 빌드 때 정한 mode/freq/size 헤더를 덮어쓰지 않는다.

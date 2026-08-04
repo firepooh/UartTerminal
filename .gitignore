@@ -47,3 +47,6 @@ $RECYCLE.BIN/
 
 # Logs
 *.log
+
+# 플래시용 esptool standalone — 저장소에 커밋하지 않고 tools/fetch-esptool.ps1 로 받는다(수십 MB)
+tools/esptool/

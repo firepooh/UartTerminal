@@ -300,7 +300,7 @@ public static class FlashPackageAnalyzer
                 Selected = hit.Name is not null && DefaultSelected(role),
                 Candidates = candidates,
                 Note = note ?? (hit.Name is null ? "패키지에 파일이 없습니다"
-                                                 : DefaultSelected(role) ? null : "기본 해제(데이터 보호)"),
+                                                 : DefaultSelected(role) ? null : UncheckedNote(role)),
             });
         }
         return items;
@@ -383,11 +383,20 @@ public static class FlashPackageAnalyzer
     }
 
     /// <summary>
-    /// 기본 체크 여부. 표준 4종만 켠다 — <c>storage</c> 같은 데이터 파티션을 자동으로 덮으면
-    /// 장치별 데이터(캘리브레이션 등)를 날릴 수 있다.
+    /// 기본 체크 여부 — <b>앱과 otadata 만</b>. 일상 작업은 앱 갱신이고,
+    /// <c>bootloader</c>/<c>partition-table</c> 은 구성이 바뀔 때만 다시 굽는다.
+    /// <c>storage</c> 같은 데이터 파티션은 자동으로 덮으면 장치별 데이터(캘리브레이션 등)를 날린다.
+    /// 필요한 항목은 사용자가 체크해서 늘린다(체크는 덜 켜져 있는 쪽이 안전하다).
     /// </summary>
-    public static bool DefaultSelected(string role) =>
-        role is "bootloader" or "partition-table" or "otadata" or "app";
+    public static bool DefaultSelected(string role) => role is "app" or "otadata";
+
+    /// <summary>기본 해제된 줄에 이유를 남긴다 — 왜 안 켜져 있는지 알아야 켤 수 있다.</summary>
+    private static string? UncheckedNote(string role) => role switch
+    {
+        "bootloader" or "partition-table" => "기본 해제 — 구성이 바뀌면 체크",
+        "storage" => "기본 해제(데이터 보호)",
+        _ => "기본 해제",
+    };
 
     // ── 유틸 ─────────────────────────────────────────────────────────────────
 
