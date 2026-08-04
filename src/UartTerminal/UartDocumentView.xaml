@@ -44,10 +44,17 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <ScrollViewer Grid.Column="0" Focusable="False"
-                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="ChipHost" Orientation="Horizontal"/>
-                </ScrollViewer>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <!-- 명령 그룹(프로젝트) 선택. 탭별로 독립이며, 세션 접속 시 자동 선택된다. -->
+                    <ComboBox x:Name="GroupSelector" MinWidth="110" MaxWidth="170" Height="26"
+                              Margin="0,0,8,0" FontSize="11.5" VerticalContentAlignment="Center"
+                              ToolTip="명령 그룹(프로젝트) 선택"
+                              SelectionChanged="GroupSelector_SelectionChanged"/>
+                    <ScrollViewer Focusable="False" HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="ChipHost" Orientation="Horizontal"/>
+                    </ScrollViewer>
+                </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0">
                     <Button x:Name="SaveCmdButton" Content="+ 저장" Style="{StaticResource DialogButton}"

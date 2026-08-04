@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="저장 명령 편집 — UartTerminal"
         Icon="/UartTerminal.ico"
-        Width="720" Height="480" MinWidth="620" MinHeight="400"
+        Width="900" Height="560" MinWidth="760" MinHeight="440"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Bg}"
@@ -19,41 +19,80 @@
 
         <TextBlock Grid.Row="0" Margin="2,0,0,10" FontSize="12.5" TextWrapping="Wrap"
                    Foreground="{StaticResource TextDim}"
-                   Text="자주 쓰는 한 줄 명령을 저장하면 터미널 아래 칩 바에서 클릭 한 번으로 전송할 수 있습니다. (Ctrl+클릭은 입력창에 채우기)"/>
+                   Text="그룹(프로젝트)별로 명령을 나눠 저장하고, 세션에 그룹을 연결하면 접속 시 자동 선택됩니다. 폴더를 만들어 하위 명령(예: reset → sw/hw/wdt)을 고르게 할 수 있고, 목록은 드래그로 순서를 바꿉니다."/>
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240" MinWidth="180"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="190" MinWidth="150"/>
+                <ColumnDefinition Width="260" MinWidth="200"/>
+                <ColumnDefinition Width="*" MinWidth="220"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 목록(평면 — 폴더 없음: 명령 10~20개 규모에 트리는 과함) -->
+            <!-- ① 그룹(프로젝트) -->
             <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Text="그룹 (프로젝트)" Margin="2,0,0,6"
+                           Foreground="{StaticResource TextDim}" FontSize="12"/>
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
-                    <Button x:Name="AddButton" Content="추가" Style="{StaticResource DialogButton}"
-                            MinWidth="0" Padding="12,0" Click="Add_Click"/>
-                    <Button x:Name="DeleteButton" Content="삭제" Style="{StaticResource DialogButton}"
-                            MinWidth="0" Padding="12,0" Margin="6,0,0,0" Click="Delete_Click"/>
-                    <Button x:Name="UpButton" Content="↑" Style="{StaticResource DialogButton}"
-                            MinWidth="34" Padding="0" Margin="6,0,0,0" ToolTip="위로" Click="Up_Click"/>
-                    <Button x:Name="DownButton" Content="↓" Style="{StaticResource DialogButton}"
-                            MinWidth="34" Padding="0" Margin="6,0,0,0" ToolTip="아래로" Click="Down_Click"/>
+                    <Button x:Name="AddGroupButton" Content="추가" Style="{StaticResource DialogButton}"
+                            MinWidth="0" Padding="10,0" Click="AddGroup_Click"/>
+                    <Button x:Name="RenameGroupButton" Content="이름" Style="{StaticResource DialogButton}"
+                            MinWidth="0" Padding="10,0" Margin="5,0,0,0" Click="RenameGroup_Click"/>
+                    <Button x:Name="DeleteGroupButton" Content="삭제" Style="{StaticResource DialogButton}"
+                            MinWidth="0" Padding="10,0" Margin="5,0,0,0" Click="DeleteGroup_Click"/>
+                </StackPanel>
+                <ListBox x:Name="GroupList" SelectionChanged="GroupList_SelectionChanged"
+                         DisplayMemberPath="Name"
+                         AllowDrop="True"
+                         PreviewMouseLeftButtonDown="Drag_Down"
+                         PreviewMouseMove="Drag_Move"
+                         Drop="GroupList_Drop"
+                         DragOver="List_DragOver"/>
+            </DockPanel>
+
+            <!-- ② 명령 / 폴더 -->
+            <DockPanel Grid.Column="1" Margin="12,0,0,0">
+                <TextBlock DockPanel.Dock="Top" x:Name="CmdHeader" Text="명령" Margin="2,0,0,6"
+                           Foreground="{StaticResource TextDim}" FontSize="12"/>
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="AddButton" Content="명령 추가" Style="{StaticResource DialogButton}"
+                                MinWidth="0" Padding="10,0" Click="Add_Click"/>
+                        <Button x:Name="AddFolderButton" Content="폴더 추가" Style="{StaticResource DialogButton}"
+                                MinWidth="0" Padding="10,0" Margin="5,0,0,0" Click="AddFolder_Click"/>
+                        <Button x:Name="DeleteButton" Content="삭제" Style="{StaticResource DialogButton}"
+                                MinWidth="0" Padding="10,0" Margin="5,0,0,0" Click="Delete_Click"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <Button x:Name="AddSubButton" Content="하위 명령 추가" Style="{StaticResource DialogButton}"
+                                MinWidth="0" Padding="10,0" ToolTip="선택한 폴더에 하위 명령 추가" Click="AddSub_Click"/>
+                        <Button x:Name="UpButton" Content="↑" Style="{StaticResource DialogButton}"
+                                MinWidth="32" Padding="0" Margin="5,0,0,0" ToolTip="위로" Click="Up_Click"/>
+                        <Button x:Name="DownButton" Content="↓" Style="{StaticResource DialogButton}"
+                                MinWidth="32" Padding="0" Margin="5,0,0,0" ToolTip="아래로" Click="Down_Click"/>
+                    </StackPanel>
                 </StackPanel>
 
-                <ListBox x:Name="CmdList" SelectionChanged="CmdList_SelectionChanged">
+                <!-- 폴더/하위를 한 목록에 들여쓰기로 표현(트리 컨트롤 없이 드래그 정렬이 쉬움) -->
+                <ListBox x:Name="CmdList" SelectionChanged="CmdList_SelectionChanged"
+                         AllowDrop="True"
+                         PreviewMouseLeftButtonDown="Drag_Down"
+                         PreviewMouseMove="Drag_Move"
+                         Drop="CmdList_Drop"
+                         DragOver="List_DragOver">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <!-- StackPanel(가로)은 자식을 무한 폭으로 측정해 TextTrimming 이 죽는다 → Grid(Auto,*) 사용 -->
-                            <Grid>
+                            <Grid Margin="{Binding Indent}">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="⚠" Margin="0,0,6,0"
+                                <TextBlock Grid.Column="0" Text="{Binding Glyph}" Margin="0,0,5,0"
+                                           Foreground="{StaticResource TextMuted}"/>
+                                <TextBlock Grid.Column="1" Text="⚠" Margin="0,0,5,0"
                                            Foreground="{StaticResource Amber}"
                                            Visibility="{Binding ConfirmMark}"/>
-                                <TextBlock Grid.Column="1" Text="{Binding Display}"
+                                <TextBlock Grid.Column="2" Text="{Binding Display}"
                                            TextTrimming="CharacterEllipsis"/>
                             </Grid>
                         </DataTemplate>
@@ -61,15 +100,15 @@
                 </ListBox>
             </DockPanel>
 
-            <!-- 상세(선택 항목 편집) -->
+            <!-- ③ 상세(선택 항목 편집) -->
             <Border Grid.Column="2" x:Name="DetailPane" Margin="14,0,0,0" IsEnabled="False">
                 <StackPanel>
-                    <TextBlock Text="이름 (칩에 표시)" Foreground="{StaticResource TextDim}" FontSize="12" Margin="2,0,0,6"/>
+                    <TextBlock Text="이름 (칩/메뉴에 표시)" Foreground="{StaticResource TextDim}" FontSize="12" Margin="2,0,0,6"/>
                     <TextBox x:Name="NameBox" Style="{StaticResource CommandInput}"
                              MaxLength="40"
                              Text="{Binding Name, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
 
-                    <TextBlock Text="전송할 문자열 (한 줄, 전송 시 CR 이 붙습니다)"
+                    <TextBlock x:Name="TextLabel" Text="전송할 문자열 (한 줄, 전송 시 CR 이 붙습니다)"
                                Foreground="{StaticResource TextDim}" FontSize="12" Margin="2,14,0,6"/>
                     <TextBox x:Name="TextBoxCmd" Style="{StaticResource CommandInput}"
                              MaxLength="2000"
@@ -78,6 +117,10 @@
                     <CheckBox x:Name="ConfirmBox" Style="{StaticResource DarkCheckBox}" Margin="2,16,0,0"
                               Content="전송 전 확인 (restart · erase 처럼 위험한 명령)"
                               IsChecked="{Binding Confirm, Mode=TwoWay}"/>
+
+                    <TextBlock x:Name="FolderHint" Visibility="Collapsed" Margin="2,16,0,0"
+                               Foreground="{StaticResource Blue}" FontSize="11.5" TextWrapping="Wrap"
+                               Text="폴더입니다 — 전송 문자열이 없고, 클릭하면 하위 명령을 고르는 메뉴가 열립니다. [하위 명령 추가]로 항목을 넣으세요."/>
 
                     <TextBlock Text="비밀번호 같은 민감정보는 저장하지 마세요 (commands.json 은 평문입니다)."
                                Foreground="{StaticResource TextFaint}" FontSize="11" TextWrapping="Wrap"
@@ -89,7 +132,7 @@
         <!-- 파일 위치(팀 공유 = 이 파일 복사) -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="2,12,0,0">
             <TextBlock x:Name="PathText" Foreground="{StaticResource TextFaint}" FontSize="11"
-                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520"/>
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="620"/>
             <Button x:Name="OpenFolderButton" Content="폴더 열기" Style="{StaticResource DialogButton}"
                     MinWidth="0" MinHeight="24" Padding="10,0" Margin="10,0,0,0" Click="OpenFolder_Click"/>
         </StackPanel>

@@ -270,12 +270,14 @@ public sealed class CommandStoreTests : IDisposable
 
         string json = File.ReadAllText(_path);
         Assert.Contains("\n", json);                 // 들여쓰기(diff 가능)
-        Assert.Contains("\"schemaVersion\": 1", json);
+        Assert.Contains("\"schemaVersion\": 2", json); // v2 = 그룹 구조
         Assert.Contains("\"name\": \"heap\"", json);
         Assert.DoesNotContain("\"confirm\"", json);   // false 는 파일에 쓰지 않음(잡음 감소)
 
         using var doc = JsonDocument.Parse(json);     // 유효한 JSON
-        Assert.Equal(1, doc.RootElement.GetProperty("commands").GetArrayLength());
+        var groups = doc.RootElement.GetProperty("groups");
+        Assert.Equal(1, groups.GetArrayLength());
+        Assert.Equal(1, groups[0].GetProperty("commands").GetArrayLength());
     }
 
     [Fact]

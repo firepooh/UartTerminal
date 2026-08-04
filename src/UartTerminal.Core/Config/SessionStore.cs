@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 namespace UartTerminal.Core.Config;
 
 /// <summary>
-/// 이름 붙인 접속 프로필. 저장하는 것은 <b>이름·포트·속도 3개뿐</b>이다.
+/// 이름 붙인 접속 프로필. 저장하는 것은 <b>이름·포트·속도 + (선택) 명령 그룹</b>이다.
 /// 8N1/흐름제어/DTR·RTS 는 고정값이며(README §2), 특히 DTR/RTS 는 ESP32 의 의도치 않은 리셋을 막는
 /// 안전장치(§7 R2)라 사용자가 편집하는 파일에 노출하지 않는다.
 /// </summary>
@@ -14,6 +14,14 @@ public sealed record SessionProfile
     [JsonPropertyName("name")] public string Name { get; init; } = "";
     [JsonPropertyName("port")] public string Port { get; init; } = "";
     [JsonPropertyName("baud")] public int Baud { get; init; } = 115200;
+
+    /// <summary>
+    /// 이 세션으로 접속할 때 자동 선택할 명령 그룹 이름(commands.json 의 그룹). 비면 자동 선택하지 않는다.
+    /// 프로젝트마다 명령 세트가 다른 경우를 위한 연결 고리(예: "proj A" 세션 ↔ "proj A" 명령 그룹).
+    /// </summary>
+    [JsonPropertyName("commandGroup")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CommandGroup { get; init; }
 
     /// <summary>목록 표시용: "모터보드 — COM24 · 115200". 파생 값이므로 파일에 저장하지 않는다.</summary>
     [JsonIgnore]
@@ -199,7 +207,7 @@ public sealed class SessionStore
         }
     }
 
-    /// <summary>포트가 없는 항목 제거, 이름 공백 시 포트로 대체, 속도 범위 검증, 길이/개수 상한.</summary>
+    /// <summary>포트가 없는 항목 제거, 이름 공백 시 포트로 대체, 속도 범위 검증, 명령 그룹 정규화, 길이/개수 상한.</summary>
     private static List<SessionProfile> Sanitize(IEnumerable<SessionProfile> src)
     {
         var list = new List<SessionProfile>();
@@ -217,7 +225,17 @@ public sealed class SessionStore
 
             int baud = s.Baud is >= 300 and <= 4_000_000 ? s.Baud : 115200;
 
-            list.Add(new SessionProfile { Name = name, Port = port, Baud = baud });
+            // 연결된 명령 그룹(선택). 공백은 null 로 정규화해 "없음"과 구분하지 않는다.
+            string group = OneLine(s.CommandGroup);
+            if (group.Length > MaxNameLength) group = group[..MaxNameLength];
+
+            list.Add(new SessionProfile
+            {
+                Name = name,
+                Port = port,
+                Baud = baud,
+                CommandGroup = group.Length > 0 ? group : null,
+            });
             if (list.Count >= MaxSessions) break;
         }
         return list;

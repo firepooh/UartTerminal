@@ -129,6 +129,7 @@ public partial class UartDocumentView : UserControl
             return;
         }
 
+        SetCommandGroup(dlg.SelectedCommandGroup); // 세션으로 재접속했으면 그 그룹으로 전환
         CloseCurrentSession(); // OpenSession→OpenUserInitiated 이 자동 재연결 대기를 종료한다
 
         if (_engine is null)
@@ -384,13 +385,53 @@ public partial class UartDocumentView : UserControl
     // ── 저장 명령 칩 바 ─────────────────────────────────────────────────────────
     // "버튼 = 한 줄 문자열 전송"까지만. 다단계 시퀀스/대기/조건은 MCP(uart_send/uart_expect)의 영역이다.
 
-    private void OnCommandsChanged() => RebuildCommandChips();
+    /// <summary>이 탭이 쓰는 명령 그룹 이름(탭별 독립). 세션 접속 시 자동 설정된다.</summary>
+    private string? _commandGroup;
+
+    private void OnCommandsChanged() { SyncGroupSelector(); RebuildCommandChips(); }
 
     /// <summary>칩 바 표시/숨김(전역 설정, Alt+B). 숨기면 세로 픽셀을 전혀 쓰지 않는다.</summary>
     public void SetCommandBarVisible(bool show)
     {
         CommandBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        if (show) RebuildCommandChips();
+        if (show) { SyncGroupSelector(); RebuildCommandChips(); }
+    }
+
+    /// <summary>세션이 지정한 명령 그룹으로 전환(없으면 첫 그룹 유지).</summary>
+    public void SetCommandGroup(string? groupName)
+    {
+        if (string.IsNullOrWhiteSpace(groupName)) return;
+        _commandGroup = groupName;
+        SyncGroupSelector();
+        RebuildCommandChips();
+    }
+
+    /// <summary>현재 선택된 그룹 이름(세션 저장 시 함께 기록).</summary>
+    public string? CurrentCommandGroup =>
+        _commands.FindGroup(_commandGroup)?.Name ?? (_commands.Groups.Count > 0 ? _commands.Groups[0].Name : null);
+
+    private bool _syncingGroups; // SelectionChanged 재진입 방지
+
+    private void SyncGroupSelector()
+    {
+        _syncingGroups = true;
+        try
+        {
+            var names = _commands.GroupNames;
+            GroupSelector.ItemsSource = names;
+            GroupSelector.Visibility = names.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            string? cur = CurrentCommandGroup;
+            GroupSelector.SelectedItem = cur;
+            _commandGroup = cur;
+        }
+        finally { _syncingGroups = false; }
+    }
+
+    private void GroupSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingGroups) return;
+        _commandGroup = GroupSelector.SelectedItem as string;
+        RebuildCommandChips();
     }
 
     private void RebuildCommandChips()
@@ -398,7 +439,8 @@ public partial class UartDocumentView : UserControl
         if (CommandBar.Visibility != Visibility.Visible) return;
         ChipHost.Children.Clear();
 
-        if (_commands.Items.Count == 0)
+        var items = _commands.CommandsOf(_commandGroup);
+        if (items.Count == 0)
         {
             ChipHost.Children.Add(new TextBlock
             {
@@ -411,29 +453,63 @@ public partial class UartDocumentView : UserControl
         }
 
         var style = (Style)FindResource("ChipButton");
-        foreach (var cmd in _commands.Items)
+        foreach (var cmd in items)
         {
             var captured = cmd;
             var btn = new Button
             {
-                Content = cmd.Confirm ? "⚠ " + cmd.Name : cmd.Name,
+                Content = ChipCaption(cmd),
                 Style = style,
                 Height = 26,
                 Margin = new Thickness(0, 0, 6, 0),
                 Focusable = false, // 포커스를 가져가면 클릭 직후 타이핑이 어디로도 가지 않는다
-                ToolTip = cmd.Confirm
-                    ? $"{cmd.Text}\n(전송 전 확인 · Ctrl+클릭: 입력창에 채우기)"
-                    : $"{cmd.Text}\n(Ctrl+클릭: 입력창에 채우기)",
+                ToolTip = ChipTooltip(cmd),
+                Tag = captured,
             };
-            btn.Click += (_, _) => RunSavedCommand(captured);
+            if (captured.IsFolder)
+                btn.Click += (s, _) => ShowFolderMenu((Button)s!, captured);
+            else
+                btn.Click += (_, _) => RunSavedCommand(captured);
             ChipHost.Children.Add(btn);
         }
     }
 
-    /// <summary>칩 클릭: 기본은 즉시 전송, Ctrl+클릭은 입력창에 채우기(수정 후 전송).</summary>
-    private void RunSavedCommand(SavedCommand cmd)
+    private static string ChipCaption(SavedCommand cmd) =>
+        cmd.IsFolder ? cmd.Name + " ▾" : (cmd.Confirm ? "⚠ " + cmd.Name : cmd.Name);
+
+    private static string ChipTooltip(SavedCommand cmd)
     {
-        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        if (cmd.IsFolder)
+            return $"{cmd.Name} — 하위 명령 {cmd.Items!.Count}개 (클릭해서 선택)";
+        return cmd.Confirm
+            ? $"{cmd.Text}\n(전송 전 확인 · Ctrl+클릭: 입력창에 채우기)"
+            : $"{cmd.Text}\n(Ctrl+클릭: 입력창에 채우기)";
+    }
+
+    /// <summary>폴더 칩 클릭: 하위 명령 목록을 컨텍스트 메뉴로 띄워 고르게 한다(예: reset → sw/hw/wdt).</summary>
+    private void ShowFolderMenu(Button anchor, SavedCommand folder)
+    {
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        var menu = new ContextMenu { PlacementTarget = anchor, Placement = PlacementMode.Top };
+        foreach (var sub in folder.Items!)
+        {
+            var captured = sub;
+            var mi = new MenuItem
+            {
+                Header = captured.Confirm ? "⚠ " + captured.Name : captured.Name,
+                ToolTip = captured.Text,
+            };
+            // 폴더 칩을 Ctrl+클릭했으면 하위 선택도 '입력창에 채우기'로 동작(일관성).
+            mi.Click += (_, _) => RunSavedCommand(captured, forceFill: ctrl);
+            menu.Items.Add(mi);
+        }
+        menu.IsOpen = true;
+    }
+
+    /// <summary>칩 클릭: 기본은 즉시 전송, Ctrl+클릭(또는 forceFill)은 입력창에 채우기(수정 후 전송).</summary>
+    private void RunSavedCommand(SavedCommand cmd, bool forceFill = false)
+    {
+        if (forceFill || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
             InputBox.Text = cmd.Text;
             InputBox.CaretIndex = InputBox.Text.Length;
@@ -465,13 +541,14 @@ public partial class UartDocumentView : UserControl
             return;
         }
         // 저장 직전에 파일을 다시 읽어 외부 손편집/다른 인스턴스의 변경을 통째로 덮어쓰지 않게 한다.
+        string? group = _commandGroup;
         _commands.Load();
-        if (!_commands.Add(new SavedCommand { Name = text, Text = text }))
+        if (!_commands.Add(new SavedCommand { Name = text, Text = text }, group))
         {
             SetStatus(_commands.LastError ?? "명령 저장 실패");
             return;
         }
-        SetStatus($"명령 저장됨: {text}");
+        SetStatus($"명령 저장됨: {text}" + (group is null ? "" : $" (그룹: {group})"));
     }
 
     private void SaveCommand_Click(object sender, RoutedEventArgs e) => SaveCurrentInputAsCommand();
@@ -492,12 +569,14 @@ public partial class UartDocumentView : UserControl
             $"이 연결({_portName} · {_params.BaudRate}bps)을 어떤 이름으로 저장할까요?", _portName);
         if (name is null) return;
 
+        string? group = CurrentCommandGroup; // 현재 탭이 쓰는 명령 그룹을 세션에 함께 기록(접속 시 자동 선택)
         _sessions.Load(); // 다른 인스턴스/손편집 반영 후 추가
         if (!_sessions.AddOrReplace(new SessionProfile
         {
             Name = name,
             Port = _portName,
             Baud = _params.BaudRate,
+            CommandGroup = group,
         }))
         {
             SetStatus(_sessions.LastError ?? "세션 저장 실패");

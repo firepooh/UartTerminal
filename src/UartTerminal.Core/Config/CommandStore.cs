@@ -21,13 +21,40 @@ public sealed record SavedCommand
     [JsonPropertyName("confirm")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Confirm { get; init; }
+
+    /// <summary>
+    /// 하위 명령(폴더). 비어 있지 않으면 이 항목은 <b>폴더</b>로 취급되어 클릭 시 하위 목록에서 고르게 한다
+    /// (예: "reset" → "sw reset" / "hw reset" / "wdt reset"). 폴더 자신의 <see cref="Text"/>는 전송하지 않는다.
+    /// 중첩은 1단계까지만 허용한다(손편집으로 더 깊어지면 평탄화).
+    /// </summary>
+    [JsonPropertyName("items")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<SavedCommand>? Items { get; init; }
+
+    /// <summary>하위 명령을 가진 폴더인지.</summary>
+    [JsonIgnore]
+    public bool IsFolder => Items is { Count: > 0 };
+}
+
+/// <summary>명령 그룹(프로젝트 단위). 세션에 연결해 접속 시 자동 선택할 수 있다.</summary>
+public sealed record CommandGroup
+{
+    [JsonPropertyName("name")] public string Name { get; init; } = "";
+    [JsonPropertyName("commands")] public List<SavedCommand> Commands { get; init; } = new();
+
+    public override string ToString() => Name;
 }
 
 /// <summary>commands.json 파일 형식(사람이 읽고 diff 할 수 있게 들여쓰기 저장).</summary>
 public sealed class CommandFile
 {
     [JsonPropertyName("schemaVersion")] public int SchemaVersion { get; set; } = CommandStore.SupportedSchemaVersion;
-    [JsonPropertyName("commands")] public List<SavedCommand> Commands { get; set; } = new();
+
+    /// <summary>v2: 그룹 목록. 프로젝트마다 다른 명령 세트를 담는다.</summary>
+    [JsonPropertyName("groups")] public List<CommandGroup>? Groups { get; set; }
+
+    /// <summary>v1 호환: 그룹 없는 평면 목록. 읽을 때 기본 그룹으로 승격된다(저장은 항상 v2).</summary>
+    [JsonPropertyName("commands")] public List<SavedCommand>? Commands { get; set; }
 }
 
 /// <summary>
@@ -44,10 +71,15 @@ public sealed class CommandFile
 /// </summary>
 public sealed class CommandStore
 {
-    public const int SupportedSchemaVersion = 1;
-    public const int MaxCommands = 200;
+    public const int SupportedSchemaVersion = 2;
+    public const int MaxCommands = 200;      // 그룹 하나당 최상위 항목 수
+    public const int MaxSubCommands = 50;    // 폴더 하나당 하위 항목 수
+    public const int MaxGroups = 50;
     public const int MaxNameLength = 40;
     public const int MaxTextLength = 2000;
+
+    /// <summary>그룹이 하나도 없는 파일을 승격할 때 쓰는 기본 그룹 이름.</summary>
+    public const string DefaultGroupName = "기본";
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -58,13 +90,53 @@ public sealed class CommandStore
     };
 
     private readonly string _path;
-    private List<SavedCommand> _items = new();
+    private List<CommandGroup> _groups = new();
 
     public CommandStore(string path) => _path = path;
 
     public string FilePath => _path;
 
-    public IReadOnlyList<SavedCommand> Items => _items;
+    /// <summary>명령 그룹 목록(프로젝트 단위).</summary>
+    public IReadOnlyList<CommandGroup> Groups => _groups;
+
+    /// <summary>그룹 이름으로 명령 목록을 얻는다. 없으면 첫 그룹, 그것도 없으면 빈 목록.</summary>
+    public IReadOnlyList<SavedCommand> CommandsOf(string? groupName)
+    {
+        var g = FindGroup(groupName) ?? (_groups.Count > 0 ? _groups[0] : null);
+        return g?.Commands ?? (IReadOnlyList<SavedCommand>)Array.Empty<SavedCommand>();
+    }
+
+    /// <summary>이름으로 그룹 찾기(대소문자 무시). 없으면 null.</summary>
+    public CommandGroup? FindGroup(string? name) =>
+        string.IsNullOrEmpty(name)
+            ? null
+            : _groups.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>그룹 이름 목록(UI 드롭다운용).</summary>
+    public IReadOnlyList<string> GroupNames => _groups.Select(g => g.Name).ToList();
+
+    /// <summary>
+    /// 첫 그룹의 명령 목록(그룹을 쓰지 않는 단순 경로용 편의 API).
+    /// 폴더 항목도 그대로 포함되므로 표시 측은 <see cref="SavedCommand.IsFolder"/>를 확인해야 한다.
+    /// </summary>
+    public IReadOnlyList<SavedCommand> Items =>
+        _groups.Count > 0 ? _groups[0].Commands : (IReadOnlyList<SavedCommand>)Array.Empty<SavedCommand>();
+
+    /// <summary>첫(또는 유일) 그룹의 명령을 통째로 교체(그룹을 쓰지 않는 단순 경로용 편의 API).</summary>
+    public bool ReplaceAll(IEnumerable<SavedCommand> items)
+    {
+        var next = new List<CommandGroup>();
+        if (_groups.Count == 0)
+        {
+            next.Add(new CommandGroup { Name = DefaultGroupName, Commands = items.ToList() });
+        }
+        else
+        {
+            next.Add(new CommandGroup { Name = _groups[0].Name, Commands = items.ToList() });
+            for (int i = 1; i < _groups.Count; i++) next.Add(_groups[i]);
+        }
+        return ReplaceAllGroups(next);
+    }
 
     /// <summary>저장이 금지된 상태(상위 스키마 버전 파일 또는 읽기 실패). 기존 파일을 덮어쓰지 않기 위한 잠금.</summary>
     public bool IsReadOnly { get; private set; }
@@ -83,7 +155,7 @@ public sealed class CommandStore
 
         if (!File.Exists(_path))
         {
-            _items = new List<SavedCommand>();
+            _groups = new List<CommandGroup>();
             RaiseChanged();
             return;
         }
@@ -96,7 +168,7 @@ public sealed class CommandStore
         catch (Exception ex)
         {
             // 읽기 실패(잠김/권한). 파일 내용을 모르는 상태이므로 저장을 잠가 사용자 데이터를 보호한다.
-            _items = new List<SavedCommand>();
+            _groups = new List<CommandGroup>();
             IsReadOnly = true;
             LastError = $"명령 파일을 열 수 없습니다({ex.GetType().Name}). 이번 실행에서는 저장하지 않습니다: {_path}";
             RaiseChanged();
@@ -112,12 +184,27 @@ public sealed class CommandStore
                 IsReadOnly = true;
                 LastError = $"명령 파일이 최신 버전(v{file.SchemaVersion})에서 만들어졌습니다. 읽기 전용으로 엽니다.";
             }
-            // "commands": null 이면 System.Text.Json 이 초기화값(new())을 null 로 덮어쓴다 → 빈 목록으로 취급.
-            _items = Sanitize(file.Commands ?? new List<SavedCommand>());
+
+            if (file.Groups is { Count: > 0 })
+            {
+                _groups = SanitizeGroups(file.Groups);
+            }
+            else if (file.Commands is { Count: > 0 })
+            {
+                // v1 자동 마이그레이션: 평면 목록을 기본 그룹으로 승격(다음 저장에서 v2 로 기록).
+                _groups = SanitizeGroups(new[]
+                {
+                    new CommandGroup { Name = DefaultGroupName, Commands = file.Commands }
+                });
+            }
+            else
+            {
+                _groups = new List<CommandGroup>();
+            }
         }
         catch (JsonException ex)
         {
-            _items = new List<SavedCommand>();
+            _groups = new List<CommandGroup>();
             LastError = $"명령 파일이 손상되었습니다: {ex.Message}";
             PreserveCorrupt();
         }
@@ -125,7 +212,7 @@ public sealed class CommandStore
         {
             // 예상 밖의 역직렬화 실패. 내용을 신뢰할 수 없으므로 저장을 잠가 원본을 보호하고,
             // 예외를 밖으로 내보내지 않는다(App 시작 경로에서 던지면 창 하나 없이 앱이 죽는다).
-            _items = new List<SavedCommand>();
+            _groups = new List<CommandGroup>();
             IsReadOnly = true;
             LastError = $"명령 파일을 해석할 수 없습니다({ex.GetType().Name}). 이번 실행에서는 저장하지 않습니다: {_path}";
         }
@@ -137,7 +224,7 @@ public sealed class CommandStore
     /// 목록 전체를 교체하고 저장(편집 확정 경로). <b>저장에 성공했을 때만</b> in-memory 목록을 커밋하고
     /// <see cref="Changed"/>를 발생시킨다 — 그렇지 않으면 칩 바가 디스크에 없는 '유령 명령'을 보여주게 된다.
     /// </summary>
-    public bool ReplaceAll(IEnumerable<SavedCommand> items)
+    public bool ReplaceAllGroups(IEnumerable<CommandGroup> groups)
     {
         if (IsReadOnly)
         {
@@ -145,30 +232,58 @@ public sealed class CommandStore
             return false;
         }
 
-        var next = Sanitize(items);
-        if (!SaveList(next)) return false;
+        var next = SanitizeGroups(groups);
+        if (!SaveGroups(next)) return false;
 
-        _items = next;
+        _groups = next;
         RaiseChanged();
         return true;
     }
 
-    /// <summary>명령 하나를 목록 끝에 추가하고 저장("현재 입력 저장" 경로).</summary>
-    public bool Add(SavedCommand item)
+    /// <summary>명령 하나를 지정 그룹 끝에 추가하고 저장("현재 입력 저장" 경로). 그룹이 없으면 만든다.</summary>
+    public bool Add(SavedCommand item, string? groupName = null)
     {
+        var target = FindGroup(groupName) ?? (_groups.Count > 0 ? _groups[0] : null);
+
         // 상한을 먼저 검사한다. Sanitize 는 초과분을 조용히 잘라내므로, 여기서 막지 않으면
         // 새 명령이 버려졌는데도 "저장됨"으로 보고된다.
-        if (_items.Count >= MaxCommands)
+        if (target is not null && target.Commands.Count >= MaxCommands)
         {
-            LastError = $"저장 명령이 최대 {MaxCommands}개입니다 — [명령 > 저장 명령 편집]에서 정리하세요.";
+            LastError = $"그룹 '{target.Name}' 의 명령이 최대 {MaxCommands}개입니다 — [명령 > 저장 명령 편집]에서 정리하세요.";
+            return false;
+        }
+        if (target is null && _groups.Count >= MaxGroups)
+        {
+            LastError = $"명령 그룹이 최대 {MaxGroups}개입니다.";
             return false;
         }
 
-        var list = new List<SavedCommand>(_items) { item };
-        return ReplaceAll(list);
+        var next = new List<CommandGroup>();
+        if (target is null)
+        {
+            next.AddRange(_groups);
+            next.Add(new CommandGroup
+            {
+                Name = string.IsNullOrWhiteSpace(groupName) ? DefaultGroupName : groupName!,
+                Commands = new List<SavedCommand> { item },
+            });
+        }
+        else
+        {
+            foreach (var g in _groups)
+            {
+                if (ReferenceEquals(g, target))
+                {
+                    var list = new List<SavedCommand>(g.Commands) { item };
+                    next.Add(new CommandGroup { Name = g.Name, Commands = list });
+                }
+                else next.Add(g);
+            }
+        }
+        return ReplaceAllGroups(next);
     }
 
-    private bool SaveList(List<SavedCommand> items)
+    private bool SaveGroups(List<CommandGroup> groups)
     {
         if (IsReadOnly)
         {
@@ -184,7 +299,7 @@ public sealed class CommandStore
             var file = new CommandFile
             {
                 SchemaVersion = SupportedSchemaVersion,
-                Commands = items,
+                Groups = groups,
             };
 
             string tmp = _path + ".tmp";
@@ -209,12 +324,30 @@ public sealed class CommandStore
     /// 개행은 공백으로 치환(손편집으로 다중 명령 시퀀스가 섞이는 것 차단), 빈 텍스트 항목 제거,
     /// 이름 공백 시 텍스트로 대체, 길이/개수 상한 적용.
     /// </summary>
-    private static List<SavedCommand> Sanitize(IEnumerable<SavedCommand> src)
+    private static List<SavedCommand> Sanitize(IEnumerable<SavedCommand> src, bool allowFolders = true)
     {
         var list = new List<SavedCommand>();
         foreach (var c in src)
         {
             if (c is null) continue;
+
+            // 폴더: 하위 명령이 있으면 폴더로 취급(자신의 Text 는 전송하지 않으므로 없어도 된다).
+            // 중첩은 1단계까지 — 하위의 하위는 평탄화(allowFolders:false)해 데이터 계층에서 깊이를 강제한다.
+            if (allowFolders && c.Items is { Count: > 0 })
+            {
+                var subs = Sanitize(c.Items, allowFolders: false);
+                if (subs.Count > MaxSubCommands) subs = subs.GetRange(0, MaxSubCommands);
+                if (subs.Count == 0) continue; // 유효 하위가 없으면 폴더도 버린다
+
+                string fname = OneLine(c.Name);
+                if (fname.Length == 0) fname = OneLine(c.Text);
+                if (fname.Length == 0) fname = "(폴더)";
+                if (fname.Length > MaxNameLength) fname = fname[..MaxNameLength];
+
+                list.Add(new SavedCommand { Name = fname, Text = "", Confirm = c.Confirm, Items = subs });
+                if (list.Count >= MaxCommands) break;
+                continue;
+            }
 
             string text = OneLine(c.Text);
             if (text.Length == 0) continue;
@@ -226,6 +359,35 @@ public sealed class CommandStore
 
             list.Add(new SavedCommand { Name = name, Text = text, Confirm = c.Confirm });
             if (list.Count >= MaxCommands) break;
+        }
+        return list;
+    }
+
+    /// <summary>그룹 목록 정규화: 이름 정리(빈 이름 대체·중복 회피), 그룹 수 상한, 각 그룹의 명령 정규화.</summary>
+    private static List<CommandGroup> SanitizeGroups(IEnumerable<CommandGroup> src)
+    {
+        var list = new List<CommandGroup>();
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var g in src)
+        {
+            if (g is null) continue;
+
+            string name = OneLine(g.Name);
+            if (name.Length == 0) name = DefaultGroupName;
+            if (name.Length > MaxNameLength) name = name[..MaxNameLength];
+            // 이름은 세션 연결 키이므로 중복을 허용하지 않는다(뒤에 오는 동명 그룹에 접미사).
+            if (!used.Add(name))
+            {
+                for (int i = 2; ; i++)
+                {
+                    string cand = $"{name} ({i})";
+                    if (cand.Length > MaxNameLength) cand = cand[..MaxNameLength];
+                    if (used.Add(cand)) { name = cand; break; }
+                }
+            }
+
+            list.Add(new CommandGroup { Name = name, Commands = Sanitize(g.Commands ?? new List<SavedCommand>()) });
+            if (list.Count >= MaxGroups) break;
         }
         return list;
     }

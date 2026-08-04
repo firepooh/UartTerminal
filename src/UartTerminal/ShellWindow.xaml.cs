@@ -120,6 +120,7 @@ public partial class ShellWindow : Window
         AttachTab(ti, doc);
         Tabs.Items.Add(ti);
         Tabs.SelectedItem = ti;
+        doc.SetCommandGroup(dlg.SelectedCommandGroup); // 세션에 연결된 명령 그룹으로 자동 전환
         doc.ConnectTo(port, dlg.SelectedBaud);
         RenderContent();
         doc.FocusTerminal();

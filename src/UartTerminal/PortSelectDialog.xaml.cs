@@ -25,10 +25,16 @@ public partial class PortSelectDialog : Window
     /// <summary>세션 선택으로 지정된 포트(감지 목록에 없을 수도 있다 — 그 경우 자동 재연결 대기로 이어진다).</summary>
     private string? _sessionPort;
 
+    /// <summary>세션 선택으로 지정된 명령 그룹(접속 확정 시 SelectedCommandGroup 으로 넘어간다).</summary>
+    private string? _sessionCommandGroup;
+
     public PortInfo? SelectedPort { get; private set; }
 
     /// <summary>사용자가 고른 통신 속도. 취소 시 의미 없음.</summary>
     public int SelectedBaud { get; private set; } = DefaultBaud;
+
+    /// <summary>세션으로 접속한 경우 그 세션에 연결된 명령 그룹(없으면 null → 그룹 자동 전환 안 함).</summary>
+    public string? SelectedCommandGroup { get; private set; }
 
     public PortSelectDialog(string? preselectPort = null, int preselectBaud = DefaultBaud,
                             SessionStore? sessions = null)
@@ -58,6 +64,7 @@ public partial class PortSelectDialog : Window
         // 세션은 '폼을 채우는 바로가기'다. 포트가 감지 목록에 있으면 그 항목을 선택하고,
         // 없으면 세션의 포트명을 기억해 두었다가 연결 시 사용한다(자동 재연결 대기로 이어짐).
         _sessionPort = s.Port;
+        _sessionCommandGroup = s.CommandGroup; // 접속 후 칩 바를 이 그룹으로 자동 전환
         SetBaud(s.Baud);
 
         var match = (PortList.ItemsSource as IEnumerable<PortInfo>)?
@@ -189,6 +196,9 @@ public partial class PortSelectDialog : Window
 
         SelectedPort = port;
         SelectedBaud = CheckedBaud();
+        // 세션으로 접속한 경우에만 그룹을 넘긴다(포트 목록에서 직접 고른 경우 현재 그룹 유지).
+        SelectedCommandGroup = string.Equals(port.PortName, _sessionPort, StringComparison.OrdinalIgnoreCase)
+            ? _sessionCommandGroup : null;
         DialogResult = true;
     }
 }
