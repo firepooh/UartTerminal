@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\UartTerminal.Core\UartTerminal.Core.csproj" />
+    <!-- UartBridge(MCP 세션 공유 로직) 테스트용. 앱 어셈블리 타입만 참조(WPF 객체는 생성하지 않음). -->
+    <ProjectReference Include="..\..\src\UartTerminal\UartTerminal.csproj" />
   </ItemGroup>
 
 </Project>
