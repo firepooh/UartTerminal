@@ -169,6 +169,65 @@ public class UartBridgeTests
         Assert.False(fake.RtsEnabled);
     }
 
+    // ── 리셋 시퀀스(uart_reset) ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Reset_Gating()
+    {
+        var b = NewBridge();
+        Assert.Equal("mcp_disabled", (await b.ResetAsync(bootloader: false)).Error);
+
+        b.Enabled = true;
+        Assert.Equal("disconnected", (await b.ResetAsync(bootloader: false)).Error);
+
+        var fake = new FakeSerialSession(); fake.Open(); b.AttachSession(fake);
+        b.ReadOnly = true;
+        Assert.Equal("read_only", (await b.ResetAsync(bootloader: false)).Error);
+        Assert.Empty(fake.ControlLines); // 차단됐으면 제어선을 건드리지 않는다
+    }
+
+    [Fact]
+    public async Task Reset_Hard_RunsEnPulse()
+    {
+        var (b, fake) = Connected(enabled: true);
+        var r = await b.ResetAsync(bootloader: false);
+
+        Assert.True(r.Ok);
+        Assert.Equal("hard", r.Mode);
+        Assert.Equal(new[] { (false, true), (false, false) }, fake.ControlLines);
+    }
+
+    [Fact]
+    public async Task Reset_Bootloader_PullsIo0Low()
+    {
+        var (b, fake) = Connected(enabled: true);
+        var r = await b.ResetAsync(bootloader: true);
+
+        Assert.True(r.Ok);
+        Assert.Equal("bootloader", r.Mode);
+        Assert.Equal(new[] { (false, true), (true, false), (false, false) }, fake.ControlLines);
+    }
+
+    // ── AI 송신 개행이 사용자 설정을 따르는지 ────────────────────────────────
+
+    [Fact]
+    public void Send_UsesConfiguredTransmitNewline()
+    {
+        var (b, fake) = Connected(enabled: true);
+        b.TransmitNewline = TransmitNewline.CrLf;
+        b.Send("x", appendNewline: true);
+        Assert.Equal(new byte[] { (byte)'x', 0x0D, 0x0A }, fake.Sent[0]);
+    }
+
+    [Fact]
+    public void Send_LfMode_NormalizesCrLfToLf()
+    {
+        var (b, fake) = Connected(enabled: true);
+        b.TransmitNewline = TransmitNewline.Lf;
+        b.Send("a\r\nb", appendNewline: false);
+        Assert.Equal(new byte[] { (byte)'a', 0x0A, (byte)'b' }, fake.Sent[0]);
+    }
+
     // ── 포트 제어(uart_close/uart_open) 위임 ─────────────────────────────────
 
     [Fact]

@@ -21,6 +21,9 @@ internal sealed class FakeSerialSession : ISerialSession
     /// <summary>Enqueue 로 들어온 송신 바이트(검증용).</summary>
     public List<byte[]> Sent { get; } = new();
 
+    /// <summary>SetDtrRts 호출 이력(리셋 시퀀스 순서 검증용).</summary>
+    public List<(bool Dtr, bool Rts)> ControlLines { get; } = new();
+
     /// <summary>Open() 이 성공/사용중(InUse)/실패(Failed) 중 무엇을 흉내낼지.</summary>
     public FakeOpenMode OpenMode { get; set; } = FakeOpenMode.Success;
 
@@ -45,7 +48,12 @@ internal sealed class FakeSerialSession : ISerialSession
 
     public void Enqueue(ReadOnlyMemory<byte> data) => Sent.Add(data.ToArray());
 
-    public void SetDtrRts(bool dtr, bool rts) { DtrEnabled = dtr; RtsEnabled = rts; }
+    public void SetDtrRts(bool dtr, bool rts)
+    {
+        DtrEnabled = dtr;
+        RtsEnabled = rts;
+        ControlLines.Add((dtr, rts));
+    }
 
     public void Close()
     {

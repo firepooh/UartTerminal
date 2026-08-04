@@ -1,5 +1,7 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using UartTerminal.Core.Terminal;
 
 namespace UartTerminal;
 
@@ -27,6 +29,20 @@ public sealed class AppState
 
     /// <summary>라인별 수신 타임스탬프 표시. 모든 창/탭 공통 전역 설정, 기본 꺼짐.</summary>
     public bool ShowTimestamps { get; set; }
+
+    /// <summary>
+    /// 포트를 열 때 EN 펄스로 보드를 리셋할지(ESP32 devkit 의 DTR/RTS 자동 리셋 회로 이용). 기본 꺼짐.
+    /// 켜면 연결/재연결마다 보드가 재부팅되어 부팅 로그를 처음부터 볼 수 있다.
+    /// </summary>
+    public bool ResetOnOpen { get; set; }
+
+    /// <summary>수신 개행 규약. 기본 CR+LF(개행=LF, CR=줄 처음으로 — 진행바 덮어쓰기 유지).</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public ReceiveNewline NewlineRx { get; set; } = ReceiveNewline.CrLf;
+
+    /// <summary>송신 개행 규약. 기본 CR(esp_console/linenoise 규약).</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public TransmitNewline NewlineTx { get; set; } = TransmitNewline.Cr;
 
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }

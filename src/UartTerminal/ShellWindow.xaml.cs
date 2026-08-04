@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using UartTerminal.Core.Config;
+using UartTerminal.Core.Terminal;
 using UartTerminal.Mcp;
 
 namespace UartTerminal;
@@ -95,6 +96,8 @@ public partial class ShellWindow : Window
         MenuCommandBar.IsChecked = _state.ShowCommandBar;
         MenuDiagCapture.IsChecked = _state.DiagCapture;
         MenuTimestamps.IsChecked = _state.ShowTimestamps;
+        MenuResetOnOpen.IsChecked = _state.ResetOnOpen;
+        SyncNewlineChrome();
         if (_isPrimary)
         {
             RestoreWindowBounds();
@@ -111,7 +114,7 @@ public partial class ShellWindow : Window
 
     private void NewTab()
     {
-        var dlg = new PortSelectDialog(_state.LastPort, _state.LastBaud, _sessions) { Owner = this };
+        var dlg = new PortSelectDialog(_state.LastPort, _state.LastBaud, _sessions, _state) { Owner = this };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
             return;
 
@@ -510,6 +513,8 @@ public partial class ShellWindow : Window
         SyncSplitChrome();
         MenuAutoReconnect.IsChecked = _state.AutoReconnect;
         MenuCommandBar.IsChecked = _state.ShowCommandBar;
+        MenuResetOnOpen.IsChecked = _state.ResetOnOpen;
+        SyncNewlineChrome();
         RefreshMcpChrome();
     }
 
@@ -557,6 +562,14 @@ public partial class ShellWindow : Window
         // Alt+B: 명령 바 토글. Alt 계열이라 터미널 type-through(단독 Ctrl+문자 = 제어 바이트)를 잠식하지 않는다.
         if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.B)
         { ToggleCommandBar(); e.Handled = true; return; }
+        // Alt+R = 하드웨어 리셋, Alt+Shift+R = 부트로더 진입(ESP32 DTR/RTS 자동 리셋 회로).
+        if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.R)
+        {
+            if ((mods & ModifierKeys.Shift) != 0) BoardBootloader();
+            else BoardHardReset();
+            e.Handled = true;
+            return;
+        }
     }
 
     /// <summary>Ctrl+마우스휠 → 활성 창(패널)의 폰트 크기 조절(스크롤 대신). Ctrl 없으면 뷰가 스크롤 처리.</summary>
@@ -586,6 +599,68 @@ public partial class ShellWindow : Window
                 foreach (var d in w.AllDocs()) d.CancelAutoReconnect();
         }
     }
+    // ── 보드 제어(ESP32 DTR/RTS 자동 리셋 회로) ─────────────────────────────────
+    // 시퀀스는 100ms+50ms 대기가 있어 비동기다. 결과는 문서가 상태바로 보고하므로 여기서는 기다리지 않는다.
+
+    private void HardReset_Click(object sender, RoutedEventArgs e) => BoardHardReset();
+    private void Bootloader_Click(object sender, RoutedEventArgs e) => BoardBootloader();
+
+    private void BoardHardReset() => _ = ActiveDoc?.HardResetAsync();
+    private void BoardBootloader() => _ = ActiveDoc?.EnterBootloaderAsync();
+
+    private void ResetOnOpen_Click(object sender, RoutedEventArgs e)
+    {
+        bool on = MenuResetOnOpen.IsChecked;
+        _state.ResetOnOpen = on;
+        _state.Save();
+        // 전역 설정 — 모든 창/탭의 접속 파라미터와 메뉴 체크를 동기화(AutoReconnect 와 같은 방침).
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+        {
+            w.MenuResetOnOpen.IsChecked = on;
+            foreach (var d in w.AllDocs()) d.SetResetOnOpen(on);
+        }
+    }
+
+    // ── 개행(New-line) 규약 ──────────────────────────────────────────────────────
+
+    private void NewlineRx_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag } || !Enum.TryParse<ReceiveNewline>(tag, out var mode))
+            return;
+        _state.NewlineRx = mode;
+        _state.Save();
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+        {
+            w.SyncNewlineChrome();
+            foreach (var d in w.AllDocs()) d.SetReceiveNewline(mode);
+        }
+    }
+
+    private void NewlineTx_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag } || !Enum.TryParse<TransmitNewline>(tag, out var mode))
+            return;
+        _state.NewlineTx = mode;
+        _state.Save();
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+        {
+            w.SyncNewlineChrome();
+            foreach (var d in w.AllDocs()) d.SetTransmitNewline(mode);
+        }
+    }
+
+    /// <summary>개행 메뉴의 체크를 현재 설정과 동기화(라디오 동작).</summary>
+    private void SyncNewlineChrome()
+    {
+        MenuRxCrLf.IsChecked = _state.NewlineRx == ReceiveNewline.CrLf;
+        MenuRxLf.IsChecked = _state.NewlineRx == ReceiveNewline.Lf;
+        MenuRxCr.IsChecked = _state.NewlineRx == ReceiveNewline.Cr;
+        MenuRxAuto.IsChecked = _state.NewlineRx == ReceiveNewline.Auto;
+        MenuTxCr.IsChecked = _state.NewlineTx == TransmitNewline.Cr;
+        MenuTxCrLf.IsChecked = _state.NewlineTx == TransmitNewline.CrLf;
+        MenuTxLf.IsChecked = _state.NewlineTx == TransmitNewline.Lf;
+    }
+
     private void SaveSession_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentAsSession();
 
     private void ManageSessions_Click(object sender, RoutedEventArgs e)

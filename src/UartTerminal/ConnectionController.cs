@@ -64,6 +64,26 @@ public sealed class ConnectionController
     /// <summary>현재 세션에 송신 데이터 적재(키 입력/DSR 응답 등). 세션 없으면 무시.</summary>
     public void Enqueue(ReadOnlyMemory<byte> data) => _session?.Enqueue(data);
 
+    /// <summary>
+    /// 제어선 시퀀스(ESP32 하드웨어 리셋/부트로더 진입)를 현재 세션에 적용한다.
+    /// 단계 사이에 대기가 있어 비동기이며, 도중 세션이 바뀌면 중단한다(엉뚱한 보드에 펄스가 가지 않게).
+    /// </summary>
+    public async Task<bool> ApplyControlLinesAsync(IReadOnlyList<ControlLineStep> steps,
+                                                   CancellationToken ct = default)
+    {
+        var s = _session;
+        if (s is null || !s.IsOpen) return false;
+
+        foreach (var step in steps)
+        {
+            if (!ReferenceEquals(_session, s) || !s.IsOpen) return false;
+            s.SetDtrRts(step.Dtr, step.Rts);
+            if (step.DelayMs > 0)
+                await Task.Delay(step.DelayMs, ct).ConfigureAwait(true);
+        }
+        return true;
+    }
+
     // ── 오픈 ─────────────────────────────────────────────────────────────────────
 
     /// <summary>세션 오픈 핵심(조용함: 팝업/포커스 없음). 성공 시 세션 설정 + 'AI 양보' 해제.</summary>

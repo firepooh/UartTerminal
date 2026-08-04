@@ -80,6 +80,11 @@ public sealed class SerialPortSession : ISerialSession
         var ct = _cts.Token;
         _rxTask = Task.Run(() => RxLoopAsync(ct));
         _txTask = Task.Run(() => TxLoopAsync(ct));
+
+        // '열 때 보드 리셋' 옵션: RX 루프를 먼저 띄운 뒤 펄스를 줘야 부팅 로그 첫 줄부터 받는다.
+        // 약 150ms 블록되지만 오픈 경로 자체가 이미 동기(블록)이므로 호출자 계약은 그대로다.
+        if (Params.ResetOnOpen)
+            EspResetSequence.Apply(this, EspResetSequence.HardReset);
     }
 
     public void Enqueue(ReadOnlyMemory<byte> data)

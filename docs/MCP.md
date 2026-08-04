@@ -2,7 +2,7 @@
 
 UartTerminal은 **내장 MCP(Model Context Protocol) 서버**를 품고 있어, 사용자가 터미널로 UART 포트를 쓰는 **동시에** AI(Claude Code)가 같은 포트를 읽고 쓸 수 있다. AI가 보낸 데이터는 터미널 화면에 `[AI→]` 메타 라인으로 표시되어 사용자 입력과 시각적으로 구분된다.
 
-이 문서는 MCP 서버의 구조, 등록 방법, 접근 제어, 그리고 제공하는 8개 도구의 사용법을 다룬다.
+이 문서는 MCP 서버의 구조, 등록 방법, 접근 제어, 그리고 제공하는 9개 도구의 사용법을 다룬다.
 
 ---
 
@@ -63,7 +63,7 @@ claude mcp add uart-com4 -- "C:\path\to\UartTerminal.McpRelay.exe" COM4
 
 ## 3. 접근 제어
 
-| 상태 | 읽기 계열<br>(`uart_status`/`uart_read`/`uart_expect`/`uart_screen`) | 쓰기·제어 계열<br>(`uart_send`/`uart_set_dtr_rts`/`uart_close`/`uart_open`) |
+| 상태 | 읽기 계열<br>(`uart_status`/`uart_read`/`uart_expect`/`uart_screen`) | 쓰기·제어 계열<br>(`uart_send`/`uart_set_dtr_rts`/`uart_reset`/`uart_close`/`uart_open`) |
 |---|---|---|
 | **비활성** (MCP 꺼짐) | 파이프 자체가 닫혀 호출 불가 | 불가 |
 | **활성 + 읽기 전용** | 허용 | 차단 → `error: "read_only"` |
@@ -74,7 +74,7 @@ claude mcp add uart-com4 -- "C:\path\to\UartTerminal.McpRelay.exe" COM4
 
 ---
 
-## 4. 도구 레퍼런스 (8종)
+## 4. 도구 레퍼런스 (9종)
 
 모든 반환값은 snake_case JSON이다. 시간이 걸리는 값은 `error` 필드로 사유를 명시한다.
 
@@ -95,8 +95,8 @@ UART로 텍스트를 전송한다. 사용자 입력과 **동일한 단일 TX 큐
 
 | 인자 | 기본 | 의미 |
 |---|---|---|
-| `text` | (필수) | 전송할 텍스트. 내부 개행은 CR로 정규화 |
-| `append_newline` | `true` | 끝에 CR을 붙임(esp_console 명령처럼 실행) |
+| `text` | (필수) | 전송할 텍스트. 내부 개행은 **송신 개행 설정값**(기본 CR)으로 정규화 — 사용자 입력과 같은 규약 |
+| `append_newline` | `true` | 끝에 개행을 붙임(esp_console 명령처럼 실행) |
 
 반환: `ok`, `bytes_sent`, `error?`
 
@@ -142,12 +142,23 @@ DTR/RTS 제어선을 설정. ESP32 리셋/부트로더 진입 시퀀스 등에 �
 
 반환: `ok`, `dtr`, `rts`, `error?`
 
-### 4.7 `uart_close` (제어, 읽기전용 시 차단) — 신규
+### 4.7 `uart_reset` (제어, 읽기전용 시 차단) — 신규
+ESP32 devkit 의 자동 프로그램 회로(DTR→IO0 / RTS→EN)로 보드를 리셋한다. `uart_set_dtr_rts` 를 여러 번 호출하는 것과 달리 **대기 시간(100ms/50ms)이 보장**돼 왕복 없이 한 번에 끝난다.
+
+| 인자 | 기본 | 의미 |
+|---|---|---|
+| `bootloader` | `false` | `false`=일반 리셋(부팅 로그를 처음부터 관측), `true`=IO0=LOW 로 다운로드(플래싱) 모드 진입 |
+
+반환: `ok`, `mode`(`hard` | `bootloader`), `dtr`, `rts`, `error?`
+
+화면에는 `[AI→] 하드웨어 리셋(EN 펄스)` 메타 라인이 남는다. 시퀀스 상세와 극성(assert=LOW)은 [README §2.2](../README.md#22-보드-리셋--부트로더-진입-esp32-devkit).
+
+### 4.8 `uart_close` (제어, 읽기전용 시 차단) — 신규
 터미널이 점유한 포트를 **닫아 양보**한다. `esptool` 같은 외부 도구가 포트를 독점해야 할 때 호출. 반환 후 포트가 해제된다. 닫혀 있는 동안 **자동 재연결(USB 재접속 감시)은 일시 중지**된다.
 
 반환: `ok`, `connected`(false), `port`, `state`(`closed` | `already_closed`), `error?`
 
-### 4.8 `uart_open` (제어, 읽기전용 시 차단) — 신규
+### 4.9 `uart_open` (제어, 읽기전용 시 차단) — 신규
 `uart_close`로 양보했거나 끊긴 포트를 **같은 포트명·같은 설정**으로 다시 연다. 외부 작업 종료 후 호출.
 
 반환: `ok`, `connected`, `port`, `state`(`open` | `already_open` | `in_use` | `error`), `error?`
@@ -232,7 +243,7 @@ DTR/RTS 제어선을 설정. ESP32 리셋/부트로더 진입 시퀀스 등에 �
 
 | 파일 | 역할 |
 |---|---|
-| `src/UartTerminal/Mcp/UartMcpTools.cs` | 8개 MCP 도구 정의(속성/설명) |
+| `src/UartTerminal/Mcp/UartMcpTools.cs` | 9개 MCP 도구 정의(속성/설명) |
 | `src/UartTerminal/Mcp/UartBridge.cs` | 스레드 안전 파사드(세션·링버퍼·접근제어·포트 제어 위임) |
 | `src/UartTerminal/Mcp/McpPipeServer.cs` | 포트별 Named Pipe 위의 in-process MCP 서버 |
 | `src/UartTerminal.McpRelay/Program.cs` | stdio ↔ Named Pipe 릴레이 exe |

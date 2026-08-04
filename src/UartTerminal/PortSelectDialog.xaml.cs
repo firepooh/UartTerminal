@@ -22,6 +22,9 @@ public partial class PortSelectDialog : Window
 
     private readonly SessionStore? _sessions;
 
+    /// <summary>'열 때 보드 리셋' 은 전역 설정이라 다이얼로그가 직접 읽고 쓴다(없으면 체크박스 숨김).</summary>
+    private readonly AppState? _state;
+
     /// <summary>세션 선택으로 지정된 포트(감지 목록에 없을 수도 있다 — 그 경우 자동 재연결 대기로 이어진다).</summary>
     private string? _sessionPort;
 
@@ -37,13 +40,24 @@ public partial class PortSelectDialog : Window
     public string? SelectedCommandGroup { get; private set; }
 
     public PortSelectDialog(string? preselectPort = null, int preselectBaud = DefaultBaud,
-                            SessionStore? sessions = null)
+                            SessionStore? sessions = null, AppState? state = null)
     {
         InitializeComponent();
         _sessions = sessions;
+        _state = state;
+        if (state is null) ResetOnOpenCheck.Visibility = Visibility.Collapsed;
+        else ResetOnOpenCheck.IsChecked = state.ResetOnOpen;
         BuildBaudChips(preselectBaud);
         LoadSessions();
         RefreshPorts(preselectPort);
+    }
+
+    /// <summary>전역 설정이므로 즉시 저장한다(취소해도 유지 — 메뉴의 [포트 열 때 보드 리셋] 과 같은 값).</summary>
+    private void ResetOnOpen_Click(object sender, RoutedEventArgs e)
+    {
+        if (_state is null) return;
+        _state.ResetOnOpen = ResetOnOpenCheck.IsChecked == true;
+        _state.Save();
     }
 
     // ── 세션 ─────────────────────────────────────────────────────────────────────

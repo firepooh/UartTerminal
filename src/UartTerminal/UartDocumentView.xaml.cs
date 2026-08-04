@@ -90,14 +90,15 @@ public partial class UartDocumentView : UserControl
     private Window? OwnerWindow => Window.GetWindow(this);
 
     /// <summary>
-    /// 통신 속도만 바꾼 접속 파라미터. 나머지는 고정(README §2) — 특히 DTR/RTS deassert 는
-    /// ESP32 의 의도치 않은 리셋/부트모드 진입을 막는 안전장치(R2)라 사용자에게 노출하지 않는다.
+    /// 통신 속도 + '열 때 보드 리셋' 만 반영한 접속 파라미터. 나머지는 고정(README §2) —
+    /// 오픈 시 DTR/RTS deassert 는 ESP32 의 의도치 않은 리셋/부트모드 진입을 막는 안전장치(R2)다.
+    /// 리셋을 <b>원할 때</b>만 오픈 직후 EN 펄스를 주도록 ResetOnOpen 으로 분리했다.
     /// 범위를 벗어난 값(손편집된 state.json 등)은 기본값으로 되돌린다.
     /// </summary>
-    private static SerialConnectionParams MakeParams(int baud)
+    private SerialConnectionParams MakeParams(int baud)
     {
         int b = baud is >= 300 and <= 4_000_000 ? baud : PortSelectDialog.DefaultBaud;
-        return new SerialConnectionParams { BaudRate = b };
+        return new SerialConnectionParams { BaudRate = b, ResetOnOpen = _state.ResetOnOpen };
     }
 
     // ── 연결 수명주기 ──────────────────────────────────────────────────────────
@@ -118,7 +119,8 @@ public partial class UartDocumentView : UserControl
     public void ReconnectViaDialog()
     {
         string? preselect = string.IsNullOrEmpty(_portName) ? _state.LastPort : _portName;
-        var dlg = new PortSelectDialog(preselect, _params.BaudRate) { Owner = OwnerWindow };
+        // sessions:null — 재연결은 '지금 이 탭의 포트를 다시 고르는' 흐름이라 세션 목록을 띄우지 않는다(기존 동작 유지).
+        var dlg = new PortSelectDialog(preselect, _params.BaudRate, sessions: null, state: _state) { Owner = OwnerWindow };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
         {
             // 취소는 아무것도 바꾸지 않아야 한다. 특히 진행 중인 자동 재연결 대기를 죽이면
@@ -159,14 +161,19 @@ public partial class UartDocumentView : UserControl
     {
         if (_engine is not null) return;
 
-        _engine = new TerminalEngine(new UTF8Encoding(false), maxLines: 10_000);
-        _bridge = new UartBridge(_engine);
+        _engine = new TerminalEngine(new UTF8Encoding(false), maxLines: 10_000)
+        {
+            ReceiveNewline = _state.NewlineRx,
+        };
+        _bridge = new UartBridge(_engine) { TransmitNewline = _state.NewlineTx };
 
         // 연결 수명주기(세션/재연결/양보/지연콜백 무력화)는 UI 비의존 컨트롤러가 소유.
         // 호스트는 세션 생성 팩토리·UI 마샬링(post)·상태 알림(notify)·상태바만 배선한다.
         _conn = new ConnectionController(
             _engine, _bridge,
-            factory: () => new SerialPortSession(_portName, _params),
+            // 파라미터를 열 때마다 새로 만든다 — '열 때 보드 리셋' 같은 전역 설정을 다른 창에서 바꿔도
+            // 이 탭의 자동 재연결/MCP 재오픈까지 즉시 반영된다(캐시된 _params 로 인한 불일치 방지).
+            factory: () => new SerialPortSession(_portName, MakeParams(_params.BaudRate)),
             portName: () => _portName,
             post: a => Dispatcher.BeginInvoke(a),
             autoReconnect: () => _state.AutoReconnect,
@@ -316,7 +323,7 @@ public partial class UartDocumentView : UserControl
 
         if (!IsConnected) return;
 
-        var bytes = KeyMap.Map(e.Key, mods);
+        var bytes = KeyMap.Map(e.Key, mods, _state.NewlineTx);
         if (bytes is not null)
         {
             Send(bytes);
@@ -360,10 +367,10 @@ public partial class UartDocumentView : UserControl
         InputBox.Clear();
     }
 
-    /// <summary>한 줄 전송 + 히스토리 적재. 입력창 전송과 칩 전송이 같은 경로를 쓰도록 분리(개행 규약 CR 단일).</summary>
+    /// <summary>한 줄 전송 + 히스토리 적재. 입력창 전송과 칩 전송이 같은 경로를 쓰도록 분리(개행은 송신 설정값).</summary>
     private void SendLine(string line)
     {
-        Send(_txEncoding.GetBytes(line + "\r"));
+        Send(_txEncoding.GetBytes(line + _state.NewlineTx.Text()));
         if (!string.IsNullOrEmpty(line))
         {
             _history.Add(line);
@@ -629,7 +636,9 @@ public partial class UartDocumentView : UserControl
             if (r != MessageBoxResult.OK) return;
         }
 
-        text = text.Replace("\r\n", "\r").Replace('\n', '\r');
+        // 클립보드의 개행(CRLF/LF/CR)을 송신 개행 설정값 하나로 정규화한다.
+        string nl = _state.NewlineTx.Text();
+        text = text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", nl);
         Send(_txEncoding.GetBytes(text));
     }
 
@@ -715,6 +724,59 @@ public partial class UartDocumentView : UserControl
 
     /// <summary>라인별 수신 타임스탬프 표시 토글(전역 설정).</summary>
     public void SetTimestamps(bool on) { if (_view is not null) _view.ShowTimestamps = on; }
+
+    // ── 개행 규약 / 제어선(ESP32 리셋·부트로더) ─────────────────────────────────
+
+    /// <summary>수신 개행 규약 변경(전역 설정 → 모든 탭에 즉시 적용). 이미 그려진 화면은 바꾸지 않는다.</summary>
+    public void SetReceiveNewline(ReceiveNewline mode)
+    {
+        if (_engine is not null) _engine.ReceiveNewline = mode;
+        RefreshMetrics();
+    }
+
+    /// <summary>송신 개행 규약 변경. 사용자 입력 경로는 _state 를 직접 보므로 AI 경로(브리지)만 맞춰준다.</summary>
+    public void SetTransmitNewline(TransmitNewline mode)
+    {
+        if (_bridge is not null) _bridge.TransmitNewline = mode;
+        RefreshMetrics();
+    }
+
+    /// <summary>'열 때 보드 리셋' 설정 변경. 실제 값은 세션 팩토리가 열 때마다 _state 에서 다시 읽는다.</summary>
+    public void SetResetOnOpen(bool on) => _params = MakeParams(_params.BaudRate);
+
+
+    // 리셋 시퀀스는 100ms+50ms 대기가 있어 비동기다. 중복 실행(연타)을 막는 가드.
+    private bool _resetting;
+
+    /// <summary>하드웨어 리셋(EN 펄스) — 보드를 재부팅한다.</summary>
+    public Task HardResetAsync() => RunControlSequenceAsync(EspResetSequence.HardReset, "하드웨어 리셋");
+
+    /// <summary>부트로더(다운로드 모드) 진입 — IO0=LOW 상태로 리셋을 해제한다.</summary>
+    public Task EnterBootloaderAsync() => RunControlSequenceAsync(EspResetSequence.Bootloader, "부트로더 진입");
+
+    private async Task RunControlSequenceAsync(IReadOnlyList<ControlLineStep> steps, string what)
+    {
+        if (_conn is null || !IsConnected)
+        {
+            SetStatus($"{what} 불가 — 연결되지 않음");
+            return;
+        }
+        if (_resetting) return;
+
+        _resetting = true;
+        SetStatus($"{what}…");
+        try
+        {
+            bool ok = await _conn.ApplyControlLinesAsync(steps);
+            SetStatus(ok ? $"{what} 완료 ({_portName})" : $"{what} 실패 — 연결 상태 확인");
+        }
+        catch (Exception ex)
+        {
+            DiagLog.Exception(what, ex);
+            SetStatus($"{what} 실패: {ex.Message}");
+        }
+        finally { _resetting = false; }
+    }
 
     // ── 스크롤백 검색(Ctrl+F) ──────────────────────────────────────────────────
     // 논리 라인 버퍼에서 대소문자 무시 부분일치를 찾아 하이라이트하고 이전/다음으로 이동한다.
@@ -860,9 +922,12 @@ public partial class UartDocumentView : UserControl
         string font = _view is null ? "" : $"  ·  {_view.FontSize:0.#}pt";
         // 명령 그룹이 여러 개일 때만 표시 — 지금 어느 세트가 적용됐는지 드롭다운을 열지 않아도 알 수 있게.
         string group = _commands.Groups.Count > 1 && CurrentCommandGroup is { } g ? $"  ·  CMD:{g}" : "";
+        // 개행 규약은 기본값(RX CR+LF / TX CR)이 아닐 때만 표시 — 바꿔 놓은 걸 잊고 헤매지 않게.
+        bool nlDefault = _state.NewlineRx == ReceiveNewline.CrLf && _state.NewlineTx == TransmitNewline.Cr;
+        string nl = nlDefault ? "" : $"  ·  NL↓{_state.NewlineRx.Label()} ↑{_state.NewlineTx.Label()}";
         MetricsMessage = IsConnected
-            ? $"{_portName}  {_params.Summary()}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}  ·  UTF-8"
-            : $"(연결 안 됨)  ·  {_view?.Columns}×{_view?.Rows}{font}{group}";
+            ? $"{_portName}  {_params.Summary()}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}  ·  UTF-8"
+            : $"(연결 안 됨)  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}";
         MetricsChanged?.Invoke(MetricsMessage);
     }
 

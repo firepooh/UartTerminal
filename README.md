@@ -42,12 +42,44 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 |------|-----|------|
 | Speed | 115200 (기본) — 74880 / 230400 / 460800 / 921600 중 선택 | 포트 선택 다이얼로그, `state.json` 에 마지막 값 기억 |
 | Data / Parity / Stop / Flow | 8 bit / none / 1 bit / none | 고정 |
-| New-line | Receive: CR, Transmit: CR | |
+| New-line | Receive: CR+LF(기본) / LF / CR / AUTO, Transmit: CR(기본) / CR+LF / LF | [터미널]>개행, `state.json` (§2.1) |
 | Local echo | OFF | |
 | 수신 인코딩 | UTF-8 (증분 디코더) | ESP-IDF 로그 기준 |
 | 폰트 | D2Coding 권장 (한글 2:1 고정폭), 없으면 Consolas+맑은 고딕 폴백 | |
-| DTR / RTS (오픈 시) | 둘 다 deassert — **보드 리셋 안 함** | ESP32 오동작 방지 (§7 R2) |
+| DTR / RTS (오픈 시) | 둘 다 deassert — **보드 리셋 안 함**(기본) | ESP32 오동작 방지 (§7 R2). 원할 때만 '열 때 리셋'(§2.2) |
 | 스크롤백 | 10,000 논리 라인 (순환 버퍼) | |
+
+### 2.1 개행(New-line) 규약
+
+TeraTerm 의 [Setup > Terminal] New-line 에 대응한다. **전역 설정**이며 [터미널] > 개행(New-line) 에서 바꾸고
+기본값이 아닐 때만 상태바에 `NL↓… ↑…` 로 표시된다. 우리 화면 모델은 셀 격자가 아니라 **논리 라인 로그**라
+LF 만 와도 계단 현상이 없으므로, 각 모드는 "어느 바이트를 개행으로 볼지"의 선택이다.
+
+| 수신 모드 | CR | LF | 쓰는 경우 |
+|---|---|---|---|
+| **CR+LF** (기본) | 줄 처음으로(덮어쓰기) | 개행 | ESP-IDF 등 대부분. `\r` 진행바 갱신이 살아 있다 |
+| LF | 무시 | 개행 | `\r` 로 덮어쓰지 않고 받은 순서대로 남기고 싶을 때 |
+| CR | 개행 (뒤따르는 LF 흡수) | 무시 | CR 만 개행으로 쓰는 장치 |
+| AUTO | 개행 | 개행 | CR·LF·CR+LF·LF+CR 어느 쪽이든 개행 1회(TeraTerm AUTO 규칙). 붙어 있는 쌍만 합치므로 `CR CR` 은 2줄, 단독 `\r` 덮어쓰기는 개행이 된다 |
+
+송신 모드(CR / CR+LF / LF)는 **Enter 키 · 입력바 · 명령 칩 · 붙여넣기 · AI(`uart_send`)** 모든 경로에 같이 적용된다.
+
+### 2.2 보드 리셋 / 부트로더 진입 (ESP32 devkit)
+
+ESP32 개발보드는 USB-시리얼의 **DTR→IO0, RTS→EN** 이 트랜지스터 2개로 교차 결합돼 있다(자동 프로그램 회로).
+`SerialPort.DtrEnable = true` 는 핀을 **LOW** 로 만들므로(assert) 회로도 진리표(1=HIGH)와는 반대로 읽어야 한다:
+
+| Enable(dtr, rts) | 핀 (DTR, RTS) | EN | IO0 | 결과 |
+|---|---|---|---|---|
+| (false, false) | (1, 1) | 1 | 1 | 정상 실행 ← 오픈 시 기본 |
+| (false, **true**) | (1, 0) | **0** | 1 | 리셋 걸림 |
+| (**true**, false) | (0, 1) | 1 | **0** | 리셋 해제 + 부트로더 진입 |
+
+- **하드웨어 리셋(Alt+R)**: `(false,true)` 100ms → `(false,false)` 50ms — esptool 의 classic reset 과 동일
+- **부트로더 진입(Alt+Shift+R)**: `(false,true)` 100ms → `(true,false)` 50ms → `(false,false)`
+- **포트 열 때 보드 리셋**(기본 꺼짐, [터미널] 메뉴 / 연결 다이얼로그 체크박스): 켜면 연결·자동 재연결·`uart_open`
+  모든 오픈 경로에서 리셋해 부팅 로그를 처음부터 볼 수 있다. RX 루프를 띄운 뒤 펄스를 주므로 첫 줄부터 잡힌다
+- AI 경로는 MCP `uart_reset(bootloader)` — 타이밍이 보장돼 왕복 없이 한 번에 리셋한다
 
 ## 3. Phase 계획
 
@@ -73,7 +105,7 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 - **SDK**: 공식 C# SDK — NuGet [`ModelContextProtocol`](https://www.nuget.org/packages/ModelContextProtocol)
 - **전송(권장, §6 Q4)**: 인스턴스별 Named Pipe(`\\.\pipe\uartterm-mcp-COM4`) + `StreamServerTransport` + 초소형 stdio 릴레이 exe.
   `.mcp.json`에 `claude mcp add uart-com4 -- UartTermMcp.exe COM4`로 정적 등록. 동적 포트/토큰/방화벽/Kestrel 문제가 모두 사라짐. 파이프 ACL은 현재 사용자 전용. GUI에 "등록 명령 복사" 버튼.
-- **도구(8종)**: `uart_status`, `uart_send`(원자적 전송), `uart_read`(단조 증가 커서, 유실 시 `dropped_bytes` 명시, `strip_ansi` 기본 true), `uart_expect`(regex+timeout — polling 왕복 최소화), `uart_screen`, `uart_set_dtr_rts`, `uart_close`/`uart_open`(포트 양보/재점유 — esptool 등 외부 플래싱 도구용)
+- **도구(9종)**: `uart_status`, `uart_send`(원자적 전송), `uart_read`(단조 증가 커서, 유실 시 `dropped_bytes` 명시, `strip_ansi` 기본 true), `uart_expect`(regex+timeout — polling 왕복 최소화), `uart_screen`, `uart_set_dtr_rts`, `uart_reset`(리셋/부트로더 진입 시퀀스 — §2.2), `uart_close`/`uart_open`(포트 양보/재점유 — esptool 등 외부 플래싱 도구용)
 - **AI TX 화면 표시**: 수신 스트림에 섞지 않고 버퍼의 **메타 라인 타입**으로 삽입 (예: 회색 배경 `[AI→] ...`)
 - **접근 제어**: MCP 활성/비활성 토글 + AI 읽기 전용(TX·제어·포트 열기/닫기 차단) 모드 + 상태바 인디케이터
 - **포트 양보(플래싱)**: `uart_close`로 포트를 해제 → 셸에서 `esptool` 실행 → `uart_open`으로 재연결. 양보 중에는 자동 재연결이 중지되고 탭에 `[AI 양보]`로 표시.

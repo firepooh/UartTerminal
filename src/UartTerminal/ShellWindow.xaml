@@ -93,6 +93,31 @@
                 <MenuItem x:Name="MenuAutoReconnect" Header="자동 재연결 (USB 재접속 시)"
                           IsCheckable="True" Click="AutoReconnect_Click"/>
                 <Separator/>
+                <!-- ESP32 devkit 의 DTR→IO0 / RTS→EN 자동 리셋 회로를 이용한 보드 제어 -->
+                <MenuItem Header="하드웨어 리셋 (EN 펄스)" InputGestureText="Alt+R" Click="HardReset_Click"/>
+                <MenuItem Header="부트로더 모드 진입 (IO0=LOW)" InputGestureText="Alt+Shift+R" Click="Bootloader_Click"/>
+                <MenuItem x:Name="MenuResetOnOpen" Header="포트 열 때 보드 리셋"
+                          IsCheckable="True" Click="ResetOnOpen_Click"/>
+                <Separator/>
+                <MenuItem Header="개행(New-line)">
+                    <MenuItem Header="수신(Receive)">
+                        <MenuItem x:Name="MenuRxCrLf" Header="CR+LF  — 개행=LF, CR=줄 처음으로(기본)"
+                                  IsCheckable="True" Click="NewlineRx_Click" Tag="CrLf"/>
+                        <MenuItem x:Name="MenuRxLf" Header="LF  — 개행=LF, CR 무시"
+                                  IsCheckable="True" Click="NewlineRx_Click" Tag="Lf"/>
+                        <MenuItem x:Name="MenuRxCr" Header="CR  — 개행=CR, LF 무시"
+                                  IsCheckable="True" Click="NewlineRx_Click" Tag="Cr"/>
+                        <MenuItem x:Name="MenuRxAuto" Header="AUTO  — CR/LF/CR+LF 모두 개행"
+                                  IsCheckable="True" Click="NewlineRx_Click" Tag="Auto"/>
+                    </MenuItem>
+                    <MenuItem Header="송신(Transmit)">
+                        <MenuItem x:Name="MenuTxCr" Header="CR  — esp_console 기본"
+                                  IsCheckable="True" Click="NewlineTx_Click" Tag="Cr"/>
+                        <MenuItem x:Name="MenuTxCrLf" Header="CR+LF" IsCheckable="True" Click="NewlineTx_Click" Tag="CrLf"/>
+                        <MenuItem x:Name="MenuTxLf" Header="LF" IsCheckable="True" Click="NewlineTx_Click" Tag="Lf"/>
+                    </MenuItem>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="현재 연결을 세션으로 저장(_S)…" Click="SaveSession_Click"/>
                 <MenuItem Header="세션 관리(_M)…" Click="ManageSessions_Click"/>
                 <Separator/>

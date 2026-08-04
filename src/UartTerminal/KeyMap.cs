@@ -1,17 +1,18 @@
 using System.Windows.Input;
+using UartTerminal.Core.Terminal;
 
 namespace UartTerminal;
 
 /// <summary>
 /// type-through 입력 키맵(README §6 Q1). 특수 키를 송신 바이트로 변환한다.
 /// 일반 문자(글자/숫자/한글 등)는 여기서 null 을 반환하고 TextInput 경로에서 처리한다.
-/// 화살표=ESC[A~D(linenoise 히스토리/커서), Backspace=0x7F.
+/// 화살표=ESC[A~D(linenoise 히스토리/커서), Backspace=0x7F, Enter=송신 개행 설정값(기본 CR).
 /// </summary>
 public static class KeyMap
 {
     private const byte ESC = 0x1B;
 
-    public static byte[]? Map(Key key, ModifierKeys mods)
+    public static byte[]? Map(Key key, ModifierKeys mods, TransmitNewline newline = TransmitNewline.Cr)
     {
         bool ctrlOnly = mods == ModifierKeys.Control;
 
@@ -21,7 +22,7 @@ public static class KeyMap
 
         switch (key)
         {
-            case Key.Enter: return new byte[] { 0x0D };      // New-line Transmit = CR
+            case Key.Enter: return newline.Bytes();          // New-line Transmit 설정값
             case Key.Back: return new byte[] { 0x7F };       // Backspace = DEL
             case Key.Tab: return new byte[] { 0x09 };
             case Key.Escape: return new byte[] { ESC };

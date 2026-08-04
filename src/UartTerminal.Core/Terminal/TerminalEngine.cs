@@ -21,6 +21,13 @@ public sealed class TerminalEngine
         set => _parser.Respond = value;
     }
 
+    /// <summary>수신 개행 규약(CR/LF/CR+LF/자동). 버퍼 락 안에서 바꿔 수신 스레드와 경합하지 않게 한다.</summary>
+    public ReceiveNewline ReceiveNewline
+    {
+        get => _parser.ReceiveNewline;
+        set { lock (Buffer.SyncRoot) _parser.ReceiveNewline = value; }
+    }
+
     public TerminalEngine(Encoding? encoding = null, int maxLines = 10_000)
     {
         Buffer = new TerminalBuffer(maxLines);

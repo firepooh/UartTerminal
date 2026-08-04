@@ -68,6 +68,16 @@ public sealed record DtrRtsResult
     [JsonPropertyName("error")] public string? Error { get; init; }
 }
 
+public sealed record ResetResult
+{
+    [JsonPropertyName("ok")] public bool Ok { get; init; }
+    /// <summary>hard(EN 펄스) / bootloader(다운로드 모드 진입)</summary>
+    [JsonPropertyName("mode")] public string Mode { get; init; } = "";
+    [JsonPropertyName("dtr")] public bool Dtr { get; init; }
+    [JsonPropertyName("rts")] public bool Rts { get; init; }
+    [JsonPropertyName("error")] public string? Error { get; init; }
+}
+
 public sealed record PortActionResult
 {
     [JsonPropertyName("ok")] public bool Ok { get; init; }
@@ -80,7 +90,7 @@ public sealed record PortActionResult
 
 /// <summary>
 /// MCP 툴과 WPF 앱 사이의 스레드 안전 파사드(README 기능 3). 시리얼 세션·터미널 엔진·수신 링버퍼·접근제어
-/// 상태를 한곳에서 감싸, MCP 서버 스레드에서 호출되는 8개 툴이 안전하게 포트를 공유하도록 한다.
+/// 상태를 한곳에서 감싸, MCP 서버 스레드에서 호출되는 9개 툴이 안전하게 포트를 공유하도록 한다.
 ///  - TX 는 단일 큐(<see cref="ISerialSession.Enqueue"/>)로 직렬화되어 사용자 입력과 원자적으로 섞인다.
 ///  - AI 송신은 화면에 <c>[AI→]</c> 메타 라인으로 표시(수신 스트림과 구분).
 ///  - 접근제어: 비활성/읽기전용에서 TX·제어선 변경·포트 열기/닫기를 차단.
@@ -108,6 +118,7 @@ public sealed class UartBridge
 
     private volatile bool _enabled;
     private volatile bool _readOnly;
+    private volatile TransmitNewline _txNewline = TransmitNewline.Cr;
 
     // 포트 열기/닫기 핸들러(문서가 UI 스레드에서 Dispatcher 로 마샬링하여 수행). null 이면 not_supported.
     private volatile Func<Task<PortActionResult>>? _closeHandler;
@@ -120,6 +131,9 @@ public sealed class UartBridge
 
     /// <summary>AI 읽기 전용(TX/제어선 변경 차단, 읽기·상태·화면은 허용).</summary>
     public bool ReadOnly { get => _readOnly; set => _readOnly = value; }
+
+    /// <summary>AI 송신에 쓸 개행 규약(사용자 설정과 동일하게 유지 — 장치가 LF 를 기대하면 AI 도 LF).</summary>
+    public TransmitNewline TransmitNewline { get => _txNewline; set => _txNewline = value; }
 
     public string PortName { get { lock (_gate) return _portName; } }
 
@@ -222,9 +236,10 @@ public sealed class UartBridge
         lock (_gate) s = _session;
         if (s is null || !s.IsOpen) return new SendResult { Ok = false, Error = "disconnected" };
 
-        // 개행을 Transmit New-line(CR)로 정규화(붙여넣기 경로와 동일 방침).
-        string body = text.Replace("\r\n", "\r").Replace('\n', '\r');
-        if (appendNewline && !body.EndsWith('\r')) body += "\r";
+        // 개행을 Transmit New-line 설정값으로 정규화(사용자 붙여넣기 경로와 동일 방침).
+        string nl = _txNewline.Text();
+        string body = text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", nl);
+        if (appendNewline && !body.EndsWith(nl, StringComparison.Ordinal)) body += nl;
 
         byte[] bytes = _utf8.GetBytes(body);
         if (bytes.Length == 0) return new SendResult { Ok = true, BytesSent = 0 };
@@ -394,6 +409,34 @@ public sealed class UartBridge
 
         s.SetDtrRts(dtr, rts);
         return new DtrRtsResult { Ok = true, Dtr = s.DtrEnabled, Rts = s.RtsEnabled };
+    }
+
+    /// <summary>
+    /// ESP32 리셋/부트로더 진입 시퀀스를 수행한다(uart_reset). 제어선을 직접 흔드는 것보다
+    /// 타이밍(100ms/50ms)이 보장돼 AI 가 왕복 없이 한 번에 리셋할 수 있다.
+    /// </summary>
+    public async Task<ResetResult> ResetAsync(bool bootloader, CancellationToken ct = default)
+    {
+        string mode = bootloader ? "bootloader" : "hard";
+        if (!_enabled) return new ResetResult { Ok = false, Mode = mode, Error = "mcp_disabled" };
+        if (_readOnly) return new ResetResult { Ok = false, Mode = mode, Error = "read_only" };
+
+        ISerialSession? s;
+        lock (_gate) s = _session;
+        if (s is null || !s.IsOpen) return new ResetResult { Ok = false, Mode = mode, Error = "disconnected" };
+
+        var steps = bootloader ? EspResetSequence.Bootloader : EspResetSequence.HardReset;
+        try
+        {
+            await EspResetSequence.ApplyAsync(s, steps, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return new ResetResult { Ok = false, Mode = mode, Error = "canceled" };
+        }
+
+        _engine.Buffer.AppendMetaLine(bootloader ? "[AI→] 부트로더 진입(IO0=LOW)" : "[AI→] 하드웨어 리셋(EN 펄스)");
+        return new ResetResult { Ok = true, Mode = mode, Dtr = s.DtrEnabled, Rts = s.RtsEnabled };
     }
 
     /// <summary>포트를 닫아 외부 도구(esptool 등)에 양보. 실제 닫기는 문서가 UI 스레드에서 수행.</summary>

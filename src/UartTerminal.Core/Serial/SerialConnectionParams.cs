@@ -20,6 +20,12 @@ public sealed class SerialConnectionParams
     /// <summary>오픈 시 RTS 상태. 기본 false — ESP32 EN(리셋) 오작동 방지.</summary>
     public bool RtsEnable { get; init; }
 
+    /// <summary>
+    /// 포트를 연 직후 EN 펄스(<see cref="EspResetSequence.HardReset"/>)로 보드를 리셋할지.
+    /// 기본 false(= 리셋하지 않음). 켜면 연결하자마자 부팅 로그를 처음부터 볼 수 있다.
+    /// </summary>
+    public bool ResetOnOpen { get; init; }
+
     public static SerialConnectionParams Default => new();
 
     /// <summary>창 제목/상태바 표기용 요약 (예: 115200 8N1).</summary>

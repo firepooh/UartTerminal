@@ -4,7 +4,7 @@ using ModelContextProtocol.Server;
 namespace UartTerminal.Mcp;
 
 /// <summary>
-/// AI(Claude Code)가 사용자와 같은 UART 포트를 공유해 읽고 쓰는 MCP 툴 8종(README 기능 3 / Phase B).
+/// AI(Claude Code)가 사용자와 같은 UART 포트를 공유해 읽고 쓰는 MCP 툴 9종(README 기능 3 / Phase B).
 /// 실제 동작은 스레드 안전 <see cref="UartBridge"/>에 위임한다. 각 툴 메서드는 MCP 서버 스레드에서 호출된다.
 /// 반환 객체는 JSON(snake_case)으로 직렬화되어 AI 에게 전달된다.
 /// </summary>
@@ -71,6 +71,17 @@ public sealed class UartMcpTools
         [Description("DTR 라인 상태.")] bool dtr,
         [Description("RTS 라인 상태.")] bool rts)
         => _bridge.SetDtrRts(dtr, rts);
+
+    [McpServerTool(Name = "uart_reset", Destructive = true, OpenWorld = false)]
+    [Description("ESP32 보드를 DTR/RTS 자동 리셋 회로로 리셋한다(EN 펄스 100ms → 해제 50ms). " +
+                 "bootloader=false(기본)면 평소처럼 펌웨어를 재부팅하므로 부팅 로그를 처음부터 관측할 수 있고, " +
+                 "bootloader=true 면 IO0=LOW 상태로 리셋을 풀어 다운로드(플래싱) 모드로 진입한다. " +
+                 "uart_set_dtr_rts 를 여러 번 호출하는 것과 달리 대기 시간이 보장된다. " +
+                 "MCP 가 읽기 전용이거나 포트가 연결되지 않았으면 error 를 반환한다.")]
+    public Task<ResetResult> Reset(
+        [Description("true 면 부트로더(다운로드) 모드로 진입. 기본 false(일반 리셋).")] bool bootloader = false,
+        CancellationToken cancellationToken = default)
+        => _bridge.ResetAsync(bootloader, cancellationToken);
 
     [McpServerTool(Name = "uart_close", Destructive = true, OpenWorld = false)]
     [Description("터미널이 점유한 UART 포트를 닫아 다른 프로그램(예: esptool)이 열 수 있게 양보한다. " +

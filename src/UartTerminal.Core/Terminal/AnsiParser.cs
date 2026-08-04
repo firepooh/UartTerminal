@@ -22,6 +22,9 @@ public sealed class AnsiParser
     private State _state = State.Ground;
     private CellAttributes _attr = CellAttributes.Default;
 
+    /// <summary>직전에 처리한 개행 문자('\r'/'\n', 없으면 '\0'). CR+LF 쌍을 한 번으로 합치는 데 쓴다.</summary>
+    private char _lastNewline;
+
     // CSI 파라미터 수집
     private readonly List<int> _params = new(8);
     private int _curParam;
@@ -30,6 +33,9 @@ public sealed class AnsiParser
 
     /// <summary>DSR 응답 등 터미널→호스트 송신이 필요할 때 호출(엔진이 시리얼 TX로 연결).</summary>
     public Action<ReadOnlyMemory<byte>>? Respond { get; set; }
+
+    /// <summary>수신 개행 규약. 기본 <see cref="ReceiveNewline.CrLf"/>(개행=LF, CR=줄 처음으로).</summary>
+    public ReceiveNewline ReceiveNewline { get; set; } = ReceiveNewline.CrLf;
 
     public AnsiParser(ITerminalSink sink) => _sink = sink;
 
@@ -40,6 +46,7 @@ public sealed class AnsiParser
     {
         _state = State.Ground;
         _attr = CellAttributes.Default;
+        _lastNewline = '\0';
         ResetParams();
     }
 
@@ -64,11 +71,14 @@ public sealed class AnsiParser
 
     private void Ground(char ch)
     {
+        // CR/LF 이외의 문자가 오면 개행 쌍(CR+LF/LF+CR) 추적을 끊는다 — 붙어 있는 쌍만 합치기 위해.
+        if (ch != '\r' && ch != '\n') _lastNewline = '\0';
+
         switch (ch)
         {
             case ESC: _state = State.Escape; return;
-            case '\n': _sink.LineFeed(); return;
-            case '\r': _sink.CarriageReturn(); return;
+            case '\n': FeedLf(); return;
+            case '\r': FeedCr(); return;
             case '\b': _sink.Backspace(); return;
             case '\t': _sink.HorizontalTab(_attr); return;
             case BEL: _sink.Bell(); return;
@@ -77,6 +87,52 @@ public sealed class AnsiParser
         if (ch < 0x20)
             return; // 기타 C0 제어(VT/FF/SI/SO 등) 무시
         _sink.Print(ch, _attr);
+    }
+
+    /// <summary>수신 CR 처리 — 모드에 따라 '개행' 또는 '줄 처음으로' 또는 무시.</summary>
+    private void FeedCr()
+    {
+        switch (ReceiveNewline)
+        {
+            case ReceiveNewline.Cr:
+                NewLine();
+                break;
+            case ReceiveNewline.Auto:
+                if (_lastNewline == '\n') { _lastNewline = '\0'; return; } // LF+CR = 개행 1회(이미 처리됨)
+                NewLine();
+                break;
+            case ReceiveNewline.Lf:
+                break; // CR 무시
+            default:
+                _sink.CarriageReturn(); // CR+LF 모드: 줄 처음으로(덮어쓰기)
+                break;
+        }
+        _lastNewline = '\r';
+    }
+
+    /// <summary>수신 LF 처리 — 모드에 따라 '개행' 또는 무시.</summary>
+    private void FeedLf()
+    {
+        switch (ReceiveNewline)
+        {
+            case ReceiveNewline.Cr:
+                break; // 개행은 CR 담당 — LF 무시(CRLF 가 두 줄이 되지 않게)
+            case ReceiveNewline.Auto:
+                if (_lastNewline == '\r') { _lastNewline = '\0'; return; } // CR+LF = 개행 1회(이미 처리됨)
+                NewLine();
+                break;
+            default:
+                _sink.LineFeed(); // CR+LF / LF 모드: LF 가 개행
+                break;
+        }
+        _lastNewline = '\n';
+    }
+
+    /// <summary>개행 1회(줄 처음으로 + 새 줄). 논리 라인 모델에서 LineFeed 가 새 줄을 만든다.</summary>
+    private void NewLine()
+    {
+        _sink.CarriageReturn();
+        _sink.LineFeed();
     }
 
     private void Escape(char ch)
