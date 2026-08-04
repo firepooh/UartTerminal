@@ -680,6 +680,7 @@ public partial class ShellWindow : Window
     private void ClearBuffer_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ClearBuffer();
     private void ScrollEnd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ScrollEnd();
     private void SaveLog_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveVisibleLog();
+    private void Find_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ShowFind();
 
     private void DiagCapture_Click(object sender, RoutedEventArgs e)
     {

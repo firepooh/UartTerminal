@@ -86,20 +86,22 @@
     <DockPanel>
         <Menu DockPanel.Dock="Top"
               Padding="6,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderBrush2}">
+            <!--
+              메뉴 구성 원칙
+               - 최상위는 '관심사' 단위: 연결(터미널) / 편집 / 보기 / 보드 제어 / 창·레이아웃 / 명령 / MCP / 도움말
+               - 접근키는 최상위에서 전부 유니크(T E V D W C M H)하고, 각 메뉴 안에서도 중복되지 않게 배정한다.
+               - 전역 Alt 단축키(Alt+N/I/B/R, Alt+Shift+R)와 겹치는 글자는 접근키로 쓸 수 없다
+                 (창 PreviewKeyDown 이 먼저 처리해 메뉴가 열리지 않는다). 그래서 '보드'는 _B 가 아니라 _D.
+            -->
             <MenuItem Header="터미널(_T)">
-                <MenuItem Header="새 연결(탭 추가)" InputGestureText="Ctrl+T" Click="NewTab_Click"/>
-                <MenuItem Header="재연결" InputGestureText="Alt+N" Click="Reconnect_Click"/>
-                <MenuItem Header="연결 해제" InputGestureText="Alt+I" Click="Disconnect_Click"/>
-                <MenuItem x:Name="MenuAutoReconnect" Header="자동 재연결 (USB 재접속 시)"
+                <MenuItem Header="새 연결(탭 추가)(_N)" InputGestureText="Ctrl+T" Click="NewTab_Click"/>
+                <MenuItem Header="재연결(_R)…" InputGestureText="Alt+N" Click="Reconnect_Click"/>
+                <MenuItem Header="연결 해제(_D)" InputGestureText="Alt+I" Click="Disconnect_Click"/>
+                <MenuItem x:Name="MenuAutoReconnect" Header="자동 재연결 (USB 재접속 시)(_A)"
                           IsCheckable="True" Click="AutoReconnect_Click"/>
                 <Separator/>
-                <!-- ESP32 devkit 의 DTR→IO0 / RTS→EN 자동 리셋 회로를 이용한 보드 제어 -->
-                <MenuItem Header="하드웨어 리셋 (EN 펄스)" InputGestureText="Alt+R" Click="HardReset_Click"/>
-                <MenuItem Header="부트로더 모드 진입 (IO0=LOW)" InputGestureText="Alt+Shift+R" Click="Bootloader_Click"/>
-                <MenuItem x:Name="MenuResetOnOpen" Header="열 때 보드 리셋 (이 탭 · 세션에 저장)"
-                          IsCheckable="True" Click="ResetOnOpen_Click"/>
-                <Separator/>
-                <MenuItem Header="개행(New-line)">
+                <!-- 개행은 회선 설정과 같은 '통신 규약'이라 연결 메뉴에 둔다(서브메뉴로 1줄만 차지) -->
+                <MenuItem Header="개행(New-line)(_L)">
                     <MenuItem Header="수신(Receive)">
                         <MenuItem x:Name="MenuRxCrLf" Header="CR+LF  — 개행=LF, CR=줄 처음으로(기본)"
                                   IsCheckable="True" Click="NewlineRx_Click" Tag="CrLf"/>
@@ -119,53 +121,65 @@
                 </MenuItem>
                 <Separator/>
                 <MenuItem Header="현재 연결을 세션으로 저장(_S)…" Click="SaveSession_Click"/>
-                <MenuItem Header="세션 관리(_M)…" Click="ManageSessions_Click"/>
+                <MenuItem Header="세션 관리(_G)…" Click="ManageSessions_Click"/>
                 <Separator/>
-                <MenuItem Header="새 창으로 분리" Click="Detach_Click"/>
-                <MenuItem Header="메인 창으로 합치기" Click="Merge_Click"/>
-                <MenuItem Header="탭 닫기" InputGestureText="Ctrl+W" Click="CloseTab_Click"/>
+                <MenuItem Header="로그 저장(_V)…" Click="SaveLog_Click"/>
                 <Separator/>
-                <MenuItem Header="종료" Click="Exit_Click"/>
+                <MenuItem Header="탭 닫기(_W)" InputGestureText="Ctrl+W" Click="CloseTab_Click"/>
+                <MenuItem Header="종료(_X)" Click="Exit_Click"/>
             </MenuItem>
             <MenuItem Header="편집(_E)">
-                <MenuItem Header="복사" InputGestureText="Ctrl+Ins" Click="Copy_Click"/>
-                <MenuItem Header="붙여넣기" InputGestureText="Shift+Ins / 우클릭" Click="Paste_Click"/>
+                <MenuItem Header="복사(_C)" InputGestureText="Ctrl+Ins" Click="Copy_Click"/>
+                <MenuItem Header="붙여넣기(_P)" InputGestureText="Shift+Ins / 우클릭" Click="Paste_Click"/>
                 <Separator/>
-                <MenuItem Header="화면 지우기" Click="ClearScreen_Click"/>
-                <MenuItem Header="버퍼 지우기" Click="ClearBuffer_Click"/>
+                <MenuItem Header="찾기(_F)…" InputGestureText="Ctrl+F" Click="Find_Click"/>
                 <Separator/>
-                <MenuItem Header="로그 저장(_L)…" Click="SaveLog_Click"/>
-                <Separator/>
-                <MenuItem Header="맨 아래로" InputGestureText="Ctrl+End" Click="ScrollEnd_Click"/>
+                <MenuItem Header="화면 지우기(_S)" Click="ClearScreen_Click"/>
+                <MenuItem Header="버퍼 지우기(_B)" Click="ClearBuffer_Click"/>
             </MenuItem>
             <MenuItem Header="보기(_V)">
-                <MenuItem Header="폰트 크게" InputGestureText="Ctrl++" Click="FontLarger_Click"/>
-                <MenuItem Header="폰트 작게" InputGestureText="Ctrl+-" Click="FontSmaller_Click"/>
+                <MenuItem Header="폰트 크게(_I)" InputGestureText="Ctrl++ / Ctrl+휠" Click="FontLarger_Click"/>
+                <MenuItem Header="폰트 작게(_O)" InputGestureText="Ctrl+- / Ctrl+휠" Click="FontSmaller_Click"/>
                 <Separator/>
-                <MenuItem x:Name="MenuTimestamps" Header="타임스탬프 표시" IsCheckable="True" Click="Timestamps_Click"/>
+                <MenuItem x:Name="MenuTimestamps" Header="타임스탬프 표시(_T)" IsCheckable="True" Click="Timestamps_Click"/>
                 <Separator/>
-                <MenuItem x:Name="MenuSplitSingle" Header="단일 화면" IsCheckable="True" Click="SplitSingle_Click"/>
-                <MenuItem x:Name="MenuSplitV" Header="좌우 분할" IsCheckable="True" Click="SplitV_Click"/>
-                <MenuItem x:Name="MenuSplitH" Header="상하 분할" IsCheckable="True" Click="SplitH_Click"/>
-                <MenuItem x:Name="MenuSplitGrid" Header="격자 분할" IsCheckable="True" Click="SplitGrid_Click"/>
+                <MenuItem Header="맨 아래로(_E)" InputGestureText="Ctrl+End" Click="ScrollEnd_Click"/>
+            </MenuItem>
+            <!-- 보드 제어: ESP32 devkit 의 DTR→IO0 / RTS→EN 자동 리셋 회로 (README §2.2) -->
+            <MenuItem Header="보드(_D)">
+                <MenuItem Header="하드웨어 리셋 (EN 펄스)(_R)" InputGestureText="Alt+R" Click="HardReset_Click"/>
+                <MenuItem Header="부트로더 모드 진입 (IO0=LOW)(_L)" InputGestureText="Alt+Shift+R" Click="Bootloader_Click"/>
+                <Separator/>
+                <MenuItem x:Name="MenuResetOnOpen" Header="열 때 보드 리셋 (이 탭 · 세션에 저장)(_O)"
+                          IsCheckable="True" Click="ResetOnOpen_Click"/>
+            </MenuItem>
+            <!-- 창·레이아웃: 탭 분리/합치기와 화면 분할은 같은 관심사라 한 메뉴에 모은다 -->
+            <MenuItem Header="창(_W)">
+                <MenuItem Header="새 창으로 분리(_D)" Click="Detach_Click"/>
+                <MenuItem Header="메인 창으로 합치기(_M)" Click="Merge_Click"/>
+                <Separator/>
+                <MenuItem x:Name="MenuSplitSingle" Header="단일 화면(_1)" IsCheckable="True" Click="SplitSingle_Click"/>
+                <MenuItem x:Name="MenuSplitV" Header="좌우 분할(_2)" IsCheckable="True" Click="SplitV_Click"/>
+                <MenuItem x:Name="MenuSplitH" Header="상하 분할(_3)" IsCheckable="True" Click="SplitH_Click"/>
+                <MenuItem x:Name="MenuSplitGrid" Header="격자 분할(_4)" IsCheckable="True" Click="SplitGrid_Click"/>
             </MenuItem>
             <MenuItem Header="명령(_C)">
-                <MenuItem x:Name="MenuCommandBar" Header="명령 바 표시" InputGestureText="Alt+B"
+                <MenuItem x:Name="MenuCommandBar" Header="명령 바 표시(_S)" InputGestureText="Alt+B"
                           IsCheckable="True" Click="CommandBar_Click"/>
                 <Separator/>
-                <MenuItem Header="현재 입력을 명령으로 저장" Click="SaveCommand_Click"/>
+                <MenuItem Header="현재 입력을 명령으로 저장(_A)" Click="SaveCommand_Click"/>
                 <MenuItem Header="저장 명령 편집(_E)…" Click="EditCommands_Click"/>
             </MenuItem>
             <MenuItem Header="MCP(_M)">
-                <MenuItem x:Name="MenuMcpEnabled" Header="MCP 서버 활성화" IsCheckable="True"
+                <MenuItem x:Name="MenuMcpEnabled" Header="MCP 서버 활성화(_E)" IsCheckable="True"
                           Click="McpEnabled_Click"/>
-                <MenuItem x:Name="MenuMcpReadOnly" Header="AI 읽기 전용 (TX·제어선 차단)" IsCheckable="True"
+                <MenuItem x:Name="MenuMcpReadOnly" Header="AI 읽기 전용 (TX·제어선 차단)(_R)" IsCheckable="True"
                           Click="McpReadOnly_Click"/>
                 <Separator/>
-                <MenuItem Header="등록 명령 복사 (claude mcp add)" Click="McpCopyCmd_Click"/>
+                <MenuItem Header="등록 명령 복사 (claude mcp add)(_C)" Click="McpCopyCmd_Click"/>
             </MenuItem>
             <MenuItem Header="도움말(_H)">
-                <MenuItem x:Name="MenuDiagCapture" Header="진단 캡처 (RX/TX → diag.log)"
+                <MenuItem x:Name="MenuDiagCapture" Header="진단 캡처 (RX/TX → diag.log)(_D)"
                           IsCheckable="True" Click="DiagCapture_Click"/>
                 <Separator/>
                 <MenuItem Header="UartTerminal 정보(_A)" Click="About_Click"/>
