@@ -319,10 +319,19 @@ public partial class FlashDialog : Window
             return;
         }
 
-        long total = selected.Sum(r => r.Size);
+        // UI 값은 여기서 <b>전부 지역 변수로</b> 읽는다. 아래 작업은 백그라운드 스레드를 오가므로
+        // 컨트롤을 직접 만지면 "다른 스레드가 이 개체를 소유하고 있어…" 예외가 난다.
+        string zipPath = ZipBox.Text;
+        int baud = BaudBox.SelectedItem is int b ? b : 576000;
+        bool keepSettings = KeepBox.IsChecked == true;
+        bool reconnectAfter = ReconnectBox.IsChecked == true;
+        var chip = _package.Chip;
+        var plan = selected.Select(r => (r.Offset, Name: r.FileName!, r.Size)).ToList();
+
+        long total = plan.Sum(p => p.Size);
         var confirm = MessageBox.Show(this,
-            $"{_portName} 에 {selected.Count}개 파일({total / 1024.0 / 1024.0:N2} MB)을 씁니다.\n" +
-            $"칩: {(_package.Chip == EspChip.Unknown ? "자동" : _package.Chip.DisplayName())} · 속도: {BaudBox.SelectedItem}\n\n" +
+            $"{_portName} 에 {plan.Count}개 파일({total / 1024.0 / 1024.0:N2} MB)을 씁니다.\n" +
+            $"칩: {(chip == EspChip.Unknown ? "자동" : chip.DisplayName())} · 속도: {baud}\n\n" +
             "진행하는 동안 이 탭의 연결이 잠시 끊깁니다. 계속할까요?",
             "펌웨어 플래시", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK);
         if (confirm != MessageBoxResult.OK) return;
@@ -338,16 +347,16 @@ public partial class FlashDialog : Window
         try
         {
             // 1) 압축 해제(재사용)
-            string root = Path.Combine(AppState.Dir, "flash", FlashExtractor.WorkFolderName(ZipBox.Text));
+            string root = Path.Combine(AppState.Dir, "flash", FlashExtractor.WorkFolderName(zipPath));
             Log($"패키지 해제: {root}");
-            var map = await Task.Run(() => FlashExtractor.Extract(ZipBox.Text, root), _cts.Token);
+            var map = await Task.Run(() => FlashExtractor.Extract(zipPath, root), _cts.Token);
 
             var files = new List<(uint Offset, string File)>();
-            foreach (var r in selected)
+            foreach (var p in plan)
             {
-                if (!map.TryGetValue(r.FileName!, out string? full))
-                    throw new FileNotFoundException($"해제된 파일을 찾을 수 없습니다: {r.FileName}");
-                files.Add((r.Offset, full));
+                if (!map.TryGetValue(p.Name, out string? full))
+                    throw new FileNotFoundException($"해제된 파일을 찾을 수 없습니다: {p.Name}");
+                files.Add((p.Offset, full));
             }
 
             // 2) 포트 양보
@@ -366,10 +375,10 @@ public partial class FlashDialog : Window
             var request = new FlashRequest
             {
                 Port = _portName,
-                Baud = BaudBox.SelectedItem is int b ? b : 576000,
-                Chip = _package.Chip,
+                Baud = baud,
+                Chip = chip,
                 Files = files,
-                KeepFlashSettings = KeepBox.IsChecked == true,
+                KeepFlashSettings = keepSettings,
                 FlashMode = _package.Args.FlashMode,
                 FlashFreq = _package.Args.FlashFreq,
                 FlashSize = _package.Args.FlashSize,
@@ -386,7 +395,7 @@ public partial class FlashDialog : Window
                 SetProgressText(p.Phase, p.Fraction);
             });
 
-            var result = await runner.RunAsync(args, selected.Select(r => r.Size).ToList(), _cts.Token);
+            var result = await runner.RunAsync(args, plan.Select(p => p.Size).ToList(), _cts.Token);
 
             if (result.Ok)
             {
@@ -416,7 +425,7 @@ public partial class FlashDialog : Window
         finally
         {
             // 4) 포트 복귀 — 성공/실패/취소 어느 경우에도 되돌린다.
-            if (released && ReconnectBox.IsChecked == true)
+            if (released && reconnectAfter)
             {
                 Log($"{_portName} 재연결…");
                 bool ok = await _reopenPort();
@@ -453,11 +462,26 @@ public partial class FlashDialog : Window
         if (_running) e.Cancel = true;
     }
 
+    // 아래 둘은 백그라운드에서 불릴 수 있는 자리(프로세스 출력 펌프 등)라 스스로 UI 스레드로 넘긴다.
+    // 호출자가 마샬링을 잊어도 "다른 스레드가 이 개체를 소유하고 있어…" 로 죽지 않게 하는 보험이다.
+
     private void SetProgressText(string phase, double fraction)
-        => ProgressText.Text = $"{phase}  ·  {fraction * 100:0}%";
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => SetProgressText(phase, fraction));
+            return;
+        }
+        ProgressText.Text = $"{phase}  ·  {fraction * 100:0}%";
+    }
 
     private void Log(string line)
     {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => Log(line));
+            return;
+        }
         LogBox.AppendText(line + Environment.NewLine);
         LogBox.ScrollToEnd();
     }
