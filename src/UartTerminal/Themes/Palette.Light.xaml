@@ -26,11 +26,11 @@
     <Color x:Key="C.Text">#FF1F2328</Color>
     <Color x:Key="C.TextDim">#FF41474E</Color>
     <Color x:Key="C.TextMuted">#FF57606A</Color>
-    <Color x:Key="C.TextFaint">#FF6B747E</Color>
+    <Color x:Key="C.TextFaint">#FF636C77</Color>
     <Color x:Key="C.Accent">#FF0969DA</Color>
     <Color x:Key="C.AccentDeep">#FF0550AE</Color>
     <!-- 상태색은 흰 배경 기준으로 눌러 4.5:1 이상 -->
-    <Color x:Key="C.Green">#FF1A7F37</Color>
+    <Color x:Key="C.Green">#FF15702F</Color>
     <Color x:Key="C.GreenBright">#FF116329</Color>
     <Color x:Key="C.Blue">#FF0550AE</Color>
     <Color x:Key="C.Amber">#FF7D4E00</Color>
@@ -65,7 +65,7 @@
     <SolidColorBrush x:Key="Idle"          Color="{StaticResource C.Idle}"/>
 
     <!-- 스크롤 손잡이(3:1 이상) -->
-    <SolidColorBrush x:Key="ScrollThumb"      Color="#FF9AA4AF"/>
+    <SolidColorBrush x:Key="ScrollThumb"      Color="#FF7C8794"/>
     <SolidColorBrush x:Key="ScrollThumbHover" Color="#FF57606A"/>
 
     <!-- ===== 코드에서 쓰는 브러시 ===== -->
