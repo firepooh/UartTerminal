@@ -299,7 +299,8 @@ public static class FlashPackageAnalyzer
                 Size = hit.Name is null ? 0 : hit.Size,
                 Selected = hit.Name is not null && DefaultSelected(role),
                 Candidates = candidates,
-                Note = note ?? (hit.Name is null ? "패키지에 파일이 없습니다" : DefaultSelected(role) ? null : "기본 해제 — 장치 데이터를 덮어씁니다"),
+                Note = note ?? (hit.Name is null ? "패키지에 파일이 없습니다"
+                                                 : DefaultSelected(role) ? null : "기본 해제(데이터 보호)"),
             });
         }
         return items;

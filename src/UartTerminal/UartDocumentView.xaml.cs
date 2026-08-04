@@ -816,6 +816,53 @@ public partial class UartDocumentView : UserControl
     // 리셋 시퀀스는 100ms+50ms 대기가 있어 비동기다. 중복 실행(연타)을 막는 가드.
     private bool _resetting;
 
+    // ── 펌웨어 플래시(외부 도구에 포트 양보) ────────────────────────────────
+    // 양보/복귀는 MCP uart_close/uart_open 과 <b>같은 컨트롤러 경로</b>를 쓴다 — 이미 검증된
+    // 지연 Closed 콜백 무력화·자동 재연결 중단 로직을 그대로 재사용하기 위함이다.
+
+    /// <summary>펌웨어 플래시 화면을 띄운다(연결이 없으면 안내만).</summary>
+    public void ShowFlashDialog()
+    {
+        if (string.IsNullOrEmpty(_portName))
+        {
+            SetStatus("플래시할 포트가 없습니다 — 먼저 연결하세요(Alt+N)");
+            MessageBox.Show(OwnerWindow, "먼저 포트에 연결하세요.\n플래시는 현재 탭의 포트를 사용합니다.",
+                "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        FlashDialog.ShowFlash(OwnerWindow, _state, _portName,
+            releasePort: ReleasePortForToolAsync,
+            reopenPort: ReopenPortAfterToolAsync);
+    }
+
+    /// <summary>외부 도구(esptool)를 위해 포트를 놓는다. 이미 닫혀 있어도 성공으로 본다.</summary>
+    private Task<bool> ReleasePortForToolAsync()
+    {
+        if (_conn is null) return Task.FromResult(false);
+        var r = _conn.McpRelease();
+        SetStatus($"플래시를 위해 포트 양보 — {_portName}");
+        return Task.FromResult(r.Ok);
+    }
+
+    /// <summary>
+    /// 플래시가 끝난 뒤 포트를 되찾는다. esptool 이 핸들을 놓기까지 잠깐 걸릴 수 있어
+    /// in_use 면 짧게 재시도한다(예전에 겪은 Dispose 지연과 같은 성격).
+    /// </summary>
+    private async Task<bool> ReopenPortAfterToolAsync()
+    {
+        if (_conn is null) return false;
+
+        for (int attempt = 0; attempt < 6; attempt++)
+        {
+            var r = _conn.McpReopen();
+            if (r.Ok) return true;
+            if (attempt == 0) SetStatus($"재연결 대기 — {_portName} 아직 사용 중");
+            await Task.Delay(400);
+        }
+        return false;
+    }
+
     /// <summary>하드웨어 리셋(EN 펄스) — 보드를 재부팅한다.</summary>
     public Task HardResetAsync() => RunControlSequenceAsync(EspResetSequence.HardReset, "하드웨어 리셋");
 

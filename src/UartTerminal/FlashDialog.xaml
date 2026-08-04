@@ -1,0 +1,247 @@
+<Window x:Class="UartTerminal.FlashDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="펌웨어 플래시 — UartTerminal"
+        Icon="/UartTerminal.ico"
+        Width="900" Height="700" MinWidth="760" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource Bg}"
+        Foreground="{StaticResource Text}"
+        FontFamily="{StaticResource UiFont}">
+    <Window.Resources>
+        <!-- 목록 셀: 선택된 행(파란 배경)에서는 흰색으로 — 다른 표와 같은 방침 -->
+        <Style x:Key="Cell" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Foreground" Value="White"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="CellMono" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+        </Style>
+        <Style x:Key="CellOffset" TargetType="TextBlock" BasedOn="{StaticResource CellMono}">
+            <Setter Property="Foreground" Value="{StaticResource Blue}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Foreground" Value="White"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="CellNote" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{Binding NoteBrush}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Foreground" Value="White"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 진행률 바(테마에 ProgressBar 스타일이 없어 여기서 정의) -->
+        <Style x:Key="FlashProgress" TargetType="ProgressBar">
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Border Background="{StaticResource Surface}" CornerRadius="5"
+                                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1">
+                            <Grid>
+                                <Rectangle x:Name="PART_Track"/>
+                                <Rectangle x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                           Fill="{StaticResource Green}" RadiusX="4" RadiusY="4" Margin="1"/>
+                            </Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="1.1*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 0) 안내 -->
+        <TextBlock Grid.Row="0" Margin="2,0,0,10" FontSize="12.5" TextWrapping="Wrap"
+                   Foreground="{StaticResource TextDim}"
+                   Text="빌드 산출물 zip 을 고르면 오프셋·칩을 자동으로 읽어 목록을 채웁니다. 시작하면 이 탭의 포트를 잠시 양보하고, 끝나면 다시 연결합니다."/>
+
+        <!-- 1) zip 선택 -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="펌웨어 패키지(zip)" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
+            <!-- Height 고정: CommandInput 은 여러 줄 입력용이라 그냥 두면 세로로 늘어난다 -->
+            <!-- Padding 재정의: CommandInput 의 넉넉한 여백을 그대로 두면 30px 높이에서 글자가 잘려 안 보인다 -->
+            <TextBox x:Name="ZipBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
+                     MinWidth="0" Height="30" Padding="10,0" VerticalContentAlignment="Center"
+                     IsReadOnly="True" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+            <Button x:Name="BrowseButton" Grid.Row="1" Grid.Column="1" Content="찾기…" Style="{StaticResource DialogButton}"
+                    MinWidth="72" Height="30" Margin="8,0,0,0" Click="Browse_Click"/>
+        </Grid>
+
+        <!-- 2) 칩 / 포트 / 속도 / 옵션 -->
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="칩" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="포트" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
+            <TextBlock Grid.Row="0" Grid.Column="2" Text="속도(bps)" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
+
+            <ComboBox x:Name="ChipBox" Grid.Row="1" Grid.Column="0" Width="210" Height="30"
+                      VerticalContentAlignment="Center" Margin="2,0,0,0"
+                      ToolTip="기본은 패키지의 bootloader 헤더에서 읽은 칩입니다. 다르게 굽고 싶을 때만 바꾸세요."
+                      SelectionChanged="ChipBox_SelectionChanged"/>
+            <TextBlock x:Name="PortText" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
+                       FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource Blue}" Text="—"/>
+            <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="2" Width="110" Height="30" Margin="10,0,0,0"
+                      VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
+            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                <CheckBox x:Name="KeepBox" Style="{StaticResource DarkCheckBox}" IsChecked="True" Content="바이너리 그대로"
+                          ToolTip="Flash Download Tool 의 DoNotChgBin 과 같은 동작 — 빌드 때 정한 SPI 설정(헤더)을 덮어쓰지 않습니다."/>
+                <CheckBox x:Name="ReconnectBox" Style="{StaticResource DarkCheckBox}" IsChecked="True"
+                          Content="완료 후 재연결" Margin="14,0,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- 3) 목록 머리글 -->
+        <Border Grid.Row="3" Margin="0,12,0,0" Background="{StaticResource BgPanel}"
+                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1" CornerRadius="6,6,0,0" Padding="10,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="92"/>
+                    <ColumnDefinition Width="96"/>
+                    <ColumnDefinition Width="124"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="210"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="1" Text="오프셋" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="2" Text="크기" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="3" Text="역할" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="4" Text="파일" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="5" Text="비고" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+            </Grid>
+        </Border>
+
+        <!-- 4) 목록 -->
+        <ListBox x:Name="ItemList" Grid.Row="4" HorizontalContentAlignment="Stretch">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,3">
+                        <Grid.ColumnDefinitions>
+                            <!-- 머리글 Grid 와 폭이 같아야 한다(다르면 열이 어긋난다) -->
+                            <ColumnDefinition Width="30"/>
+                            <ColumnDefinition Width="92"/>
+                            <ColumnDefinition Width="96"/>
+                            <ColumnDefinition Width="124"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="210"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox Grid.Column="0" Style="{StaticResource DarkCheckBox}" VerticalAlignment="Center"
+                                  IsChecked="{Binding Selected, Mode=TwoWay}" IsEnabled="{Binding CanSelect}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding OffsetText}" Style="{StaticResource CellOffset}"/>
+                        <TextBlock Grid.Column="2" Text="{Binding SizeText}" Style="{StaticResource CellMono}"/>
+                        <TextBlock Grid.Column="3" Text="{Binding Role}" Style="{StaticResource Cell}"/>
+                        <Grid Grid.Column="4" Margin="0,0,8,0">
+                            <!-- 후보가 여럿이면(앱 사본 등) 고르게, 하나면 그냥 표시 -->
+                            <TextBlock Text="{Binding FileDisplay}" Style="{StaticResource Cell}"
+                                       Visibility="{Binding PlainVisibility}"/>
+                            <ComboBox ItemsSource="{Binding Candidates}" SelectedItem="{Binding FileName, Mode=TwoWay}"
+                                      Height="26" VerticalContentAlignment="Center"
+                                      Visibility="{Binding ChoiceVisibility}"/>
+                        </Grid>
+                        <!-- 비고는 별도 열 — 파일명과 같은 칸에 두면 이름이 길 때 글자가 겹친다 -->
+                        <TextBlock Grid.Column="5" Text="{Binding Note}" Style="{StaticResource CellNote}"
+                                   Margin="0,0,10,0" TextWrapping="NoWrap"/>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- 5) 경고/오류 -->
+        <Border x:Name="NoticePane" Grid.Row="5" Margin="0,10,0,0" Visibility="Collapsed"
+                Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderBrush2}"
+                BorderThickness="1" CornerRadius="6" Padding="10,8">
+            <ScrollViewer MaxHeight="88" VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="NoticeText" TextWrapping="Wrap" FontSize="11.5"
+                           Foreground="{StaticResource Amber}"/>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 6) 진행률 -->
+        <Grid Grid.Row="6" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <ProgressBar x:Name="Progress" Grid.Column="0" Style="{StaticResource FlashProgress}" VerticalAlignment="Center"/>
+            <TextBlock x:Name="ProgressText" Grid.Column="1" Margin="10,0,0,0" MinWidth="190"
+                       TextAlignment="Right" VerticalAlignment="Center" FontSize="11.5"
+                       Foreground="{StaticResource TextDim}" Text="대기"/>
+        </Grid>
+
+        <!-- 7) 로그 -->
+        <TextBox x:Name="LogBox" Grid.Row="7" Margin="0,10,0,0" IsReadOnly="True"
+                 Style="{StaticResource CommandInput}" MinWidth="0"
+                 FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                 TextWrapping="NoWrap" AcceptsReturn="True"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                 VerticalContentAlignment="Top"/>
+
+        <!-- 8) 버튼 -->
+        <Grid Grid.Row="8" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="ToolText" Grid.Column="0" VerticalAlignment="Center" FontSize="11"
+                       Foreground="{StaticResource TextFaint}" TextTrimming="CharacterEllipsis"
+                       Text="esptool 확인 중…"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="StartButton" Content="플래시 시작" Style="{StaticResource SendButton}"
+                        MinWidth="110" MinHeight="32" Margin="0,0,8,0" IsEnabled="False" Click="Start_Click"/>
+                <Button x:Name="StopButton" Content="중지" Style="{StaticResource DialogButton}"
+                        MinWidth="72" MinHeight="32" Margin="0,0,8,0" IsEnabled="False" Click="Stop_Click"/>
+                <Button x:Name="CloseButton" Content="닫기" Style="{StaticResource DialogButton}"
+                        MinWidth="72" MinHeight="32" Click="Close_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

@@ -36,6 +36,18 @@ public sealed class AppState
     /// </summary>
     public bool ResetOnOpen { get; set; }
 
+    /// <summary>마지막으로 플래시한 펌웨어 패키지(zip) 경로. 반복 작업이 대부분이라 다음에 바로 불러온다.</summary>
+    public string? LastFlashZip { get; set; }
+
+    /// <summary>플래시 속도(bps). 기본 576000 — ESP32-S3 devkit 에서 안정적으로 쓰이는 값.</summary>
+    public int FlashBaud { get; set; } = 576000;
+
+    /// <summary>
+    /// esptool 실행 파일 경로(직접 지정). 비면 자동 탐색(앱 번들 → ESP-IDF 설치본 → PATH).
+    /// ESP-IDF 가 없는 PC 에서 standalone esptool 을 쓸 때 여기에 적는다.
+    /// </summary>
+    public string? EsptoolPath { get; set; }
+
     /// <summary>수신 개행 규약. 기본 CR+LF(개행=LF, CR=줄 처음으로 — 진행바 덮어쓰기 유지).</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public ReceiveNewline NewlineRx { get; set; } = ReceiveNewline.CrLf;

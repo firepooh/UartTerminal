@@ -611,6 +611,8 @@ public partial class ShellWindow : Window
     private void BoardHardReset() => _ = ActiveDoc?.HardResetAsync();
     private void BoardBootloader() => _ = ActiveDoc?.EnterBootloaderAsync();
 
+    private void Flash_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ShowFlashDialog();
+
     /// <summary>
     /// '열 때 보드 리셋'은 속도처럼 <b>탭(연결)별</b> 값이다 — 보드마다 다르고 세션에 함께 저장된다.
     /// 그래서 전역 동기화(자동 재연결/타임스탬프 방식)를 하지 않고 활성 탭에만 적용한다.

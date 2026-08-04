@@ -152,6 +152,8 @@
                 <Separator/>
                 <MenuItem x:Name="MenuResetOnOpen" Header="열 때 보드 리셋 (이 탭 · 세션에 저장)(_O)"
                           IsCheckable="True" Click="ResetOnOpen_Click"/>
+                <Separator/>
+                <MenuItem Header="펌웨어 플래시(zip)(_F)…" Click="Flash_Click"/>
             </MenuItem>
             <!-- 창·레이아웃: 탭 분리/합치기와 화면 분할은 같은 관심사라 한 메뉴에 모은다 -->
             <MenuItem Header="창(_W)">
