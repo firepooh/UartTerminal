@@ -16,7 +16,7 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 | 4 | 다중 UART를 탭으로 — 필요 시 탭을 새 창으로 분리/다시 합치기 (Tier A: 메뉴/버튼, 단일 프로세스라 이동 중 연결 유지) | C |
 | 5 | 통신 속도 선택 (포트 선택 시 프리셋에서) | C1a |
 | 6 | 저장 명령 칩 바 — 자주 쓰는 **한 줄** 명령을 클릭 한 번으로 전송 (`commands.json`) | C2 |
-| 7 | 이름 붙인 접속 프로필(세션) — 이름·포트·속도·열 때 리셋·명령 그룹을 저장해 더블클릭 접속 (`sessions.json`) | C1b |
+| 7 | 이름 붙인 접속 프로필(세션) — 이름·포트·속도·열 때 리셋·개행·명령 그룹을 저장해 더블클릭 접속 (`sessions.json`) | C1b |
 
 **확정 사항** (2026-07-21):
 
@@ -42,7 +42,7 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 |------|-----|------|
 | Speed | 115200 (기본) — 74880 / 230400 / 460800 / 921600 중 선택 | 포트 선택 다이얼로그, `state.json` 에 마지막 값 기억 |
 | Data / Parity / Stop / Flow | 8 bit / none / 1 bit / none | 고정 |
-| New-line | Receive: CR+LF(기본) / LF / CR / AUTO, Transmit: CR(기본) / CR+LF / LF | [터미널]>개행, `state.json` (§2.1) |
+| New-line | Receive: CR+LF(기본) / LF / CR / AUTO, Transmit: CR(기본) / CR+LF / LF | 탭별 · 세션 저장 (§2.1) |
 | Local echo | OFF | |
 | 수신 인코딩 | UTF-8 (증분 디코더) | ESP-IDF 로그 기준 |
 | 폰트 | D2Coding 권장 (한글 2:1 고정폭), 없으면 Consolas+맑은 고딕 폴백 | |
@@ -51,9 +51,13 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 
 ### 2.1 개행(New-line) 규약
 
-TeraTerm 의 [Setup > Terminal] New-line 에 대응한다. **전역 설정**이며 [터미널] > 개행(New-line) 에서 바꾸고
-기본값이 아닐 때만 상태바에 `NL↓… ↑…` 로 표시된다. 우리 화면 모델은 셀 격자가 아니라 **논리 라인 로그**라
-LF 만 와도 계단 현상이 없으므로, 각 모드는 "어느 바이트를 개행으로 볼지"의 선택이다.
+TeraTerm 의 [Setup > Terminal] New-line 에 대응한다. 장치마다 다르므로 속도·열 때 리셋과 같은
+**탭(연결)별 접속 속성**이고 **세션에 함께 저장**된다: [터미널] > 개행(New-line) 은 활성 탭만 바꾸고,
+기본값이 아닐 때 상태바에 `NL↓… ↑…` 로 표시되며, 세션 관리 화면의 `개행` 열에서 확인·편집한다.
+세션이 값을 지정하지 않았거나(`(기본)`) 세션 없이 포트만 골라 열면 **마지막으로 쓴 값**(`state.json`)을 쓴다.
+
+우리 화면 모델은 셀 격자가 아니라 **논리 라인 로그**라 LF 만 와도 계단 현상이 없으므로,
+각 모드는 "어느 바이트를 개행으로 볼지"의 선택이다.
 
 | 수신 모드 | CR | LF | 쓰는 경우 |
 |---|---|---|---|
@@ -136,9 +140,12 @@ ESP32 개발보드는 USB-시리얼의 **DTR→IO0, RTS→EN** 이 트랜지스�
 ### Phase C1b — 이름 붙인 접속 프로필 (기능 7)
 
 - `%APPDATA%\UartTerminal\sessions.json`
-  (`{schemaVersion, sessions:[{name, port, baud, resetOnOpen?, commandGroup?}]}`) — 접속을 재현하는 데 필요한 값만 저장.
-  8N1/흐름제어는 고정이고 오픈 시 DTR/RTS deassert 도 고정이다 — 리셋은 '펄스를 줄지'라는 의도라
-  `resetOnOpen` 한 항목으로만 노출한다(§2.2). 기본값(false)은 파일에 쓰지 않는다.
+  (`{schemaVersion, sessions:[{name, port, baud, resetOnOpen?, newlineRx?, newlineTx?, commandGroup?}]}`)
+  — 접속을 재현하는 데 필요한 값만 저장. 8N1/흐름제어는 고정이고 오픈 시 DTR/RTS deassert 도 고정이다 —
+  리셋은 '펄스를 줄지'라는 의도라 `resetOnOpen` 한 항목으로만 노출한다(§2.2).
+  **기본값/미지정 필드는 파일에 쓰지 않는다**(사람이 읽는 파일을 조용하게). `newline*` 이 없으면 '지정 없음' →
+  접속 시 마지막으로 쓴 값을 유지하며, **알 수 없는 이름이 적혀 있어도 예외 대신 '지정 없음'** 으로 떨어뜨린다
+  (오타 하나로 프로필 전체가 `.corrupt-*` 로 격리되지 않게)
   손실 방어는 `commands.json` 과 동일(원자 저장 + `.bak`, 손상 시 `.corrupt-*`, 읽기 실패 시 저장 잠금,
   상위 `schemaVersion` 저장 거부, 저장 성공 시에만 목록 커밋)
 - 연결 다이얼로그를 **확장**(교체 아님 — 취소 안전 계약을 지키기 위해): 위쪽에 세션 목록(더블클릭 접속·삭제),

@@ -125,7 +125,8 @@ public partial class ShellWindow : Window
         Tabs.Items.Add(ti);
         Tabs.SelectedItem = ti;
         doc.SetCommandGroup(dlg.SelectedCommandGroup); // 세션에 연결된 명령 그룹으로 자동 전환
-        doc.ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen);
+        doc.ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen,
+                      dlg.SelectedNewlineRx, dlg.SelectedNewlineTx);
         RenderContent();
         doc.FocusTerminal();
     }
@@ -627,42 +628,40 @@ public partial class ShellWindow : Window
 
     // ── 개행(New-line) 규약 ──────────────────────────────────────────────────────
 
+    // 개행도 '열 때 보드 리셋'과 같은 탭별 접속 속성(장치마다 다르다) → 활성 탭에만 적용하고
+    // 세션에 저장된다. _state 의 값은 새 탭/세션 없이 열 때의 기본값 역할만 한다.
+
     private void NewlineRx_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuItem { Tag: string tag } || !Enum.TryParse<ReceiveNewline>(tag, out var mode))
             return;
-        _state.NewlineRx = mode;
-        _state.Save();
-        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
-        {
-            w.SyncNewlineChrome();
-            foreach (var d in w.AllDocs()) d.SetReceiveNewline(mode);
-        }
+        if (ActiveDoc is { } doc) doc.SetReceiveNewline(mode);
+        else { _state.NewlineRx = mode; _state.Save(); } // 탭이 없으면 기본값만 바꾼다
+        SyncNewlineChrome();
     }
 
     private void NewlineTx_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuItem { Tag: string tag } || !Enum.TryParse<TransmitNewline>(tag, out var mode))
             return;
-        _state.NewlineTx = mode;
-        _state.Save();
-        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
-        {
-            w.SyncNewlineChrome();
-            foreach (var d in w.AllDocs()) d.SetTransmitNewline(mode);
-        }
+        if (ActiveDoc is { } doc) doc.SetTransmitNewline(mode);
+        else { _state.NewlineTx = mode; _state.Save(); }
+        SyncNewlineChrome();
     }
 
-    /// <summary>개행 메뉴의 체크를 현재 설정과 동기화(라디오 동작).</summary>
+    /// <summary>개행 메뉴의 체크를 활성 탭 값과 동기화(라디오 동작). 탭이 없으면 기본값을 보여준다.</summary>
     private void SyncNewlineChrome()
     {
-        MenuRxCrLf.IsChecked = _state.NewlineRx == ReceiveNewline.CrLf;
-        MenuRxLf.IsChecked = _state.NewlineRx == ReceiveNewline.Lf;
-        MenuRxCr.IsChecked = _state.NewlineRx == ReceiveNewline.Cr;
-        MenuRxAuto.IsChecked = _state.NewlineRx == ReceiveNewline.Auto;
-        MenuTxCr.IsChecked = _state.NewlineTx == TransmitNewline.Cr;
-        MenuTxCrLf.IsChecked = _state.NewlineTx == TransmitNewline.CrLf;
-        MenuTxLf.IsChecked = _state.NewlineTx == TransmitNewline.Lf;
+        var doc = ActiveDoc;
+        var rx = doc?.NewlineRx ?? _state.NewlineRx;
+        var tx = doc?.NewlineTx ?? _state.NewlineTx;
+        MenuRxCrLf.IsChecked = rx == ReceiveNewline.CrLf;
+        MenuRxLf.IsChecked = rx == ReceiveNewline.Lf;
+        MenuRxCr.IsChecked = rx == ReceiveNewline.Cr;
+        MenuRxAuto.IsChecked = rx == ReceiveNewline.Auto;
+        MenuTxCr.IsChecked = tx == TransmitNewline.Cr;
+        MenuTxCrLf.IsChecked = tx == TransmitNewline.CrLf;
+        MenuTxLf.IsChecked = tx == TransmitNewline.Lf;
     }
 
     private void SaveSession_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentAsSession();

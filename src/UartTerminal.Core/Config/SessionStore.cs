@@ -1,11 +1,12 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using UartTerminal.Core.Terminal;
 
 namespace UartTerminal.Core.Config;
 
 /// <summary>
-/// 이름 붙인 접속 프로필. 저장하는 것은 <b>이름·포트·속도·열 때 리셋 + (선택) 명령 그룹</b>이다.
+/// 이름 붙인 접속 프로필. 저장하는 것은 <b>이름·포트·속도·열 때 리셋·개행 + (선택) 명령 그룹</b>이다.
 /// 8N1/흐름제어는 고정값이며(README §2), 오픈 시 DTR/RTS deassert 도 고정이다 —
 /// 리셋은 '펄스를 줄지 말지'라는 의도이므로 <see cref="ResetOnOpen"/> 한 항목으로만 노출한다(§2.2).
 /// </summary>
@@ -22,6 +23,21 @@ public sealed record SessionProfile
     [JsonPropertyName("resetOnOpen")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool ResetOnOpen { get; init; }
+
+    /// <summary>
+    /// 이 세션의 수신 개행 규약. <b>null = 지정 없음</b> → 접속할 때 현재(마지막으로 쓴) 값을 그대로 쓴다.
+    /// 장치마다 개행이 다르므로(ESP-IDF=CR+LF, 구형 계측기=CR) 세션에 함께 저장한다. 알 수 없는 값도 null 로 취급.
+    /// </summary>
+    [JsonPropertyName("newlineRx")]
+    [JsonConverter(typeof(TolerantNullableEnumConverter<ReceiveNewline>))]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ReceiveNewline? NewlineRx { get; init; }
+
+    /// <summary>이 세션의 송신 개행 규약. null = 지정 없음(현재 값 유지).</summary>
+    [JsonPropertyName("newlineTx")]
+    [JsonConverter(typeof(TolerantNullableEnumConverter<TransmitNewline>))]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TransmitNewline? NewlineTx { get; init; }
 
     /// <summary>
     /// 이 세션으로 접속할 때 자동 선택할 명령 그룹 이름(commands.json 의 그룹). 비면 자동 선택하지 않는다.
@@ -243,6 +259,9 @@ public sealed class SessionStore
                 Port = port,
                 Baud = baud,
                 ResetOnOpen = s.ResetOnOpen,
+                // 정의되지 않은 enum 값(손편집/구버전)은 '지정 없음'으로 떨어뜨린다.
+                NewlineRx = Enum.IsDefined(s.NewlineRx ?? (ReceiveNewline)(-1)) ? s.NewlineRx : null,
+                NewlineTx = Enum.IsDefined(s.NewlineTx ?? (TransmitNewline)(-1)) ? s.NewlineTx : null,
                 CommandGroup = group.Length > 0 ? group : null,
             });
             if (list.Count >= MaxSessions) break;

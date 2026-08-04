@@ -29,9 +29,11 @@ public partial class UartDocumentView : UserControl
     // MCP uart_open 이 모두 이 필드를 쓰므로, 여기만 갱신하면 세 경로가 같은 속도로 일관되게 열린다.
     private SerialConnectionParams _params = SerialConnectionParams.Default;
 
-    // '열 때 보드 리셋'도 속도와 같은 성격의 접속 속성(보드마다 다르다) → 탭이 소유하고 세션에 저장된다.
-    // 전역 _state.ResetOnOpen 은 '마지막으로 쓴 값'(새 탭/다이얼로그 기본값)일 뿐이다 — LastBaud 와 같은 역할.
+    // '열 때 보드 리셋'·'개행 규약'도 속도와 같은 성격의 접속 속성(장치마다 다르다) → 탭이 소유하고
+    // 세션에 저장된다. _state 의 같은 이름 값들은 '마지막으로 쓴 값'(새 탭 기본값)일 뿐이다 — LastBaud 와 같은 역할.
     private bool _resetOnOpen;
+    private ReceiveNewline _nlRx = ReceiveNewline.CrLf;
+    private TransmitNewline _nlTx = TransmitNewline.Cr;
 
     private readonly Encoding _txEncoding = new UTF8Encoding(false);
 
@@ -85,7 +87,10 @@ public partial class UartDocumentView : UserControl
         _state = state;
         _commands = commands;
         _sessions = sessions;
-        _resetOnOpen = state.ResetOnOpen; // 마지막으로 쓴 값을 새 탭의 기본값으로
+        // 마지막으로 쓴 값을 새 탭의 기본값으로(세션 없이 열 때 이 값이 그대로 쓰인다)
+        _resetOnOpen = state.ResetOnOpen;
+        _nlRx = state.NewlineRx;
+        _nlTx = state.NewlineTx;
         _params = MakeParams(state.LastBaud);
         _commands.Changed += OnCommandsChanged;
         SetCommandBarVisible(state.ShowCommandBar);
@@ -109,11 +114,17 @@ public partial class UartDocumentView : UserControl
 
     // ── 연결 수명주기 ──────────────────────────────────────────────────────────
 
-    /// <summary>최초 연결(엔진/뷰/브리지/MCP 서버 생성 후 세션 오픈). resetOnOpen 은 이 연결의 속성이다.</summary>
-    public void ConnectTo(PortInfo port, int baud, bool resetOnOpen = false)
+    /// <summary>
+    /// 최초 연결(엔진/뷰/브리지/MCP 서버 생성 후 세션 오픈).
+    /// resetOnOpen 은 이 연결의 속성이고, 개행은 <b>null 이면 지정 없음</b> → 현재(기본) 값을 유지한다.
+    /// </summary>
+    public void ConnectTo(PortInfo port, int baud, bool resetOnOpen = false,
+                          ReceiveNewline? newlineRx = null, TransmitNewline? newlineTx = null)
     {
         _portName = port.PortName;
         _resetOnOpen = resetOnOpen;
+        if (newlineRx is { } rx) _nlRx = rx;
+        if (newlineTx is { } tx) _nlTx = tx;
         _params = MakeParams(baud);
         EnsureEngine();
         OpenSession();
@@ -126,6 +137,8 @@ public partial class UartDocumentView : UserControl
         _state.LastPort = _portName;
         _state.LastBaud = _params.BaudRate;
         _state.ResetOnOpen = _resetOnOpen;
+        _state.NewlineRx = _nlRx;
+        _state.NewlineTx = _nlTx;
         _state.Save();
     }
 
@@ -151,7 +164,8 @@ public partial class UartDocumentView : UserControl
 
         if (_engine is null)
         {
-            ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen);
+            ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen,
+                      dlg.SelectedNewlineRx, dlg.SelectedNewlineTx);
             return;
         }
 
@@ -163,6 +177,9 @@ public partial class UartDocumentView : UserControl
         }
         // 속도/리셋 변경은 세션을 새로 여는 것으로 반영된다(위에서 기존 세션을 닫았고 아래에서 재오픈).
         _resetOnOpen = dlg.SelectedResetOnOpen;
+        // 개행은 세션으로 접속한 경우에만 값이 오고, 아니면 이 탭의 값을 유지한다.
+        if (dlg.SelectedNewlineRx is { } rx) SetReceiveNewline(rx);
+        if (dlg.SelectedNewlineTx is { } tx) SetTransmitNewline(tx);
         _params = MakeParams(dlg.SelectedBaud);
 
         OpenSession();
@@ -178,9 +195,9 @@ public partial class UartDocumentView : UserControl
 
         _engine = new TerminalEngine(new UTF8Encoding(false), maxLines: 10_000)
         {
-            ReceiveNewline = _state.NewlineRx,
+            ReceiveNewline = _nlRx,
         };
-        _bridge = new UartBridge(_engine) { TransmitNewline = _state.NewlineTx };
+        _bridge = new UartBridge(_engine) { TransmitNewline = _nlTx };
 
         // 연결 수명주기(세션/재연결/양보/지연콜백 무력화)는 UI 비의존 컨트롤러가 소유.
         // 호스트는 세션 생성 팩토리·UI 마샬링(post)·상태 알림(notify)·상태바만 배선한다.
@@ -338,7 +355,7 @@ public partial class UartDocumentView : UserControl
 
         if (!IsConnected) return;
 
-        var bytes = KeyMap.Map(e.Key, mods, _state.NewlineTx);
+        var bytes = KeyMap.Map(e.Key, mods, _nlTx);
         if (bytes is not null)
         {
             Send(bytes);
@@ -385,7 +402,7 @@ public partial class UartDocumentView : UserControl
     /// <summary>한 줄 전송 + 히스토리 적재. 입력창 전송과 칩 전송이 같은 경로를 쓰도록 분리(개행은 송신 설정값).</summary>
     private void SendLine(string line)
     {
-        Send(_txEncoding.GetBytes(line + _state.NewlineTx.Text()));
+        Send(_txEncoding.GetBytes(line + _nlTx.Text()));
         if (!string.IsNullOrEmpty(line))
         {
             _history.Add(line);
@@ -603,25 +620,30 @@ public partial class UartDocumentView : UserControl
 
         // 기본 이름은 friendly name 이 아니라 포트명 — 사용자가 보드 별칭을 직접 붙이게 한다.
         string reset = _resetOnOpen ? " · 열 때 리셋" : "";
+        string nl = _nlRx == ReceiveNewline.CrLf && _nlTx == TransmitNewline.Cr
+            ? "" : $" · 개행 ↓{_nlRx.Label()} ↑{_nlTx.Label()}";
         string? name = TextPromptDialog.Ask(OwnerWindow, "세션 저장",
-            $"이 연결({_portName} · {_params.BaudRate}bps{reset})을 어떤 이름으로 저장할까요?", _portName);
+            $"이 연결({_portName} · {_params.BaudRate}bps{reset}{nl})을 어떤 이름으로 저장할까요?", _portName);
         if (name is null) return;
 
         string? group = CurrentCommandGroup; // 현재 탭이 쓰는 명령 그룹을 세션에 함께 기록(접속 시 자동 선택)
         _sessions.Load(); // 다른 인스턴스/손편집 반영 후 추가
+        // 개행은 '현재 값'을 명시적으로 기록한다 — 나중에 기본값을 바꿔도 이 세션은 그대로 재현되게.
         if (!_sessions.AddOrReplace(new SessionProfile
         {
             Name = name,
             Port = _portName,
             Baud = _params.BaudRate,
             ResetOnOpen = _resetOnOpen,
+            NewlineRx = _nlRx,
+            NewlineTx = _nlTx,
             CommandGroup = group,
         }))
         {
             SetStatus(_sessions.LastError ?? "세션 저장 실패");
             return;
         }
-        SetStatus($"세션 저장됨: {name} — {_portName} · {_params.BaudRate}{reset}");
+        SetStatus($"세션 저장됨: {name} — {_portName} · {_params.BaudRate}{reset}{nl}");
     }
 
     private void EditCommands_Click(object sender, RoutedEventArgs e)
@@ -654,7 +676,7 @@ public partial class UartDocumentView : UserControl
         }
 
         // 클립보드의 개행(CRLF/LF/CR)을 송신 개행 설정값 하나로 정규화한다.
-        string nl = _state.NewlineTx.Text();
+        string nl = _nlTx.Text();
         text = text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", nl);
         Send(_txEncoding.GetBytes(text));
     }
@@ -744,17 +766,30 @@ public partial class UartDocumentView : UserControl
 
     // ── 개행 규약 / 제어선(ESP32 리셋·부트로더) ─────────────────────────────────
 
-    /// <summary>수신 개행 규약 변경(전역 설정 → 모든 탭에 즉시 적용). 이미 그려진 화면은 바꾸지 않는다.</summary>
+    /// <summary>이 탭의 개행 규약(세션에 저장되는 접속 속성).</summary>
+    public ReceiveNewline NewlineRx => _nlRx;
+    public TransmitNewline NewlineTx => _nlTx;
+
+    /// <summary>
+    /// 이 탭의 수신 개행 규약 변경(다음 수신분부터 적용 — 이미 그려진 화면은 바꾸지 않는다).
+    /// 마지막으로 쓴 값도 갱신해 새 탭의 기본값이 되게 한다.
+    /// </summary>
     public void SetReceiveNewline(ReceiveNewline mode)
     {
+        _nlRx = mode;
         if (_engine is not null) _engine.ReceiveNewline = mode;
+        _state.NewlineRx = mode;
+        _state.Save();
         RefreshMetrics();
     }
 
-    /// <summary>송신 개행 규약 변경. 사용자 입력 경로는 _state 를 직접 보므로 AI 경로(브리지)만 맞춰준다.</summary>
+    /// <summary>이 탭의 송신 개행 규약 변경(키 입력·입력바·칩·붙여넣기·AI 전송 모두 이 값을 쓴다).</summary>
     public void SetTransmitNewline(TransmitNewline mode)
     {
+        _nlTx = mode;
         if (_bridge is not null) _bridge.TransmitNewline = mode;
+        _state.NewlineTx = mode;
+        _state.Save();
         RefreshMetrics();
     }
 
@@ -956,8 +991,8 @@ public partial class UartDocumentView : UserControl
         // 명령 그룹이 여러 개일 때만 표시 — 지금 어느 세트가 적용됐는지 드롭다운을 열지 않아도 알 수 있게.
         string group = _commands.Groups.Count > 1 && CurrentCommandGroup is { } g ? $"  ·  CMD:{g}" : "";
         // 개행 규약은 기본값(RX CR+LF / TX CR)이 아닐 때만 표시 — 바꿔 놓은 걸 잊고 헤매지 않게.
-        bool nlDefault = _state.NewlineRx == ReceiveNewline.CrLf && _state.NewlineTx == TransmitNewline.Cr;
-        string nl = nlDefault ? "" : $"  ·  NL↓{_state.NewlineRx.Label()} ↑{_state.NewlineTx.Label()}";
+        bool nlDefault = _nlRx == ReceiveNewline.CrLf && _nlTx == TransmitNewline.Cr;
+        string nl = nlDefault ? "" : $"  ·  NL↓{_nlRx.Label()} ↑{_nlTx.Label()}";
         // 이 탭이 '열 때 리셋'인지 — 세션마다 다른 값이라 켜져 있을 때 상태바에 남긴다.
         string rst = _resetOnOpen ? "  ·  열 때 리셋" : "";
         MetricsMessage = IsConnected

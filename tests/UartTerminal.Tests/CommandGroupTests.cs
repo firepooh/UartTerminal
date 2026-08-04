@@ -1,5 +1,6 @@
 using System.Text.Json;
 using UartTerminal.Core.Config;
+using UartTerminal.Core.Terminal;
 
 namespace UartTerminal.Tests;
 
@@ -285,6 +286,87 @@ public sealed class CommandGroupTests : IDisposable
         var off = new SessionProfile { Name = "B", Port = "COM4", Baud = 115200 };
         Assert.Contains("리셋", on.Display);
         Assert.DoesNotContain("리셋", off.Display);
+    }
+
+    // ── 개행 규약(세션별 접속 속성 · null = 지정 없음) ──────────────────────────
+
+    [Fact]
+    public void SessionProfile_PersistsNewline()
+    {
+        string sp = Path.Combine(_dir, "sessions.json");
+        var store = new SessionStore(sp);
+        store.Load();
+        Assert.True(store.AddOrReplace(new SessionProfile
+        {
+            Name = "계측기", Port = "COM9", Baud = 9600,
+            NewlineRx = ReceiveNewline.Cr, NewlineTx = TransmitNewline.CrLf,
+        }));
+
+        var reload = new SessionStore(sp);
+        reload.Load();
+        Assert.Equal(ReceiveNewline.Cr, reload.Items[0].NewlineRx);
+        Assert.Equal(TransmitNewline.CrLf, reload.Items[0].NewlineTx);
+    }
+
+    [Fact]
+    public void SessionProfile_Newline_SavedAsReadableNames()
+    {
+        string sp = Path.Combine(_dir, "sessions.json");
+        var store = new SessionStore(sp);
+        store.Load();
+        store.AddOrReplace(new SessionProfile
+        {
+            Name = "a", Port = "COM4", Baud = 115200,
+            NewlineRx = ReceiveNewline.Auto, NewlineTx = TransmitNewline.Lf,
+        });
+
+        // 사람이 읽고 고치는 파일이므로 숫자(0/1/2)가 아니라 이름으로 저장돼야 한다.
+        string json = File.ReadAllText(sp);
+        Assert.Contains("\"newlineRx\": \"Auto\"", json);
+        Assert.Contains("\"newlineTx\": \"Lf\"", json);
+    }
+
+    [Fact]
+    public void SessionProfile_NoNewline_IsOmitted_AndReadsBackNull()
+    {
+        // '세션 설정 없이 열 때' 시나리오: 세션이 개행을 지정하지 않으면 필드 자체가 없고,
+        // 읽으면 null → 호출자는 현재(마지막으로 쓴) 값을 그대로 쓴다.
+        string sp = Path.Combine(_dir, "sessions.json");
+        var store = new SessionStore(sp);
+        store.Load();
+        store.AddOrReplace(new SessionProfile { Name = "기본", Port = "COM4", Baud = 115200 });
+
+        string json = File.ReadAllText(sp);
+        Assert.DoesNotContain("newlineRx", json);
+        Assert.DoesNotContain("newlineTx", json);
+
+        var reload = new SessionStore(sp);
+        reload.Load();
+        Assert.Null(reload.Items[0].NewlineRx);
+        Assert.Null(reload.Items[0].NewlineTx);
+    }
+
+    [Fact]
+    public void SessionProfile_UnknownNewlineName_FallsBackToNull_WithoutCorruptingFile()
+    {
+        // 손편집 오타가 파일 전체를 '손상'으로 만들어 프로필을 날리면 안 된다(관용 변환기).
+        File.WriteAllText(Path.Combine(_dir, "sessions.json"), """
+        {
+          "schemaVersion": 1,
+          "sessions": [
+            { "name": "오타", "port": "COM4", "baud": 115200, "newlineRx": "CRLF!", "newlineTx": 3 }
+          ]
+        }
+        """);
+
+        var store = new SessionStore(Path.Combine(_dir, "sessions.json"));
+        store.Load();
+
+        Assert.Null(store.LastError);            // 손상 처리되지 않음
+        Assert.Single(store.Items);              // 프로필은 살아 있음
+        Assert.Equal("오타", store.Items[0].Name);
+        Assert.Null(store.Items[0].NewlineRx);   // 알 수 없는 값 → 지정 없음
+        Assert.Null(store.Items[0].NewlineTx);
     }
 
     [Fact]

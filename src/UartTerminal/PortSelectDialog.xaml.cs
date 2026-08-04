@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using UartTerminal.Core.Config;
 using UartTerminal.Core.Serial;
+using UartTerminal.Core.Terminal;
 
 namespace UartTerminal;
 
@@ -28,6 +29,10 @@ public partial class PortSelectDialog : Window
     /// <summary>세션 선택으로 지정된 명령 그룹(접속 확정 시 SelectedCommandGroup 으로 넘어간다).</summary>
     private string? _sessionCommandGroup;
 
+    /// <summary>세션 선택으로 지정된 개행 규약(없으면 null → 현재 탭 값 유지).</summary>
+    private ReceiveNewline? _sessionNewlineRx;
+    private TransmitNewline? _sessionNewlineTx;
+
     public PortInfo? SelectedPort { get; private set; }
 
     /// <summary>사용자가 고른 통신 속도. 취소 시 의미 없음.</summary>
@@ -38,6 +43,13 @@ public partial class PortSelectDialog : Window
 
     /// <summary>세션으로 접속한 경우 그 세션에 연결된 명령 그룹(없으면 null → 그룹 자동 전환 안 함).</summary>
     public string? SelectedCommandGroup { get; private set; }
+
+    /// <summary>
+    /// 세션으로 접속한 경우 그 세션이 지정한 개행 규약. <b>null 이면 '지정 없음'</b> —
+    /// 세션을 안 쓰고 포트만 골라 열었거나 세션에 값이 없을 때이며, 호출자는 현재 값을 그대로 유지한다.
+    /// </summary>
+    public ReceiveNewline? SelectedNewlineRx { get; private set; }
+    public TransmitNewline? SelectedNewlineTx { get; private set; }
 
     public PortSelectDialog(string? preselectPort = null, int preselectBaud = DefaultBaud,
                             SessionStore? sessions = null, bool preselectResetOnOpen = false)
@@ -71,6 +83,8 @@ public partial class PortSelectDialog : Window
         // 없으면 세션의 포트명을 기억해 두었다가 연결 시 사용한다(자동 재연결 대기로 이어짐).
         _sessionPort = s.Port;
         _sessionCommandGroup = s.CommandGroup; // 접속 후 칩 바를 이 그룹으로 자동 전환
+        _sessionNewlineRx = s.NewlineRx;       // 세션에 값이 있으면 접속 시 그 개행 규약으로 전환
+        _sessionNewlineTx = s.NewlineTx;
         SetBaud(s.Baud);
         ResetOnOpenCheck.IsChecked = s.ResetOnOpen; // 보드마다 다른 값 — 세션이 폼을 채운다
 
@@ -204,9 +218,11 @@ public partial class PortSelectDialog : Window
         SelectedPort = port;
         SelectedBaud = CheckedBaud();
         SelectedResetOnOpen = ResetOnOpenCheck.IsChecked == true;
-        // 세션으로 접속한 경우에만 그룹을 넘긴다(포트 목록에서 직접 고른 경우 현재 그룹 유지).
-        SelectedCommandGroup = string.Equals(port.PortName, _sessionPort, StringComparison.OrdinalIgnoreCase)
-            ? _sessionCommandGroup : null;
+        // 세션으로 접속한 경우에만 세션 값을 넘긴다(포트 목록에서 직접 고른 경우 현재 값 유지).
+        bool viaSession = string.Equals(port.PortName, _sessionPort, StringComparison.OrdinalIgnoreCase);
+        SelectedCommandGroup = viaSession ? _sessionCommandGroup : null;
+        SelectedNewlineRx = viaSession ? _sessionNewlineRx : null;
+        SelectedNewlineTx = viaSession ? _sessionNewlineTx : null;
         DialogResult = true;
     }
 }

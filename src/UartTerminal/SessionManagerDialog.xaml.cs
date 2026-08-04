@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using UartTerminal.Core.Config;
+using UartTerminal.Core.Terminal;
 
 namespace UartTerminal;
 
@@ -25,12 +26,27 @@ public partial class SessionManagerDialog : Window
         private int _baud = 115200;
         private string? _group;
         private bool _resetOnOpen;
+        private ReceiveNewline? _nlRx;
+        private TransmitNewline? _nlTx;
 
         public string Name { get => _name; set { _name = value ?? ""; Raise(); } }
         public string Port { get; init; } = "";
         public int Baud { get => _baud; set { _baud = value; Raise(); } }
         public string? Group { get => _group; set { _group = value; Raise(); } }
         public bool ResetOnOpen { get => _resetOnOpen; set { _resetOnOpen = value; Raise(); } }
+
+        /// <summary>null = 지정 없음(접속 시 현재 값 유지).</summary>
+        public ReceiveNewline? NewlineRx { get => _nlRx; set { _nlRx = value; Raise(); } }
+        public TransmitNewline? NewlineTx { get => _nlTx; set { _nlTx = value; Raise(); } }
+
+        /// <summary>"↓CR+LF ↑CR" 형태. 둘 다 지정 없으면 흐린 "(기본)".</summary>
+        public string NewlineDisplay => _nlRx is null && _nlTx is null
+            ? "(기본)"
+            : $"↓{(_nlRx?.Label() ?? "기본")} ↑{(_nlTx?.Label() ?? "기본")}";
+
+        public Brush NewlineBrush => _nlRx is null && _nlTx is null
+            ? (Brush)Application.Current.Resources["TextFaint"]
+            : (Brush)Application.Current.Resources["TextDim"];
 
         /// <summary>켜짐만 눈에 띄게 — 꺼짐은 흐린 "—" 로 둬서 표가 시끄러워지지 않게.</summary>
         public string ResetDisplay => _resetOnOpen ? "리셋" : "—";
@@ -56,11 +72,35 @@ public partial class SessionManagerDialog : Window
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GroupBrush)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResetDisplay)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResetBrush)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NewlineDisplay)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NewlineBrush)));
         }
     }
 
     /// <summary>그룹 콤보의 "지정 안 함" 항목(null 을 콤보에 담을 수 없어 센티넬 문자열을 쓴다).</summary>
     private const string NoGroup = "(없음)";
+
+    /// <summary>개행 콤보의 "지정 안 함" — 세션에 값을 두지 않고 접속 시 현재 설정을 따른다.</summary>
+    private const string NoNewline = "(기본 — 현재 설정)";
+
+    // 콤보 항목: 표시 문자열 ↔ enum 값. (기본)은 null.
+    // 라벨은 콤보 폭에 맞춰 짧게 — 자세한 규칙은 ToolTip/README §2.1 에 있다.
+    private static readonly (string Text, ReceiveNewline? Value)[] RxItems =
+    {
+        (NoNewline, null),
+        ("CR+LF  (개행=LF)", ReceiveNewline.CrLf),
+        ("LF  (CR 무시)", ReceiveNewline.Lf),
+        ("CR  (LF 무시)", ReceiveNewline.Cr),
+        ("AUTO  (CR·LF 모두)", ReceiveNewline.Auto),
+    };
+
+    private static readonly (string Text, TransmitNewline? Value)[] TxItems =
+    {
+        (NoNewline, null),
+        ("CR", TransmitNewline.Cr),
+        ("CR+LF", TransmitNewline.CrLf),
+        ("LF", TransmitNewline.Lf),
+    };
 
     private static readonly int[] BaudPresets = { 74880, 115200, 230400, 460800, 921600 };
 
@@ -81,11 +121,14 @@ public partial class SessionManagerDialog : Window
             {
                 Name = s.Name, Port = s.Port, Baud = s.Baud,
                 ResetOnOpen = s.ResetOnOpen, Group = s.CommandGroup,
+                NewlineRx = s.NewlineRx, NewlineTx = s.NewlineTx,
             });
 
         SessionList.ItemsSource = _rows;
 
         BaudBox.ItemsSource = BaudPresets;
+        RxBox.ItemsSource = RxItems.Select(i => i.Text).ToList();
+        TxBox.ItemsSource = TxItems.Select(i => i.Text).ToList();
         // 그룹 목록 = commands.json 의 그룹 + "(없음)". 연결이 끊긴 그룹명(파일에서 지워진 경우)도 보존해 보여준다.
         var groups = new List<string> { NoGroup };
         groups.AddRange(commands.GroupNames);
@@ -137,6 +180,8 @@ public partial class SessionManagerDialog : Window
             BaudBox.SelectedItem = row is null ? null : (object)row.Baud;
             GroupBox.SelectedItem = row is null ? null : (string.IsNullOrEmpty(row.Group) ? NoGroup : row.Group!);
             ResetCheck.IsChecked = row?.ResetOnOpen ?? false;
+            RxBox.SelectedItem = RxItems.First(i => i.Value == row?.NewlineRx).Text;
+            TxBox.SelectedItem = TxItems.First(i => i.Value == row?.NewlineTx).Text;
         }
         finally { _syncing = false; }
     }
@@ -163,6 +208,18 @@ public partial class SessionManagerDialog : Window
     {
         if (_syncing || SessionList.SelectedItem is not Row row) return;
         row.ResetOnOpen = ResetCheck.IsChecked == true;
+    }
+
+    private void RxBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing || SessionList.SelectedItem is not Row row) return;
+        if (RxBox.SelectedItem is string t) row.NewlineRx = RxItems.First(i => i.Text == t).Value;
+    }
+
+    private void TxBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing || SessionList.SelectedItem is not Row row) return;
+        if (TxBox.SelectedItem is string t) row.NewlineTx = TxItems.First(i => i.Text == t).Value;
     }
 
     private void Delete_Click(object sender, RoutedEventArgs e)
@@ -203,6 +260,8 @@ public partial class SessionManagerDialog : Window
             Port = r.Port,
             Baud = r.Baud,
             ResetOnOpen = r.ResetOnOpen,
+            NewlineRx = r.NewlineRx,
+            NewlineTx = r.NewlineTx,
             CommandGroup = r.Group,
         });
 
