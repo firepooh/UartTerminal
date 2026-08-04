@@ -17,6 +17,7 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 | 5 | 통신 속도 선택 (포트 선택 시 프리셋에서) | C1a |
 | 6 | 저장 명령 칩 바 — 자주 쓰는 **한 줄** 명령을 클릭 한 번으로 전송 (`commands.json`) | C2 |
 | 7 | 이름 붙인 접속 프로필(세션) — 이름·포트·속도·열 때 리셋·개행·명령 그룹을 저장해 더블클릭 접속 (`sessions.json`) | C1b |
+| 8 | 펌웨어 플래시 — 빌드 산출물 zip 을 골라 esptool 로 굽기(포트 자동 양보·복귀) | C3 |
 
 **확정 사항** (2026-07-21):
 
@@ -87,6 +88,44 @@ ESP32 개발보드는 USB-시리얼의 **DTR→IO0, RTS→EN** 이 트랜지스�
   연결 다이얼로그 체크박스에서 고르고(세션을 선택하면 그 값으로 자동 채움), [보드] 메뉴로 현재 탭만 바꾸며,
   세션 관리 화면의 `열 때 리셋` 열에서 확인·편집한다. `state.json` 의 값은 새 탭의 기본값(= 마지막으로 쓴 값)일 뿐이다
 - AI 경로는 MCP `uart_reset(bootloader)` — 타이밍이 보장돼 왕복 없이 한 번에 리셋한다
+
+### 2.3 펌웨어 플래시 ([보드] > 펌웨어 플래시(zip)…)
+
+빌드 산출물 zip 을 고르면 **오프셋·칩·파일이 자동으로 채워지고**, 시작하면 그 탭의 포트를 잠시
+양보한 뒤 esptool 로 굽고 다시 연결한다. 굽자마자 부팅 로그가 이어져 보이는 것이 이 기능의 목적이다.
+
+**엔진**: Espressif 의 `esptool`(별도 프로세스). Flash Download Tool(GUI)은 CLI 진입점이 없어
+자동화할 수 없고, 내부 엔진이 esptool 이므로 그것을 직접 호출한다. 탐색 순서는
+
+```
+1. state.json 의 esptoolPath (직접 지정)
+2. <앱 폴더>\tools\esptool\esptool.exe        ← 개발환경 없는 PC 용 번들 자리
+3. %USERPROFILE%\.espressif  — esp_idf.json 의 idfSelectedId 가 가리키는 IDF 우선
+4. PATH
+```
+
+v4 와 v5 의 문법 차이(`write_flash`↔`write-flash`, `--flash_mode`↔`--flash-mode`)는 `esptool version`
+으로 판별해 분기한다. ESP-IDF 가 없는 PC 는 [esptool 릴리스](https://github.com/espressif/esptool/releases)의
+standalone 바이너리(GPL-2.0)를 2번 위치에 두거나 1번에 경로를 적으면 된다.
+
+**zip 해석에서 실제로 부딪히는 것들** (모두 자동 처리 + 회귀 테스트로 고정)
+
+| 상황 | 처리 |
+|---|---|
+| `flash_project_args` 의 경로가 빌드 트리 기준(`bootloader/bootloader.bin`)인데 zip 은 평면 | 파일명(basename)으로 매칭 |
+| args 의 앱 이름이 실제와 다름(빌드명 `VMS.bin` → 배포 `OD420*.bin`) | 역할로 재탐색하고 경고 |
+| 같은 앱의 사본이 여럿(`OD420.bin` / `OD420-4.0.1724.229.bin`) | 그 줄만 콤보로 노출, **버전 붙은 쪽**을 기본 선택 |
+| zip 에 칩 정보가 없음 | `bootloader.bin` 헤더의 `chip_id` 로 확정(필요할 때만 수동 override) |
+| 같은 오프셋에 두 파일 / 빈 파일 | 오류로 차단 |
+| `storage` 등 데이터 파티션 | **기본 해제** — 자동으로 덮으면 장치별 데이터(캘리브레이션 등)가 날아간다 |
+
+**SPI 설정**은 기본이 `keep`(바이너리 그대로) — Flash Download Tool 의 `DoNotChgBin` 과 같은 동작이라
+빌드 때 정한 mode/freq/size 헤더를 덮어쓰지 않는다.
+
+**안전장치**: 진행 중 창 닫기 차단 · 시작 전 확인 · 실패·취소에도 `finally` 에서 포트 복귀 ·
+복귀는 esptool 이 핸들을 놓을 때까지 400ms×6 재시도(§7 의 Dispose 지연과 같은 성격).
+해제한 파일은 `%APPDATA%\UartTerminal\flash\<zip이름-해시>\` 에 두고 같은 zip 이면 재사용하며,
+zip 은 외부 파일이므로 경로 탈출(Zip Slip)을 거부한다.
 
 ## 3. Phase 계획
 
