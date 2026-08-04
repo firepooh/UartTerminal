@@ -67,6 +67,28 @@
             </Grid.ColumnDefinitions>
             <Border x:Name="ViewHost" Grid.Column="0" Background="{StaticResource Bg}"/>
 
+            <!-- 스크롤백 검색 바(Ctrl+F). 우상단, 매치 하이라이트 + 이전/다음 이동. Esc 로 닫기. -->
+            <Border x:Name="FindBar" Grid.Column="0" Visibility="Collapsed"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,8,14,0" Padding="8,6"
+                    Background="#F20B0F16" BorderBrush="{StaticResource BorderStrong}"
+                    BorderThickness="1" CornerRadius="8">
+                <StackPanel Orientation="Horizontal">
+                    <TextBox x:Name="FindBox" Width="220" MinHeight="26" FontSize="12"
+                             Style="{StaticResource CommandInput}" Padding="8,3"
+                             TextChanged="FindBox_TextChanged" PreviewKeyDown="FindBox_PreviewKeyDown"/>
+                    <TextBlock x:Name="FindCount" VerticalAlignment="Center" Margin="9,0,7,0"
+                               MinWidth="46" Foreground="{StaticResource TextMuted}" FontSize="11.5"
+                               FontFamily="{StaticResource MonoFont}" Text=""/>
+                    <Button Content="▲" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
+                            Padding="9,0" Focusable="False" Click="FindPrev_Click" ToolTip="이전 (Shift+Enter)"/>
+                    <Button Content="▼" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
+                            Padding="9,0" Margin="5,0,0,0" Focusable="False" Click="FindNext_Click" ToolTip="다음 (Enter)"/>
+                    <Button Content="✕" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
+                            Padding="9,0" Margin="5,0,0,0" Focusable="False" Click="FindClose_Click" ToolTip="닫기 (Esc)"/>
+                </StackPanel>
+            </Border>
+
             <!-- 폰트 크기 실시간 표시(Ctrl+휠/Ctrl+±). 잠깐 떴다 사라짐. 마우스 입력 통과. -->
             <Border x:Name="ZoomIndicator" Grid.Column="0" Visibility="Collapsed"
                     IsHitTestVisible="False"

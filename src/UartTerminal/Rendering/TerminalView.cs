@@ -109,6 +109,60 @@ public sealed class TerminalView : FrameworkElement
         set { if (_showTimestamps == value) return; _showTimestamps = value; _forceRender = true; }
     }
 
+    // 검색 하이라이트: 절대 라인 → 매치 구간 목록(셀 시작, 길이). 현재 매치는 별도로 강조.
+    public readonly record struct SearchHit(long AbsLine, int StartCell, int Length);
+    private readonly Dictionary<long, List<(int start, int len)>> _searchLines = new();
+    private SearchHit? _currentHit;
+    private static readonly Color SearchMatchBg = Color.FromRgb(0x4B, 0x46, 0x12);   // 어두운 올리브
+    private static readonly Color SearchCurrentBg = Color.FromRgb(0x8A, 0x66, 0x00); // 밝은 앰버
+
+    /// <summary>검색 매치 집합과 현재 매치 인덱스를 설정(하이라이트 갱신).</summary>
+    public void SetSearch(IReadOnlyList<SearchHit> hits, int current)
+    {
+        _searchLines.Clear();
+        foreach (var h in hits)
+        {
+            if (!_searchLines.TryGetValue(h.AbsLine, out var list)) { list = new(); _searchLines[h.AbsLine] = list; }
+            list.Add((h.StartCell, h.Length));
+        }
+        _currentHit = (current >= 0 && current < hits.Count) ? hits[current] : null;
+        _forceRender = true;
+    }
+
+    public void ClearSearch()
+    {
+        if (_searchLines.Count == 0 && _currentHit is null) return;
+        _searchLines.Clear();
+        _currentHit = null;
+        _forceRender = true;
+    }
+
+    /// <summary>지정한 절대 라인을 화면 상단 근처로 스크롤(검색 매치 이동용).</summary>
+    public void ScrollLineIntoView(long absLine)
+    {
+        lock (_buffer.SyncRoot)
+        {
+            _followTail = false;
+            long lo = _buffer.TrimmedCount;
+            long hi = _buffer.TrimmedCount + Math.Max(0, _buffer.LineCount - 1);
+            _topAbsLine = Math.Clamp(absLine, lo, hi);
+            _topSubRow = 0;
+        }
+        _forceRender = true;
+    }
+
+    /// <summary>이 셀이 검색 매치/현재 매치에 속하는지(배경 하이라이트용).</summary>
+    private (bool match, bool current) SearchState(long absLine, int cell)
+    {
+        bool current = _currentHit is { } ch && ch.AbsLine == absLine
+                       && cell >= ch.StartCell && cell < ch.StartCell + ch.Length;
+        if (current) return (true, true);
+        if (_searchLines.Count > 0 && _searchLines.TryGetValue(absLine, out var ranges))
+            foreach (var (st, ln) in ranges)
+                if (cell >= st && cell < st + ln) return (true, false);
+        return (false, false);
+    }
+
     public event Action<ScrollMetrics>? ScrollMetricsChanged;
 
     /// <summary>드래그 선택 완료 시 선택 텍스트를 전달(TeraTerm식 자동 복사).</summary>
@@ -275,10 +329,17 @@ public sealed class TerminalView : FrameworkElement
 
             if (cellPx > 0)
             {
-                bool selected = _hasSelection && InSelection(row.AbsLine, row.StartCell + i, selMin, selMax);
+                int ci = row.StartCell + i;
+                bool selected = _hasSelection && InSelection(row.AbsLine, ci, selMin, selMax);
+                var (isMatch, isCurrent) = SearchState(row.AbsLine, ci);
                 if (selected)
                 {
                     dc.DrawRectangle(GetBrush(_palette.SelectionBackground), null,
+                        new Rect(x, y, cellPx, m.CellHeight));
+                }
+                else if (isMatch)
+                {
+                    dc.DrawRectangle(GetBrush(isCurrent ? SearchCurrentBg : SearchMatchBg), null,
                         new Rect(x, y, cellPx, m.CellHeight));
                 }
                 else if (_palette.HasExplicitBackground(attr))

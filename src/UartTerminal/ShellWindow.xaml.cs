@@ -551,6 +551,8 @@ public partial class ShellWindow : Window
         { NewTab(); e.Handled = true; return; }
         if (mods == ModifierKeys.Control && e.Key == Key.W)
         { CloseActiveTab(); e.Handled = true; return; }
+        if (mods == ModifierKeys.Control && e.Key == Key.F)
+        { ActiveDoc?.ShowFind(); e.Handled = true; return; }
         // Alt+B: 명령 바 토글. Alt 계열이라 터미널 type-through(단독 Ctrl+문자 = 제어 바이트)를 잠식하지 않는다.
         if ((mods & ModifierKeys.Alt) != 0 && e.SystemKey == Key.B)
         { ToggleCommandBar(); e.Handled = true; return; }

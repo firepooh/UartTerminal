@@ -748,6 +748,94 @@ public partial class UartDocumentView : UserControl
     /// <summary>라인별 수신 타임스탬프 표시 토글(전역 설정).</summary>
     public void SetTimestamps(bool on) { if (_view is not null) _view.ShowTimestamps = on; }
 
+    // ── 스크롤백 검색(Ctrl+F) ──────────────────────────────────────────────────
+    // 논리 라인 버퍼에서 대소문자 무시 부분일치를 찾아 하이라이트하고 이전/다음으로 이동한다.
+    // 매치는 검색 시점에 계산(절대 라인 번호로 저장 → 트림에도 안정). 새 수신분은 재검색 시 반영.
+
+    private readonly List<TerminalView.SearchHit> _findHits = new();
+    private int _findIndex = -1;
+
+    /// <summary>찾기 바 열기(Ctrl+F). 기존 검색어가 있으면 재실행.</summary>
+    public void ShowFind()
+    {
+        FindBar.Visibility = Visibility.Visible;
+        FindBox.Focus();
+        FindBox.SelectAll();
+        if (!string.IsNullOrEmpty(FindBox.Text)) RunSearch();
+    }
+
+    private void CloseFind()
+    {
+        FindBar.Visibility = Visibility.Collapsed;
+        _findHits.Clear();
+        _findIndex = -1;
+        _view?.ClearSearch();
+        FocusTerminal();
+    }
+
+    private void FindClose_Click(object sender, RoutedEventArgs e) => CloseFind();
+    private void FindNext_Click(object sender, RoutedEventArgs e) => MoveFind(+1);
+    private void FindPrev_Click(object sender, RoutedEventArgs e) => MoveFind(-1);
+    private void FindBox_TextChanged(object sender, TextChangedEventArgs e) => RunSearch();
+
+    private void FindBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.Enter:
+                MoveFind((Keyboard.Modifiers & ModifierKeys.Shift) != 0 ? -1 : +1);
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                CloseFind();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void RunSearch()
+    {
+        _findHits.Clear();
+        string q = FindBox.Text;
+        if (_engine is not null && !string.IsNullOrEmpty(q))
+        {
+            var buffer = _engine.Buffer;
+            lock (buffer.SyncRoot)
+            {
+                long trimmed = buffer.TrimmedCount;
+                int n = buffer.LineCount;
+                for (int i = 0; i < n; i++)
+                {
+                    string text = buffer.GetLine(i).Text();
+                    int idx = 0;
+                    while ((idx = text.IndexOf(q, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
+                    {
+                        _findHits.Add(new TerminalView.SearchHit(trimmed + i, idx, q.Length));
+                        idx += q.Length; // 겹침 없이 다음
+                    }
+                }
+            }
+        }
+        _findIndex = _findHits.Count > 0 ? 0 : -1;
+        ApplyFind(scroll: _findIndex >= 0);
+    }
+
+    private void MoveFind(int dir)
+    {
+        if (_findHits.Count == 0) return;
+        _findIndex = ((_findIndex < 0 ? 0 : _findIndex) + dir % _findHits.Count + _findHits.Count) % _findHits.Count;
+        ApplyFind(scroll: true);
+    }
+
+    private void ApplyFind(bool scroll)
+    {
+        _view?.SetSearch(_findHits, _findIndex);
+        FindCount.Text = _findHits.Count == 0
+            ? (FindBox.Text.Length == 0 ? "" : "없음")
+            : $"{_findIndex + 1}/{_findHits.Count}";
+        if (scroll && _findIndex >= 0) _view?.ScrollLineIntoView(_findHits[_findIndex].AbsLine);
+    }
+
     // ── MCP ─────────────────────────────────────────────────────────────────────
 
     public void McpSetEnabled(bool on)
