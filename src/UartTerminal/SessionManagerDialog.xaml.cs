@@ -41,22 +41,22 @@ public partial class SessionManagerDialog : Window
 
         /// <summary>"↓CR+LF ↑CR" 형태. 둘 다 지정 없으면 흐린 "(기본)".</summary>
         public string NewlineDisplay => _nlRx is null && _nlTx is null
-            ? "(기본)"
-            : $"↓{(_nlRx?.Label() ?? "기본")} ↑{(_nlTx?.Label() ?? "기본")}";
+            ? Loc.S("Sess.NewlineDefault")
+            : $"↓{(_nlRx?.Label() ?? Loc.S("Sess.NewlineDefaultShort"))} ↑{(_nlTx?.Label() ?? Loc.S("Sess.NewlineDefaultShort"))}";
 
         public Brush NewlineBrush => _nlRx is null && _nlTx is null
             ? (Brush)Application.Current.Resources["TextFaint"]
             : (Brush)Application.Current.Resources["TextDim"];
 
         /// <summary>켜짐만 눈에 띄게 — 꺼짐은 흐린 "—" 로 둬서 표가 시끄러워지지 않게.</summary>
-        public string ResetDisplay => _resetOnOpen ? "리셋" : "—";
+        public string ResetDisplay => _resetOnOpen ? Loc.S("Sess.Reset") : "—";
 
         public Brush ResetBrush => _resetOnOpen
             ? (Brush)Application.Current.Resources["Amber"]
             : (Brush)Application.Current.Resources["TextFaint"];
 
         /// <summary>그룹이 없으면 "(없음)" — 빈칸으로 두면 설정 누락인지 알 수 없다.</summary>
-        public string GroupDisplay => string.IsNullOrEmpty(_group) ? "(없음)" : _group!;
+        public string GroupDisplay => string.IsNullOrEmpty(_group) ? Loc.S("Sess.NoGroup") : _group!;
 
         /// <summary>그룹 미지정은 흐리게, 지정은 강조색으로 — 표에서 바로 구분되게.</summary>
         public Brush GroupBrush => string.IsNullOrEmpty(_group)
@@ -78,23 +78,24 @@ public partial class SessionManagerDialog : Window
     }
 
     /// <summary>그룹 콤보의 "지정 안 함" 항목(null 을 콤보에 담을 수 없어 센티넬 문자열을 쓴다).</summary>
-    private const string NoGroup = "(없음)";
+    private static string NoGroup => Loc.S("Sess.NoGroup");
 
     /// <summary>개행 콤보의 "지정 안 함" — 세션에 값을 두지 않고 접속 시 현재 설정을 따른다.</summary>
-    private const string NoNewline = "(기본 — 현재 설정)";
+    private static string NoNewline => Loc.S("Sess.NoNewline");
 
     // 콤보 항목: 표시 문자열 ↔ enum 값. (기본)은 null.
     // 라벨은 콤보 폭에 맞춰 짧게 — 자세한 규칙은 ToolTip/README §2.1 에 있다.
-    private static readonly (string Text, ReceiveNewline? Value)[] RxItems =
+    // static readonly 로 두면 시작 시 언어로 고정된다 → 매번 조회하는 프로퍼티.
+    private static (string Text, ReceiveNewline? Value)[] RxItems => new (string, ReceiveNewline?)[]
     {
         (NoNewline, null),
-        ("CR+LF  (개행=LF)", ReceiveNewline.CrLf),
-        ("LF  (CR 무시)", ReceiveNewline.Lf),
-        ("CR  (LF 무시)", ReceiveNewline.Cr),
-        ("AUTO  (CR·LF 모두)", ReceiveNewline.Auto),
+        (Loc.S("Nl.RxCrLf"), ReceiveNewline.CrLf),
+        (Loc.S("Nl.RxLf"), ReceiveNewline.Lf),
+        (Loc.S("Nl.RxCr"), ReceiveNewline.Cr),
+        (Loc.S("Nl.RxAuto"), ReceiveNewline.Auto),
     };
 
-    private static readonly (string Text, TransmitNewline? Value)[] TxItems =
+    private static (string Text, TransmitNewline? Value)[] TxItems => new (string, TransmitNewline?)[]
     {
         (NoNewline, null),
         ("CR", TransmitNewline.Cr),
@@ -225,7 +226,7 @@ public partial class SessionManagerDialog : Window
     private void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (SessionList.SelectedItem is not Row row) return;
-        var r = MessageBox.Show(this, $"세션을 삭제할까요?\n\n{row.Name} — {row.Port} · {row.Baud}",
+        var r = MessageBox.Show(this, Loc.F("Sess.ConfirmDelete", $"{row.Name} — {row.Port} · {row.Baud}"),
             "UartTerminal", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
         if (r != MessageBoxResult.OK) return;
 
@@ -268,7 +269,7 @@ public partial class SessionManagerDialog : Window
         if (!_sessions.ReplaceAll(items))
         {
             // 실패 시 창을 닫지 않는다(편집 내용을 잃지 않게).
-            MessageBox.Show(this, _sessions.LastError ?? "세션을 저장하지 못했습니다.",
+            MessageBox.Show(this, _sessions.LastError ?? Loc.S("Sess.SaveFailed"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }

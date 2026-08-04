@@ -174,7 +174,7 @@ public partial class ShellWindow : Window
         {
             Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "탭 닫기",
+            ToolTip = Loc.S("Tip.CloseTab"),
             Style = (Style)FindResource("TabCloseButton"),
         };
         close.Click += (_, _) => CloseTab(ti);
@@ -453,7 +453,7 @@ public partial class ShellWindow : Window
     {
         if (Tabs.Items.Count < 2)
         {
-            StatusText.Text = "분리할 탭이 하나뿐입니다";
+            StatusText.Text = Loc.S("Shell.OnlyOneTab");
             return;
         }
         var floatWin = new ShellWindow(_state, _commands, _sessions, isPrimary: false);
@@ -466,7 +466,7 @@ public partial class ShellWindow : Window
     {
         if (_isPrimary || Primary is null)
         {
-            StatusText.Text = "이미 메인 창입니다";
+            StatusText.Text = Loc.S("Shell.AlreadyMain");
             return;
         }
         MoveTab(ti, Primary);
@@ -531,7 +531,7 @@ public partial class ShellWindow : Window
 
         if (doc is null || !doc.McpEnabled)
         {
-            McpStatusText.Text = "MCP: 꺼짐";
+            McpStatusText.Text = Loc.S("Status.McpOff");
             McpStatusText.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
         }
         else

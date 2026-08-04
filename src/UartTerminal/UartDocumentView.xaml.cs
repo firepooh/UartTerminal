@@ -154,8 +154,8 @@ public partial class UartDocumentView : UserControl
             // 취소는 아무것도 바꾸지 않아야 한다. 특히 진행 중인 자동 재연결 대기를 죽이면
             // USB 를 다시 꽂아도 되살아나지 않는다(사용자가 직접 재연결해야 함).
             SetStatus((_conn?.IsReconnecting ?? false)
-                ? $"재연결 취소됨 — 자동 재연결 대기 계속 ({_portName})"
-                : "재연결 취소됨");
+                ? Loc.F("Conn.ReconnectCanceledWaiting", _portName)
+                : Loc.S("Conn.ReconnectCanceled"));
             return;
         }
 
@@ -238,18 +238,17 @@ public partial class UartDocumentView : UserControl
         switch (_conn!.OpenUserInitiated())
         {
             case OpenOutcome.Success:
-                SetStatus($"연결됨: {_portName}");
+                SetStatus(Loc.F("Conn.Connected", _portName));
                 _view?.Focus();
                 break;
             case OpenOutcome.InUse:
-                SetStatus($"{_portName} 사용 중(다른 프로그램/창)");
-                MessageBox.Show(OwnerWindow,
-                    $"{_portName} 을(를) 열 수 없습니다.\n다른 프로그램(또는 다른 창/탭)이 사용 중일 수 있습니다.",
+                SetStatus(Loc.F("Conn.InUse", _portName));
+                MessageBox.Show(OwnerWindow, Loc.F("Conn.InUseBody", _portName),
                     "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
                 break;
             default:
-                SetStatus($"연결 실패: {_conn.LastOpenError}");
-                MessageBox.Show(OwnerWindow, $"{_portName} 연결 실패:\n{_conn.LastOpenError}",
+                SetStatus(Loc.F("Conn.OpenFailed", _conn.LastOpenError));
+                MessageBox.Show(OwnerWindow, Loc.F("Conn.OpenFailedBody", _portName, _conn.LastOpenError),
                     "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
                 break;
         }
@@ -316,7 +315,7 @@ public partial class UartDocumentView : UserControl
         {
             _mcpServer.Start();
             DiagLog.Info($"MCP 파이프 변경: {McpPipeServer.PipeNameFor(_portName)} — 릴레이 재등록 필요");
-            SetStatus($"포트 변경 — MCP 재등록 필요: [MCP] 메뉴 > 등록 명령 복사 ({_portName})");
+            SetStatus(Loc.F("Conn.PortChangedMcp", _portName));
         }
         RaiseMcpState();
     }
@@ -394,7 +393,7 @@ public partial class UartDocumentView : UserControl
 
     private void SendInputLine()
     {
-        if (!IsConnected) { SetStatus("연결되지 않음 — 입력 전송 불가"); return; }
+        if (!IsConnected) { SetStatus(Loc.S("Doc.NotConnectedInput")); return; }
         SendLine(InputBox.Text);
         InputBox.Clear();
     }
@@ -571,7 +570,7 @@ public partial class UartDocumentView : UserControl
             return;
         }
 
-        if (!IsConnected) { SetStatus("연결되지 않음 — 명령 전송 불가"); return; }
+        if (!IsConnected) { SetStatus(Loc.S("Doc.NotConnectedCommand")); return; }
 
         if (cmd.Confirm)
         {
@@ -591,7 +590,7 @@ public partial class UartDocumentView : UserControl
         string text = InputBox.Text.Trim();
         if (text.Length == 0)
         {
-            SetStatus("저장할 내용이 없습니다 — 입력창에 명령을 입력하세요");
+            SetStatus(Loc.S("Doc.NothingToSave"));
             return;
         }
         // 저장 직전에 파일을 다시 읽어 외부 손편집/다른 인스턴스의 변경을 통째로 덮어쓰지 않게 한다.
@@ -599,10 +598,10 @@ public partial class UartDocumentView : UserControl
         _commands.Load();
         if (!_commands.Add(new SavedCommand { Name = text, Text = text }, group))
         {
-            SetStatus(_commands.LastError ?? "명령 저장 실패");
+            SetStatus(_commands.LastError ?? Loc.S("Doc.CommandSaveFailed"));
             return;
         }
-        SetStatus($"명령 저장됨: {text}" + (group is null ? "" : $" (그룹: {group})"));
+        SetStatus(group is null ? Loc.F("Doc.CommandSaved", text) : Loc.F("Doc.CommandSavedInGroup", text, group));
     }
 
     private void SaveCommand_Click(object sender, RoutedEventArgs e) => SaveCurrentInputAsCommand();
@@ -614,16 +613,16 @@ public partial class UartDocumentView : UserControl
     {
         if (string.IsNullOrEmpty(_portName))
         {
-            SetStatus("저장할 연결이 없습니다");
+            SetStatus(Loc.S("Doc.NoConnectionToSave"));
             return;
         }
 
         // 기본 이름은 friendly name 이 아니라 포트명 — 사용자가 보드 별칭을 직접 붙이게 한다.
-        string reset = _resetOnOpen ? " · 열 때 리셋" : "";
+        string reset = _resetOnOpen ? Loc.S("Doc.SessionResetSuffix") : "";
         string nl = _nlRx == ReceiveNewline.CrLf && _nlTx == TransmitNewline.Cr
-            ? "" : $" · 개행 ↓{_nlRx.Label()} ↑{_nlTx.Label()}";
-        string? name = TextPromptDialog.Ask(OwnerWindow, "세션 저장",
-            $"이 연결({_portName} · {_params.BaudRate}bps{reset}{nl})을 어떤 이름으로 저장할까요?", _portName);
+            ? "" : Loc.F("Doc.SessionNewlineSuffix", _nlRx.Label(), _nlTx.Label());
+        string? name = TextPromptDialog.Ask(OwnerWindow, Loc.S("Doc.SessionPromptTitle"),
+            Loc.F("Doc.SessionPrompt", _portName, _params.BaudRate, reset + nl), _portName);
         if (name is null) return;
 
         string? group = CurrentCommandGroup; // 현재 탭이 쓰는 명령 그룹을 세션에 함께 기록(접속 시 자동 선택)
@@ -640,10 +639,10 @@ public partial class UartDocumentView : UserControl
             CommandGroup = group,
         }))
         {
-            SetStatus(_sessions.LastError ?? "세션 저장 실패");
+            SetStatus(_sessions.LastError ?? Loc.S("Doc.SessionSaveFailed"));
             return;
         }
-        SetStatus($"세션 저장됨: {name} — {_portName} · {_params.BaudRate}{reset}{nl}");
+        SetStatus(Loc.F("Doc.SessionSaved", name, _portName, _params.BaudRate, reset + nl));
     }
 
     private void EditCommands_Click(object sender, RoutedEventArgs e)
@@ -670,7 +669,7 @@ public partial class UartDocumentView : UserControl
         if (text.Contains('\n') || text.Contains('\r'))
         {
             var r = MessageBox.Show(OwnerWindow,
-                "여러 줄을 붙여넣습니다. 전송할까요?", "UartTerminal",
+                Loc.S("Doc.PasteConfirm"), "UartTerminal",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
             if (r != MessageBoxResult.OK) return;
         }
@@ -688,7 +687,7 @@ public partial class UartDocumentView : UserControl
     /// <summary>현재 스크롤백 버퍼(논리 라인 전체)를 텍스트 파일로 1회 저장(사용자 개시). 연속 로깅과는 별개.</summary>
     public void SaveVisibleLog()
     {
-        if (_engine is null) { SetStatus("저장할 내용이 없습니다"); return; }
+        if (_engine is null) { SetStatus(Loc.S("Doc.NothingToSaveLog")); return; }
 
         var sb = new StringBuilder();
         var buffer = _engine.Buffer;
@@ -715,12 +714,12 @@ public partial class UartDocumentView : UserControl
         try
         {
             File.WriteAllText(dlg.FileName, sb.ToString(), new UTF8Encoding(false));
-            SetStatus($"로그 저장됨: {dlg.FileName}");
+            SetStatus(Loc.F("Doc.LogSaved", dlg.FileName));
         }
         catch (Exception ex)
         {
             DiagLog.Exception("SaveVisibleLog", ex);
-            SetStatus($"로그 저장 실패: {ex.Message}");
+            SetStatus(Loc.F("Doc.LogSaveFailed", ex.Message));
         }
     }
 
@@ -806,9 +805,7 @@ public partial class UartDocumentView : UserControl
         _params = MakeParams(_params.BaudRate);
         _state.ResetOnOpen = on;
         _state.Save();
-        SetStatus(on
-            ? "열 때 보드 리셋: 켜짐 — 다음 연결부터 적용(지금 리셋은 Alt+R)"
-            : "열 때 보드 리셋: 꺼짐");
+        SetStatus(Loc.S(on ? "Doc.ResetOnOpenOn" : "Doc.ResetOnOpenOff"));
         RefreshMetrics();
     }
 
@@ -825,8 +822,8 @@ public partial class UartDocumentView : UserControl
     {
         if (string.IsNullOrEmpty(_portName))
         {
-            SetStatus("플래시할 포트가 없습니다 — 먼저 연결하세요(Alt+N)");
-            MessageBox.Show(OwnerWindow, "먼저 포트에 연결하세요.\n플래시는 현재 탭의 포트를 사용합니다.",
+            SetStatus(Loc.S("Flash.Status.NoPort"));
+            MessageBox.Show(OwnerWindow, Loc.S("Flash.Msg.NoPort"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -841,7 +838,7 @@ public partial class UartDocumentView : UserControl
     {
         if (_conn is null) return Task.FromResult(false);
         var r = _conn.McpRelease();
-        SetStatus($"플래시를 위해 포트 양보 — {_portName}");
+        SetStatus(Loc.F("Doc.FlashRelease", _portName));
         return Task.FromResult(r.Ok);
     }
 
@@ -857,38 +854,40 @@ public partial class UartDocumentView : UserControl
         {
             var r = _conn.McpReopen();
             if (r.Ok) return true;
-            if (attempt == 0) SetStatus($"재연결 대기 — {_portName} 아직 사용 중");
+            if (attempt == 0) SetStatus(Loc.F("Doc.FlashReopenWait", _portName));
             await Task.Delay(400);
         }
         return false;
     }
 
     /// <summary>하드웨어 리셋(EN 펄스) — 보드를 재부팅한다.</summary>
-    public Task HardResetAsync() => RunControlSequenceAsync(EspResetSequence.HardReset, "하드웨어 리셋");
+    public Task HardResetAsync() => RunControlSequenceAsync(EspResetSequence.HardReset, "Board.HardReset");
 
     /// <summary>부트로더(다운로드 모드) 진입 — IO0=LOW 상태로 리셋을 해제한다.</summary>
-    public Task EnterBootloaderAsync() => RunControlSequenceAsync(EspResetSequence.Bootloader, "부트로더 진입");
+    public Task EnterBootloaderAsync() => RunControlSequenceAsync(EspResetSequence.Bootloader, "Board.Bootloader");
 
-    private async Task RunControlSequenceAsync(IReadOnlyList<ControlLineStep> steps, string what)
+    /// <summary><paramref name="whatKey"/> 는 동작 이름의 번역 키(문장은 현재 언어로 조립).</summary>
+    private async Task RunControlSequenceAsync(IReadOnlyList<ControlLineStep> steps, string whatKey)
     {
+        string what = Loc.S(whatKey);
         if (_conn is null || !IsConnected)
         {
-            SetStatus($"{what} 불가 — 연결되지 않음");
+            SetStatus(Loc.F("Board.NotConnected", what));
             return;
         }
         if (_resetting) return;
 
         _resetting = true;
-        SetStatus($"{what}…");
+        SetStatus(Loc.F("Board.Running", what));
         try
         {
             bool ok = await _conn.ApplyControlLinesAsync(steps);
-            SetStatus(ok ? $"{what} 완료 ({_portName})" : $"{what} 실패 — 연결 상태 확인");
+            SetStatus(ok ? Loc.F("Board.Done", what, _portName) : Loc.F("Board.Failed", what));
         }
         catch (Exception ex)
         {
             DiagLog.Exception(what, ex);
-            SetStatus($"{what} 실패: {ex.Message}");
+            SetStatus(Loc.F("Board.Error", what, ex.Message));
         }
         finally { _resetting = false; }
     }
@@ -1005,7 +1004,7 @@ public partial class UartDocumentView : UserControl
         string name = $"uart-{_portName.ToLowerInvariant()}";
         string cmd = $"claude mcp add {name} -- \"{exe}\" {_portName}";
         TrySetClipboard(cmd);
-        SetStatus("MCP 등록 명령을 클립보드에 복사했습니다");
+        SetStatus(Loc.S("Doc.McpCopied"));
     }
 
     // ── 정리 ─────────────────────────────────────────────────────────────────────

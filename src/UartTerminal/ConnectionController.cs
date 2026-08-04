@@ -174,14 +174,14 @@ public sealed class ConnectionController
                 if (_autoReconnect() && !string.IsNullOrEmpty(_portName()))
                     StartAutoReconnect();
                 else
-                    _status("장치 분리됨 — Alt+N 또는 [터미널>재연결]");
+                    _status(Loc.S("Conn.DeviceRemoved"));
                 break;
             case SerialCloseReason.UserClosed:
                 StopAutoReconnect();
-                _status("연결 해제됨");
+                _status(Loc.S("Conn.Disconnected"));
                 break;
             default:
-                _status("연결 종료(오류)");
+                _status(Loc.S("Conn.ClosedError"));
                 break;
         }
     }
@@ -193,7 +193,7 @@ public sealed class ConnectionController
         if (_closed) return;
         _reconnectPending = true;
         _notify(); // 호스트가 IsReconnecting 을 보고 DispatcherTimer 를 시작
-        _status($"장치 분리됨 — 자동 재연결 대기 중… ({_portName()})");
+        _status(Loc.F("Conn.WaitingReconnect", _portName()));
         DiagLog.Info($"자동 재연결 대기 시작: {_portName()}");
     }
 
@@ -209,7 +209,7 @@ public sealed class ConnectionController
     {
         if (!_reconnectPending) return;
         StopAutoReconnect();
-        _status("자동 재연결 꺼짐 — Alt+N 또는 [터미널>재연결]");
+        _status(Loc.S("Conn.AutoReconnectOff"));
     }
 
     /// <summary>
@@ -229,7 +229,7 @@ public sealed class ConnectionController
         if (_autoReconnect() && !string.IsNullOrEmpty(_portName()))
             StartAutoReconnect();
         else
-            _status("장치 분리됨 — Alt+N 또는 [터미널>재연결]");
+            _status(Loc.S("Conn.DeviceRemoved"));
         // 죽은 포트 핸들 정리(늦게 오는 Closed 콜백은 _session=null 이라 가드가 무시).
         if (s is not null) { try { s.Close(); } catch { } }
     }
@@ -251,14 +251,14 @@ public sealed class ConnectionController
         {
             case OpenOutcome.Success:
                 StopAutoReconnect();
-                _status($"자동 재연결됨: {_portName()}");
+                _status(Loc.F("Conn.Reconnected", _portName()));
                 DiagLog.Info($"자동 재연결됨: {_portName()}");
                 break;
             case OpenOutcome.InUse:
-                _status($"재연결 대기 중… ({_portName()} 사용 중)");
+                _status(Loc.F("Conn.RetryInUse", _portName()));
                 break;
             default:
-                _status($"재연결 대기 중… ({_portName()} 준비 중)");
+                _status(Loc.F("Conn.RetryNotReady", _portName()));
                 break;
         }
     }
@@ -276,7 +276,7 @@ public sealed class ConnectionController
         _mcpReleased = false;
         _bridge.DetachSession();
         _notify();
-        _status("연결 해제됨");
+        _status(Loc.S("Conn.Disconnected"));
         if (s is not null) { try { s.Close(); } catch { } }
     }
 
@@ -307,7 +307,7 @@ public sealed class ConnectionController
         _mcpReleased = true;
         _bridge.DetachSession();
         _notify();
-        _status($"AI가 포트 양보 — 외부 작업 대기 중… ({_portName()})");
+        _status(Loc.F("Conn.McpReleased", _portName()));
         DiagLog.Info($"MCP 포트 양보(uart_close): {_portName()}");
         if (s is not null) { try { s.Close(); } catch { } }
 
@@ -335,14 +335,14 @@ public sealed class ConnectionController
         {
             case OpenOutcome.Success:
                 StopAutoReconnect(); // 장치 분리 후 대기 중이었다면 함께 종료
-                _status($"AI가 포트 재연결(uart_open): {_portName()}");
+                _status(Loc.F("Conn.McpReopened", _portName()));
                 DiagLog.Info($"MCP 포트 재연결(uart_open): {_portName()}");
                 return new PortActionResult { Ok = true, Connected = true, Port = _portName(), State = "open" };
             case OpenOutcome.InUse:
-                _status($"재연결 대기 — {_portName()} 아직 사용 중(외부 작업 진행 중?)");
+                _status(Loc.F("Conn.McpStillInUse", _portName()));
                 return new PortActionResult { Ok = false, Connected = false, Port = _portName(), State = "in_use", Error = "in_use" };
             default:
-                _status($"재연결 실패: {_lastOpenError}");
+                _status(Loc.F("Conn.ReopenFailed", _lastOpenError));
                 return new PortActionResult { Ok = false, Connected = false, Port = _portName(), State = "error", Error = _lastOpenError ?? "open_failed" };
         }
     }

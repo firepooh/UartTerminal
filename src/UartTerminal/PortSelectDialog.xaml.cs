@@ -113,13 +113,13 @@ public partial class PortSelectDialog : Window
     {
         if (_sessions is null || SessionList.SelectedItem is not SessionProfile s) return;
 
-        var r = MessageBox.Show(this, $"세션을 삭제할까요?\n\n{s.Display}", "UartTerminal",
+        var r = MessageBox.Show(this, Loc.F("Sess.ConfirmDelete", s.Display), "UartTerminal",
             MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
         if (r != MessageBoxResult.OK) return;
 
         if (!_sessions.Remove(s))
         {
-            MessageBox.Show(this, _sessions.LastError ?? "세션을 삭제하지 못했습니다.",
+            MessageBox.Show(this, _sessions.LastError ?? Loc.S("Sess.DeleteFailed"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
@@ -211,7 +211,7 @@ public partial class PortSelectDialog : Window
 
         if (port is null)
         {
-            MessageBox.Show(this, "포트를 선택하세요.", "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, Loc.S("Port.PickOne"), "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 

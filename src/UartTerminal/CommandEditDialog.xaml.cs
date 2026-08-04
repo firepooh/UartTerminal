@@ -138,11 +138,11 @@ public partial class CommandEditDialog : Window
     {
         if (_groups.Count >= CommandStore.MaxGroups)
         {
-            MessageBox.Show(this, $"그룹은 최대 {CommandStore.MaxGroups}개입니다.", "UartTerminal",
+            MessageBox.Show(this, Loc.F("Cmd.GroupLimit", CommandStore.MaxGroups), "UartTerminal",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        string? name = TextPromptDialog.Ask(this, "그룹 추가", "새 그룹(프로젝트) 이름:", "");
+        string? name = TextPromptDialog.Ask(this, Loc.S("Cmd.AddGroupTitle"), Loc.S("Cmd.AddGroupPrompt"), "");
         if (string.IsNullOrWhiteSpace(name)) return;
         var gr = new GroupRow { Name = name.Trim() };
         _groups.Add(gr);
@@ -154,7 +154,7 @@ public partial class CommandEditDialog : Window
     private void RenameGroup_Click(object sender, RoutedEventArgs e)
     {
         if (_current is null) return;
-        string? name = TextPromptDialog.Ask(this, "그룹 이름 변경", "그룹 이름:", _current.Name);
+        string? name = TextPromptDialog.Ask(this, Loc.S("Cmd.RenameGroupTitle"), Loc.S("Cmd.RenameGroupPrompt"), _current.Name);
         if (string.IsNullOrWhiteSpace(name)) return;
         _current.Name = name.Trim();
         // ObservableCollection 은 항목 '내부' 변경을 모른다 → 표시 갱신을 위해 다시 바인딩
@@ -170,11 +170,11 @@ public partial class CommandEditDialog : Window
         if (_current is null) return;
         if (_groups.Count <= 1)
         {
-            MessageBox.Show(this, "그룹이 하나뿐입니다 — 삭제할 수 없습니다.", "UartTerminal",
+            MessageBox.Show(this, Loc.S("Cmd.LastGroup"), "UartTerminal",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var r = MessageBox.Show(this, $"그룹 '{_current.Name}' 과(와) 그 안의 명령을 모두 삭제할까요?",
+        var r = MessageBox.Show(this, Loc.F("Cmd.ConfirmDeleteGroup", _current.Name),
             "UartTerminal", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
         if (r != MessageBoxResult.OK) return;
 
@@ -250,7 +250,7 @@ public partial class CommandEditDialog : Window
         int subCount = insert - folderIdx - 1;
         if (subCount >= CommandStore.MaxSubCommands)
         {
-            MessageBox.Show(this, $"폴더 하위 명령은 최대 {CommandStore.MaxSubCommands}개입니다.", "UartTerminal",
+            MessageBox.Show(this, Loc.F("Cmd.SubLimit", CommandStore.MaxSubCommands), "UartTerminal",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -287,7 +287,7 @@ public partial class CommandEditDialog : Window
             int subs = end - i - 1;
             if (subs > 0)
             {
-                var r = MessageBox.Show(this, $"폴더와 하위 명령 {subs}개를 함께 삭제할까요?", "UartTerminal",
+                var r = MessageBox.Show(this, Loc.F("Cmd.ConfirmDeleteFolder", subs), "UartTerminal",
                     MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
                 if (r != MessageBoxResult.OK) return;
             }
@@ -518,7 +518,7 @@ public partial class CommandEditDialog : Window
         if (!_store.ReplaceAllGroups(groups))
         {
             // 실패 시 창을 닫지 않는다(편집 내용을 잃지 않게).
-            MessageBox.Show(this, _store.LastError ?? "명령을 저장하지 못했습니다.",
+            MessageBox.Show(this, _store.LastError ?? Loc.S("Cmd.SaveFailed"),
                 "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
