@@ -39,6 +39,8 @@ public partial class UartDocumentView : UserControl
 
     // 자동 재연결 폴링 타이머: 대기 '상태'는 컨트롤러가 소유하고, 실제 DispatcherTimer 는 호스트가 돌린다.
     private DispatcherTimer? _reconnectTimer;
+    // 연결 감시 타이머: 연결 중 포트가 사라지면(유휴 케이블 뽑기) 감지해 컨트롤러에 알린다.
+    private DispatcherTimer? _watchdogTimer;
 
     private readonly List<string> _history = new();
     private int _historyIndex;
@@ -216,9 +218,10 @@ public partial class UartDocumentView : UserControl
     // ── 자동 재연결 폴링 타이머(대기 '상태'는 컨트롤러, 실제 타이머는 호스트) ──────
     // 컨트롤러가 IsReconnecting 을 켜면(장치 분리) 1.5초 주기로 tick 하며 포트 존재를 확인해 재오픈 시도.
 
-    /// <summary>컨트롤러 상태 변경 알림 → 재연결 타이머 동기화 + 제목/메트릭 갱신.</summary>
+    /// <summary>컨트롤러 상태 변경 알림 → 재연결/감시 타이머 동기화 + 제목/메트릭 갱신.</summary>
     private void OnConnStateChanged()
     {
+        // 재연결 대기: 포트가 다시 나타나는지 폴링
         if (_conn is { IsReconnecting: true })
         {
             if (_reconnectTimer is null)
@@ -233,6 +236,27 @@ public partial class UartDocumentView : UserControl
         {
             _reconnectTimer?.Stop();
         }
+
+        // 연결 감시: 연결 중 포트가 목록에서 사라지면(유휴 케이블 뽑기) DeviceRemoved 로 취급
+        if (_conn is { IsConnected: true })
+        {
+            if (_watchdogTimer is null)
+            {
+                _watchdogTimer = new DispatcherTimer(DispatcherPriority.Background)
+                { Interval = TimeSpan.FromMilliseconds(1500) };
+                _watchdogTimer.Tick += (_, _) =>
+                {
+                    if (_conn is { IsConnected: true } && !PortEnumerator.PortExists(_portName))
+                        _conn.HandlePortVanished();
+                };
+            }
+            if (!_watchdogTimer.IsEnabled) _watchdogTimer.Start();
+        }
+        else
+        {
+            _watchdogTimer?.Stop();
+        }
+
         RaiseTitle();
         RefreshMetrics();
     }
@@ -720,6 +744,7 @@ public partial class UartDocumentView : UserControl
     {
         _commands.Changed -= OnCommandsChanged; // 전역 스토어 구독 해지(닫힌 문서가 갱신을 붙잡지 않게)
         _reconnectTimer?.Stop();
+        _watchdogTimer?.Stop();
         _conn?.CloseDocument();
         try { _mcpServer?.Stop(); } catch { }
     }

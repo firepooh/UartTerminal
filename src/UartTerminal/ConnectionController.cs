@@ -192,6 +192,28 @@ public sealed class ConnectionController
         _status("자동 재연결 꺼짐 — Alt+N 또는 [터미널>재연결]");
     }
 
+    /// <summary>
+    /// 연결 상태에서 포트가 목록에서 사라진 것을 호스트 감시가 발견했을 때(유휴 케이블 뽑기).
+    /// 유휴 중에는 ReadAsync 가 즉시 faulting 하지 않아 세션 Closed 가 안 오므로, 여기서 DeviceRemoved 로 취급한다.
+    /// </summary>
+    public void HandlePortVanished()
+    {
+        if (_closed || !_connected || _session is null) return;
+
+        var s = _session;
+        _session = null;
+        _connected = false;
+        _bridge.DetachSession();
+        _notify();
+        DiagLog.Warn($"포트 사라짐 감지(유휴): {_portName()}");
+        if (_autoReconnect() && !string.IsNullOrEmpty(_portName()))
+            StartAutoReconnect();
+        else
+            _status("장치 분리됨 — Alt+N 또는 [터미널>재연결]");
+        // 죽은 포트 핸들 정리(늦게 오는 Closed 콜백은 _session=null 이라 가드가 무시).
+        if (s is not null) { try { s.Close(); } catch { } }
+    }
+
     /// <summary>호스트의 재연결 타이머 tick 에서 호출. portExists 는 호스트가 <c>PortEnumerator.PortExists</c> 로 판단.</summary>
     public void ReconnectTick(bool portExists)
     {

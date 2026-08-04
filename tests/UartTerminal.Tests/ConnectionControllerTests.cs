@@ -171,6 +171,37 @@ public class ConnectionControllerTests
         Assert.False(h.Ctl.IsReconnecting);
     }
 
+    // ── 유휴 케이블 뽑기 감지(포트 사라짐 감시) ──────────────────────────────────
+
+    [Fact]
+    public void HandlePortVanished_WhenConnected_StartsAutoReconnect()
+    {
+        var h = new Harness();
+        h.Ctl.Open();
+        h.Ctl.HandlePortVanished();
+        Assert.False(h.Ctl.IsConnected);
+        Assert.True(h.Ctl.IsReconnecting);
+    }
+
+    [Fact]
+    public void HandlePortVanished_RespectsAutoReconnectDisabled()
+    {
+        var h = new Harness { AutoReconnect = false };
+        h.Ctl.Open();
+        h.Ctl.HandlePortVanished();
+        Assert.False(h.Ctl.IsConnected);
+        Assert.False(h.Ctl.IsReconnecting);
+    }
+
+    [Fact]
+    public void HandlePortVanished_WhenNotConnected_IsNoOp()
+    {
+        var h = new Harness();
+        h.Ctl.HandlePortVanished(); // 연결된 적 없음
+        Assert.False(h.Ctl.IsReconnecting);
+        Assert.False(h.Ctl.IsConnected);
+    }
+
     // ── MCP 포트 양보/재개 ───────────────────────────────────────────────────────
 
     [Fact]
