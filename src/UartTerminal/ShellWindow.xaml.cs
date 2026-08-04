@@ -93,6 +93,7 @@ public partial class ShellWindow : Window
     {
         MenuAutoReconnect.IsChecked = _state.AutoReconnect;
         MenuCommandBar.IsChecked = _state.ShowCommandBar;
+        MenuDiagCapture.IsChecked = _state.DiagCapture;
         if (_isPrimary)
         {
             RestoreWindowBounds();
@@ -592,6 +593,19 @@ public partial class ShellWindow : Window
     private void ClearScreen_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ClearScreen();
     private void ClearBuffer_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ClearBuffer();
     private void ScrollEnd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ScrollEnd();
+    private void SaveLog_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveVisibleLog();
+
+    private void DiagCapture_Click(object sender, RoutedEventArgs e)
+    {
+        bool on = MenuDiagCapture.IsChecked;
+        DiagLog.Capture = on;
+        _state.DiagCapture = on;
+        _state.Save();
+        DiagLog.Info($"진단 캡처 {(on ? "켜짐" : "꺼짐")}");
+        // 전역 설정 — 열린 모든 창의 메뉴 체크 동기화(AutoReconnect 와 같은 방침).
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+            w.MenuDiagCapture.IsChecked = on;
+    }
     private void FontLarger_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(+1);
     private void FontSmaller_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(-1);
 

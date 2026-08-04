@@ -172,7 +172,11 @@ public partial class UartDocumentView : UserControl
         if (_engine is not null) return;
 
         _engine = new TerminalEngine(new UTF8Encoding(false), maxLines: 10_000);
-        _engine.Respond = mem => _session?.Enqueue(mem); // DSR 등 응답 → TX
+        _engine.Respond = mem => // DSR 등 응답 → TX
+        {
+            if (DiagLog.Capture) DiagLog.Trace($"TX(resp)[{mem.Length}] {DiagLog.Escape(mem.Span)}");
+            _session?.Enqueue(mem);
+        };
 
         _bridge = new UartBridge(_engine);
         // uart_close/uart_open 은 MCP 서버 스레드에서 호출되므로 UI 스레드로 마샬링해 포트를 닫고/연다.
@@ -336,6 +340,7 @@ public partial class UartDocumentView : UserControl
 
     private void OnDataReceived(ReadOnlyMemory<byte> data)
     {
+        if (DiagLog.Capture) DiagLog.Trace($"RX[{data.Length}] {DiagLog.Escape(data.Span)}");
         try { _engine!.Receive(data.Span); }
         catch (Exception ex) { DiagLog.Exception("Receive", ex); }
     }
@@ -446,6 +451,7 @@ public partial class UartDocumentView : UserControl
 
     private void Send(byte[] data)
     {
+        if (DiagLog.Capture) DiagLog.Trace($"TX[{data.Length}] {DiagLog.Escape(data)}");
         _session?.Enqueue(data);
         _view?.ScrollToEnd();
     }
@@ -662,6 +668,45 @@ public partial class UartDocumentView : UserControl
     public void ClearScreen() => _engine?.Buffer.ClearScreen(_view?.Rows ?? 25);
     public void ClearBuffer() => _engine?.Buffer.Clear();
     public void ScrollEnd() => _view?.ScrollToEnd();
+
+    /// <summary>현재 스크롤백 버퍼(논리 라인 전체)를 텍스트 파일로 1회 저장(사용자 개시). 연속 로깅과는 별개.</summary>
+    public void SaveVisibleLog()
+    {
+        if (_engine is null) { SetStatus("저장할 내용이 없습니다"); return; }
+
+        var sb = new StringBuilder();
+        var buffer = _engine.Buffer;
+        lock (buffer.SyncRoot)
+        {
+            int n = buffer.LineCount;
+            for (int i = 0; i < n; i++)
+            {
+                sb.Append(buffer.GetLine(i).Text());
+                if (i < n - 1) sb.Append('\n');
+            }
+        }
+
+        string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        string port = string.IsNullOrEmpty(_portName) ? "log" : _portName;
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "버퍼 로그 저장",
+            Filter = "텍스트 파일 (*.txt)|*.txt|모든 파일 (*.*)|*.*",
+            FileName = $"UartTerminal-{port}-{stamp}.txt",
+        };
+        if (dlg.ShowDialog(OwnerWindow) != true) return;
+
+        try
+        {
+            File.WriteAllText(dlg.FileName, sb.ToString(), new UTF8Encoding(false));
+            SetStatus($"로그 저장됨: {dlg.FileName}");
+        }
+        catch (Exception ex)
+        {
+            DiagLog.Exception("SaveVisibleLog", ex);
+            SetStatus($"로그 저장 실패: {ex.Message}");
+        }
+    }
 
     /// <summary>폰트 크기 조절(Ctrl+± / Ctrl+휠). 6~48pt 로 clamp, 크기를 잠깐 오버레이로 표시.</summary>
     public void AdjustFont(double delta)

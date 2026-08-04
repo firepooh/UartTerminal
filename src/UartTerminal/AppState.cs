@@ -22,6 +22,9 @@ public sealed class AppState
     /// <summary>저장 명령 칩 바를 표시할지(Alt+B). 모든 창/탭에 공통 적용되는 전역 설정.</summary>
     public bool ShowCommandBar { get; set; } = true;
 
+    /// <summary>진단 캡처(RX/TX 덤프 → diag.log). 문제 추적용, 기본 꺼짐.</summary>
+    public bool DiagCapture { get; set; }
+
     public double? WindowLeft { get; set; }
     public double? WindowTop { get; set; }
     public double? WindowWidth { get; set; }

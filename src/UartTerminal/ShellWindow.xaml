@@ -108,6 +108,8 @@
                 <MenuItem Header="화면 지우기" Click="ClearScreen_Click"/>
                 <MenuItem Header="버퍼 지우기" Click="ClearBuffer_Click"/>
                 <Separator/>
+                <MenuItem Header="로그 저장(_L)…" Click="SaveLog_Click"/>
+                <Separator/>
                 <MenuItem Header="맨 아래로" InputGestureText="Ctrl+End" Click="ScrollEnd_Click"/>
             </MenuItem>
             <MenuItem Header="보기(_V)">
@@ -135,6 +137,9 @@
                 <MenuItem Header="등록 명령 복사 (claude mcp add)" Click="McpCopyCmd_Click"/>
             </MenuItem>
             <MenuItem Header="도움말(_H)">
+                <MenuItem x:Name="MenuDiagCapture" Header="진단 캡처 (RX/TX → diag.log)"
+                          IsCheckable="True" Click="DiagCapture_Click"/>
+                <Separator/>
                 <MenuItem Header="UartTerminal 정보(_A)" Click="About_Click"/>
             </MenuItem>
         </Menu>

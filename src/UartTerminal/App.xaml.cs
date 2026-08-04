@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 using UartTerminal.Core.Config;
 
 namespace UartTerminal;
@@ -16,7 +17,15 @@ public partial class App : Application
 
         ShutdownMode = ShutdownMode.OnMainWindowClose;
 
+        // 전역 예외 그물: 미처리 예외를 진단 로그에 남기고, UI 스레드 예외는 앱을 죽이지 않고 계속(개발 도구 특성).
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += (_, ea) =>
+        {
+            if (ea.ExceptionObject is Exception ex) DiagLog.Exception("AppDomain.Unhandled", ex);
+        };
+
         var state = AppState.Load();
+        DiagLog.Capture = state.DiagCapture; // 진단 캡처 설정 복원
 
         // 저장 명령은 창 좌표 같은 휘발성 상태(state.json)와 분리된 사용자 저작 파일이다(팀 공유 = 이 파일 복사).
         var commands = new CommandStore(Path.Combine(AppState.Dir, "commands.json"));
@@ -44,5 +53,19 @@ public partial class App : Application
         var shell = new ShellWindow(state, commands, sessions, isPrimary: true);
         MainWindow = shell;
         shell.Show();
+    }
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        DiagLog.Exception("Dispatcher.Unhandled", e.Exception);
+        try
+        {
+            MessageBox.Show(
+                $"예기치 못한 오류가 발생했지만 계속 실행합니다.\n\n{e.Exception.GetType().Name}: {e.Exception.Message}\n\n" +
+                @"자세한 내용: %LOCALAPPDATA%\UartTerminal\diag.log",
+                "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch { /* 알림 실패는 무시 */ }
+        e.Handled = true; // 로그를 남긴 뒤 가능한 한 앱을 살려둔다
     }
 }

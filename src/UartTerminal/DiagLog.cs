@@ -16,12 +16,39 @@ public static class DiagLog
 
     private static string FilePath => Path.Combine(Dir, "diag.log");
 
+    /// <summary>진단 캡처(RX/TX 덤프) 활성 여부. [도움말] 메뉴 토글 + state.json 에 지속. 기본 꺼짐.</summary>
+    public static volatile bool Capture;
+
     public static void Info(string msg) => Write("INFO", msg);
     public static void Warn(string msg) => Write("WARN", msg);
     public static void Error(string msg) => Write("ERROR", msg);
 
+    /// <summary>진단 캡처가 켜져 있을 때만 기록되는 상세 트레이스(RX/TX 등).</summary>
+    public static void Trace(string msg) { if (Capture) Write("TRACE", msg); }
+
     public static void Exception(string context, Exception ex) =>
         Write("ERROR", $"{context}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+
+    /// <summary>바이트를 사람이 읽는 형태로(ESC→\e, CR→\r, LF→\n, 기타 제어/비ASCII→\xNN, 나머지는 그대로).</summary>
+    public static string Escape(ReadOnlySpan<byte> data)
+    {
+        var sb = new System.Text.StringBuilder(data.Length * 2);
+        foreach (byte b in data)
+        {
+            switch (b)
+            {
+                case 0x1B: sb.Append("\\e"); break;
+                case 0x0D: sb.Append("\\r"); break;
+                case 0x0A: sb.Append("\\n"); break;
+                case 0x09: sb.Append("\\t"); break;
+                default:
+                    if (b < 0x20 || b >= 0x7F) sb.Append($"\\x{b:x2}");
+                    else sb.Append((char)b);
+                    break;
+            }
+        }
+        return sb.ToString();
+    }
 
     private static void Write(string level, string msg)
     {
