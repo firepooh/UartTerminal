@@ -587,6 +587,9 @@ public partial class ShellWindow : Window
         }
     }
     private void SaveSession_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentAsSession();
+
+    private void ManageSessions_Click(object sender, RoutedEventArgs e)
+        => SessionManagerDialog.ShowManager(_sessions, _commands, this);
     private void Detach_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) DetachTab(ti); }
     private void Merge_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) MergeTab(ti); }
     private void CloseTab_Click(object sender, RoutedEventArgs e) => CloseActiveTab();

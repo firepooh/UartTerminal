@@ -94,6 +94,7 @@
                           IsCheckable="True" Click="AutoReconnect_Click"/>
                 <Separator/>
                 <MenuItem Header="현재 연결을 세션으로 저장(_S)…" Click="SaveSession_Click"/>
+                <MenuItem Header="세션 관리(_M)…" Click="ManageSessions_Click"/>
                 <Separator/>
                 <MenuItem Header="새 창으로 분리" Click="Detach_Click"/>
                 <MenuItem Header="메인 창으로 합치기" Click="Merge_Click"/>

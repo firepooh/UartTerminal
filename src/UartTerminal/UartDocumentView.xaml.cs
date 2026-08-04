@@ -404,6 +404,7 @@ public partial class UartDocumentView : UserControl
         _commandGroup = groupName;
         SyncGroupSelector();
         RebuildCommandChips();
+        RefreshMetrics();
     }
 
     /// <summary>현재 선택된 그룹 이름(세션 저장 시 함께 기록).</summary>
@@ -419,7 +420,11 @@ public partial class UartDocumentView : UserControl
         {
             var names = _commands.GroupNames;
             GroupSelector.ItemsSource = names;
-            GroupSelector.Visibility = names.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            // 그룹이 하나뿐이면 셀렉터를 감춰(기존 화면과 동일하게) 잡음을 줄인다.
+            var vis = names.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            GroupSelector.Visibility = vis;
+            GroupDivider.Visibility = vis;
+            GroupLabel.Visibility = vis;
             string? cur = CurrentCommandGroup;
             GroupSelector.SelectedItem = cur;
             _commandGroup = cur;
@@ -432,6 +437,7 @@ public partial class UartDocumentView : UserControl
         if (_syncingGroups) return;
         _commandGroup = GroupSelector.SelectedItem as string;
         RebuildCommandChips();
+        RefreshMetrics(); // 상태바의 CMD:그룹 표시 갱신
     }
 
     private void RebuildCommandChips()
@@ -490,13 +496,22 @@ public partial class UartDocumentView : UserControl
     private void ShowFolderMenu(Button anchor, SavedCommand folder)
     {
         bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
-        var menu = new ContextMenu { PlacementTarget = anchor, Placement = PlacementMode.Top };
+        var mono = (FontFamily)FindResource("MonoFont");
+        var menu = new ContextMenu
+        {
+            PlacementTarget = anchor,
+            Placement = PlacementMode.Top,
+            FontFamily = mono,
+        };
         foreach (var sub in folder.Items!)
         {
             var captured = sub;
             var mi = new MenuItem
             {
                 Header = captured.Confirm ? "⚠ " + captured.Name : captured.Name,
+                FontFamily = mono,
+                // 전송 문자열을 부제처럼 보여줘 어떤 명령인지 바로 알 수 있게 한다.
+                InputGestureText = captured.Text,
                 ToolTip = captured.Text,
             };
             // 폴더 칩을 Ctrl+클릭했으면 하위 선택도 '입력창에 채우기'로 동작(일관성).
@@ -843,9 +858,11 @@ public partial class UartDocumentView : UserControl
     private void RefreshMetrics()
     {
         string font = _view is null ? "" : $"  ·  {_view.FontSize:0.#}pt";
+        // 명령 그룹이 여러 개일 때만 표시 — 지금 어느 세트가 적용됐는지 드롭다운을 열지 않아도 알 수 있게.
+        string group = _commands.Groups.Count > 1 && CurrentCommandGroup is { } g ? $"  ·  CMD:{g}" : "";
         MetricsMessage = IsConnected
-            ? $"{_portName}  {_params.Summary()}  ·  {_view?.Columns}×{_view?.Rows}{font}  ·  UTF-8"
-            : $"(연결 안 됨)  ·  {_view?.Columns}×{_view?.Rows}{font}";
+            ? $"{_portName}  {_params.Summary()}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}  ·  UTF-8"
+            : $"(연결 안 됨)  ·  {_view?.Columns}×{_view?.Rows}{font}{group}";
         MetricsChanged?.Invoke(MetricsMessage);
     }
 
