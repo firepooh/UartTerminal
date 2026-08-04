@@ -143,6 +143,11 @@
                 <Separator/>
                 <MenuItem x:Name="MenuTimestamps" Header="타임스탬프 표시(_T)" IsCheckable="True" Click="Timestamps_Click"/>
                 <Separator/>
+                <MenuItem Header="테마(_M)">
+                    <MenuItem x:Name="MenuThemeDark" Header="다크" IsCheckable="True" Click="Theme_Click" Tag="Dark"/>
+                    <MenuItem x:Name="MenuThemeLight" Header="라이트" IsCheckable="True" Click="Theme_Click" Tag="Light"/>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="맨 아래로(_E)" InputGestureText="Ctrl+End" Click="ScrollEnd_Click"/>
             </MenuItem>
             <!-- 보드 제어: ESP32 devkit 의 DTR→IO0 / RTS→EN 자동 리셋 회로 (README §2.2) -->

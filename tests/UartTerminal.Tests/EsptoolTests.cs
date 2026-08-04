@@ -19,7 +19,7 @@ public sealed class EsptoolTests
         {
             (0x0u, @"C:\pkg\bootloader.bin"),
             (0x8000u, @"C:\pkg\partition-table.bin"),
-            (0x10000u, @"C:\pkg\OD420-4.0.1724.229.bin"),
+            (0x10000u, @"C:\pkg\myapp-1.2.3.bin"),
         },
     };
 

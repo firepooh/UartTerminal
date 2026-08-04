@@ -1,7 +1,15 @@
 using System.Windows;
 using System.Windows.Media;
+using UartTerminal.Rendering;
 
 namespace UartTerminal;
+
+/// <summary>선택 가능한 테마.</summary>
+public enum AppTheme
+{
+    Dark,
+    Light,
+}
 
 /// <summary>
 /// 테마 리소스 접근 창구. <b>색은 테마 사전(DarkTheme.xaml 등)에만 두고</b> 코드는 여기로만 읽는다.
@@ -45,6 +53,86 @@ public static class Theme
             SolidColorBrush sb => sb.Color,
             _ => fallback,
         };
+    }
+
+    // ── 테마 전환 ────────────────────────────────────────────────────────────
+
+    /// <summary>현재 적용된 테마.</summary>
+    public static AppTheme Current { get; private set; } = AppTheme.Dark;
+
+    /// <summary>테마가 바뀐 뒤 발생(렌더러처럼 색을 스냅샷해 두는 곳이 다시 읽도록).</summary>
+    public static event Action? Changed;
+
+    /// <summary>
+    /// 테마를 바꾼다. <b>사전을 교체하지 않고 팔레트 값만 덮어쓴다</b> —
+    /// 사전 교체나 DynamicResource 는 이미 렌더된 컨트롤에 반영되지 않는 것을 실험으로 확인했다.
+    /// 브러시는 같은 인스턴스의 <c>Color</c> 만 바꾸므로, StaticResource 로 브러시를 가져간
+    /// 컨트롤(앱 XAML 200여 곳)도 손대지 않고 즉시 따라온다.
+    /// </summary>
+    public static void Apply(AppTheme theme)
+    {
+        var app = Application.Current;
+        if (app is null) return;
+
+        var live = LivePalette(app);
+        if (live is null)
+        {
+            DiagLog.Warn("팔레트 사전을 찾지 못해 테마를 바꾸지 못했습니다.");
+            return;
+        }
+
+        var target = LoadPalette(theme);
+        if (target is null) return;
+
+        // 키 집합이 어긋나면 한쪽 테마에서만 색이 남아 화면이 깨진다 → 진단에 남긴다.
+        foreach (object key in live.Keys)
+            if (!target.Contains(key))
+                DiagLog.Warn($"{theme} 팔레트에 키 없음: {key}");
+
+        foreach (object key in target.Keys)
+        {
+            object? next = target[key];
+            object? now = live[key];
+
+            // 브러시는 '인스턴스 유지 + 색만 교체'. 이게 이 방식의 핵심이다.
+            if (now is SolidColorBrush cur && next is SolidColorBrush nb)
+            {
+                if (!cur.IsFrozen) { cur.Color = nb.Color; continue; }
+                DiagLog.Warn($"브러시가 frozen 이라 색을 바꿀 수 없습니다: {key}");
+            }
+
+            live[key] = next!;   // Color 항목 등은 값 자체를 교체(코드에서 Theme.Color 로 읽는다)
+        }
+
+        Current = theme;
+        TerminalPalette.Reload();     // 렌더러가 스냅샷한 기본색 갱신
+        try { Changed?.Invoke(); } catch (Exception ex) { DiagLog.Exception("Theme.Changed", ex); }
+        DiagLog.Info($"테마 적용: {theme}");
+    }
+
+    /// <summary>앱에 병합된 팔레트 사전(색·브러시가 들어 있는 쪽)을 찾는다.</summary>
+    private static ResourceDictionary? LivePalette(Application app)
+    {
+        foreach (var d in app.Resources.MergedDictionaries)
+            if (d.Contains("C.Bg")) return d;   // 팔레트만 갖는 표식 키
+        return null;
+    }
+
+    private static ResourceDictionary? LoadPalette(AppTheme theme)
+    {
+        string file = theme == AppTheme.Light ? "Palette.Light.xaml" : "Palette.Dark.xaml";
+        try
+        {
+            return new ResourceDictionary
+            {
+                Source = new Uri($"/UartTerminal;component/Themes/{file}", UriKind.Relative),
+            };
+        }
+        catch (Exception ex)
+        {
+            DiagLog.Exception($"팔레트 로드 실패: {file}", ex);
+            return null;
+        }
     }
 
     private static object? Find(string key)

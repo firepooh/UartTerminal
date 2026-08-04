@@ -36,6 +36,10 @@ public sealed class AppState
     /// </summary>
     public bool ResetOnOpen { get; set; }
 
+    /// <summary>화면 테마(다크/라이트). 전역 설정 — 모든 창에 즉시 적용된다.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AppTheme Theme { get; set; } = AppTheme.Dark;
+
     /// <summary>마지막으로 플래시한 펌웨어 패키지(zip) 경로. 반복 작업이 대부분이라 다음에 바로 불러온다.</summary>
     public string? LastFlashZip { get; set; }
 

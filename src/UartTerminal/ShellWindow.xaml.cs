@@ -98,6 +98,7 @@ public partial class ShellWindow : Window
         MenuTimestamps.IsChecked = _state.ShowTimestamps;
         MenuResetOnOpen.IsChecked = _state.ResetOnOpen;
         SyncNewlineChrome();
+        SyncThemeChrome();
         if (_isPrimary)
         {
             RestoreWindowBounds();
@@ -518,6 +519,7 @@ public partial class ShellWindow : Window
         // 탭별 값이므로 활성 탭을 따른다(탭이 없으면 마지막으로 쓴 기본값).
         MenuResetOnOpen.IsChecked = doc?.ResetOnOpen ?? _state.ResetOnOpen;
         SyncNewlineChrome();
+        SyncThemeChrome();
         RefreshMcpChrome();
     }
 
@@ -696,6 +698,26 @@ public partial class ShellWindow : Window
     }
     private void FontLarger_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(+1);
     private void FontSmaller_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(-1);
+
+    /// <summary>테마 전환 — 전역 설정이라 열린 모든 창의 메뉴 체크를 함께 맞춘다(적용 자체는 Theme.Apply 가 전역).</summary>
+    private void Theme_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag } || !Enum.TryParse<AppTheme>(tag, out var theme))
+            return;
+
+        Theme.Apply(theme);
+        _state.Theme = theme;
+        _state.Save();
+
+        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+            w.SyncThemeChrome();
+    }
+
+    private void SyncThemeChrome()
+    {
+        MenuThemeDark.IsChecked = Theme.Current == AppTheme.Dark;
+        MenuThemeLight.IsChecked = Theme.Current == AppTheme.Light;
+    }
 
     private void Timestamps_Click(object sender, RoutedEventArgs e)
     {

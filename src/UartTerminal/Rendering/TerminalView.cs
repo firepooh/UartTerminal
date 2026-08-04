@@ -61,7 +61,8 @@ public sealed class TerminalView : FrameworkElement
     private static readonly string[] FallbackFonts = { "Malgun Gothic", "맑은 고딕", "Gulim", "굴림" };
 
     private readonly TerminalBuffer _buffer;
-    private readonly TerminalPalette _palette = TerminalPalette.Dark;
+    // readonly 아님 — 테마 전환 시 새 팔레트로 교체한다(OnThemeChanged).
+    private TerminalPalette _palette = TerminalPalette.Dark;
     private readonly ConditionalWeakTable<LogicalLine, WrapEntry> _wrapCache = new();
     private readonly Dictionary<uint, SolidColorBrush> _brushes = new();
     private readonly DispatcherTimer _timer;
@@ -192,6 +193,17 @@ public sealed class TerminalView : FrameworkElement
                 InvalidateVisual();
         };
         _timer.Start();
+
+        // 테마가 바뀌면 팔레트를 다시 읽어 그린다. 렌더러는 GlyphRun/Pen 에 Color 를 직접 쓰므로
+        // 브러시 인스턴스 교체만으로는 갱신되지 않는다(스타일과 달리 자동 반영이 없다).
+        Theme.Changed += OnThemeChanged;
+        Unloaded += (_, _) => Theme.Changed -= OnThemeChanged;
+    }
+
+    private void OnThemeChanged()
+    {
+        _palette = TerminalPalette.Dark;
+        _forceRender = true;
     }
 
     public double FontSize

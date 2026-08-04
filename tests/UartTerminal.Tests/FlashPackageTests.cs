@@ -4,10 +4,10 @@ using UartTerminal.Core.Flash;
 namespace UartTerminal.Tests;
 
 /// <summary>
-/// 펌웨어 패키지(zip) 해석 회귀 테스트. 실제 배포 zip(OD420-4.0.1724.229-c84f0fd.zip)에서
+/// 펌웨어 패키지(zip) 해석 회귀 테스트. 실제 배포 zip(myapp-1.2.3-abc1234.zip)에서
 /// 관측한 함정을 그대로 고정한다:
 ///  - flash_project_args 의 경로는 빌드 트리 기준인데 zip 은 평면
-///  - args 의 앱 파일명(VMS.bin)이 실제 파일명(OD420*.bin)과 다름
+///  - args 의 앱 파일명(firmware.bin)이 실제 파일명(myapp*.bin)과 다름
 ///  - 같은 앱의 사본이 2개(크기 동일)
 ///  - 칩 정보는 args 에 없고 bootloader 헤더 chip_id 로만 알 수 있음(=9 → ESP32-S3)
 /// </summary>
@@ -44,7 +44,7 @@ public sealed class FlashPackageTests : IDisposable
     private const string RealArgs = """
         --flash_mode dio --flash_freq 80m --flash_size 16MB
         0x0 bootloader/bootloader.bin
-        0x10000 VMS.bin
+        0x10000 firmware.bin
         0x8000 partition_table/partition-table.bin
         0xd000 ota_data_initial.bin
         0xc10000 storage.bin
@@ -73,14 +73,14 @@ public sealed class FlashPackageTests : IDisposable
     }
 
     /// <summary>실제 배포 zip 재현: 평면 구조 + args 앱 이름 불일치 + 앱 사본 2개.</summary>
-    private string MakeRealisticZip() => MakeZip("OD420-4.0.1724.229-c84f0fd.zip", zip =>
+    private string MakeRealisticZip() => MakeZip("myapp-1.2.3-abc1234.zip", zip =>
     {
         AddText(zip, "flash_project_args", RealArgs);
         AddBytes(zip, "bootloader.bin", Image(9, 22_426));
         AddBytes(zip, "partition-table.bin", Image(9, 3_072));
         AddBytes(zip, "ota_data_initial.bin", Image(9, 8_192));
-        AddBytes(zip, "OD420.bin", Image(9, 2_186_854));
-        AddBytes(zip, "OD420-4.0.1724.229.bin", Image(9, 2_186_854));
+        AddBytes(zip, "myapp.bin", Image(9, 2_186_854));
+        AddBytes(zip, "myapp-1.2.3.bin", Image(9, 2_186_854));
         AddBytes(zip, "storage.bin", Image(9, 1_572_864));
     });
 
@@ -172,21 +172,21 @@ public sealed class FlashPackageTests : IDisposable
     [Fact]
     public void RenamedApp_FallsBackToRoleSearch_AndPrefersVersionedCopy()
     {
-        // args 는 VMS.bin 을 가리키지만 zip 에는 OD420.bin / OD420-4.0.1724.229.bin 이 있다.
+        // args 는 firmware.bin 을 가리키지만 zip 에는 myapp.bin / myapp-1.2.3.bin 이 있다.
         var pkg = Analyze(MakeRealisticZip());
         var app = pkg.Items.Single(i => i.Role == "app");
 
-        Assert.Equal("OD420-4.0.1724.229.bin", app.FileName);   // 버전 붙은 사본 우선
+        Assert.Equal("myapp-1.2.3.bin", app.FileName);   // 버전 붙은 사본 우선
         Assert.Equal(2, app.Candidates.Count);                   // 사용자가 바꿀 수 있게 후보 노출
-        Assert.Contains("OD420.bin", app.Candidates);
-        Assert.Contains(pkg.Warnings, w => w.Contains("VMS.bin"));
+        Assert.Contains("myapp.bin", app.Candidates);
+        Assert.Contains(pkg.Warnings, w => w.Contains("firmware.bin"));
     }
 
     [Fact]
     public void PreferredCandidate_PicksVersionedName()
     {
-        Assert.Equal("OD420-4.0.1724.229.bin",
-            FlashPackageAnalyzer.PreferredCandidate(new[] { "OD420.bin", "OD420-4.0.1724.229.bin" }));
+        Assert.Equal("myapp-1.2.3.bin",
+            FlashPackageAnalyzer.PreferredCandidate(new[] { "myapp.bin", "myapp-1.2.3.bin" }));
     }
 
     // ── 기본 선택 정책 ──────────────────────────────────────────────────────
@@ -290,13 +290,13 @@ public sealed class FlashPackageTests : IDisposable
               "flash_settings": { "flash_mode": "dio", "flash_size": "detect", "flash_freq": "40m" },
               "flash_files": { "0x8000": "partition_table/partition-table.bin",
                                "0x1000": "bootloader/bootloader.bin",
-                               "0x10000": "OD400.bin" },
+                               "0x10000": "sample.bin" },
               "extra_esptool_args": { "chip": "esp32" }
             }
             """);
             AddBytes(z, "bootloader.bin", Image(0));
             AddBytes(z, "partition-table.bin", Image(0));
-            AddBytes(z, "OD400.bin", Image(0));
+            AddBytes(z, "sample.bin", Image(0));
         });
 
         var pkg = Analyze(zip);

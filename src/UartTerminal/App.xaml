@@ -5,7 +5,10 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Themes/DarkTheme.xaml"/>
+                <!-- 팔레트(색)를 먼저, 스타일을 나중에 — 스타일이 브러시 키를 StaticResource 로 찾는다.
+                     테마 전환은 Theme.Apply() 가 이 팔레트 사전의 값을 덮어쓰는 방식이다(사전 교체 아님). -->
+                <ResourceDictionary Source="Themes/Palette.Dark.xaml"/>
+                <ResourceDictionary Source="Themes/Controls.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

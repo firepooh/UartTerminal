@@ -119,8 +119,8 @@ public sealed class DirectoryFlashSource : IFlashSource
 ///
 /// 실제 배포 zip 에서 확인된 함정들을 그대로 다룬다:
 ///  1) <c>flash_project_args</c> 의 경로는 <b>빌드 트리 기준</b>(<c>bootloader/bootloader.bin</c>)인데 zip 은 평면 → 파일명으로 매칭
-///  2) args 의 앱 파일명이 실제와 다를 수 있다(빌드명 <c>VMS.bin</c> → 배포 시 <c>OD420.bin</c> 로 rename) → 역할로 재탐색
-///  3) 같은 앱의 사본이 여럿(<c>OD420.bin</c> / <c>OD420-4.0.1724.229.bin</c>) → 후보로 올리고 버전 붙은 쪽을 기본 선택
+///  2) args 의 앱 파일명이 실제와 다를 수 있다(빌드명 <c>firmware.bin</c> → 배포 시 <c>myapp.bin</c> 로 rename) → 역할로 재탐색
+///  3) 같은 앱의 사본이 여럿(<c>myapp.bin</c> / <c>myapp-1.2.3.bin</c>) → 후보로 올리고 버전 붙은 쪽을 기본 선택
 ///  4) zip 에 칩 정보가 없어도 <b>bootloader 헤더의 chip_id</b> 로 확정
 ///  5) 같은 오프셋에 두 파일이 잡히면 오류로 막는다
 /// </summary>
@@ -131,7 +131,7 @@ public static class FlashPackageAnalyzer
     private const uint OtaDataOffset = 0xD000;
     private const uint AppOffset = 0x10000;
 
-    /// <summary>버전이 박힌 파일명(예: OD420-4.0.1724.229.bin)을 사본보다 우선한다 — 무엇을 구웠는지 추적 가능하니까.</summary>
+    /// <summary>버전이 박힌 파일명(예: myapp-1.2.3.bin)을 사본보다 우선한다 — 무엇을 구웠는지 추적 가능하니까.</summary>
     private static readonly Regex VersionLike = new(@"\d+\.\d+\.\d+", RegexOptions.Compiled);
 
     public static FlashPackage Analyze(IFlashSource source, string sourcePath = "", EspChip chipOverride = EspChip.Unknown)

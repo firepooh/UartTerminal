@@ -53,7 +53,7 @@ public static class FlashArgsFile
     /// <code>
     /// --flash_mode dio --flash_freq 80m --flash_size 16MB
     /// 0x0 bootloader/bootloader.bin
-    /// 0x10000 VMS.bin
+    /// 0x10000 firmware.bin
     /// </code>
     /// 옵션 줄은 어디에 있어도 되고(<c>--</c> 로 시작), 오프셋 줄은 순서를 그대로 보존한다.
     /// </summary>
