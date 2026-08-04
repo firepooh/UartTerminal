@@ -16,7 +16,7 @@ ESP-IDF(ESP32) 개발용 **Serial UART 전용** 경량 터미널 (Windows 11, C#
 | 4 | 다중 UART를 탭으로 — 필요 시 탭을 새 창으로 분리/다시 합치기 (Tier A: 메뉴/버튼, 단일 프로세스라 이동 중 연결 유지) | C |
 | 5 | 통신 속도 선택 (포트 선택 시 프리셋에서) | C1a |
 | 6 | 저장 명령 칩 바 — 자주 쓰는 **한 줄** 명령을 클릭 한 번으로 전송 (`commands.json`) | C2 |
-| 7 | 이름 붙인 접속 프로필(세션) — 이름·포트·속도를 저장해 더블클릭 접속 (`sessions.json`) | C1b |
+| 7 | 이름 붙인 접속 프로필(세션) — 이름·포트·속도·열 때 리셋·명령 그룹을 저장해 더블클릭 접속 (`sessions.json`) | C1b |
 
 **확정 사항** (2026-07-21):
 
@@ -77,8 +77,11 @@ ESP32 개발보드는 USB-시리얼의 **DTR→IO0, RTS→EN** 이 트랜지스�
 
 - **하드웨어 리셋(Alt+R)**: `(false,true)` 100ms → `(false,false)` 50ms — esptool 의 classic reset 과 동일
 - **부트로더 진입(Alt+Shift+R)**: `(false,true)` 100ms → `(true,false)` 50ms → `(false,false)`
-- **포트 열 때 보드 리셋**(기본 꺼짐, [터미널] 메뉴 / 연결 다이얼로그 체크박스): 켜면 연결·자동 재연결·`uart_open`
-  모든 오픈 경로에서 리셋해 부팅 로그를 처음부터 볼 수 있다. RX 루프를 띄운 뒤 펄스를 주므로 첫 줄부터 잡힌다
+- **열 때 보드 리셋**(기본 꺼짐): 켜면 그 탭의 연결·자동 재연결·`uart_open` 모든 오픈 경로에서 리셋해
+  부팅 로그를 처음부터 볼 수 있다. RX 루프를 띄운 뒤 펄스를 주므로 첫 줄부터 잡힌다.
+  **속도와 같은 성격의 접속 속성**이라 전역이 아니라 **탭별** 값이고 **세션에 함께 저장**된다(보드마다 다르다):
+  연결 다이얼로그 체크박스에서 고르고(세션을 선택하면 그 값으로 자동 채움), [터미널] 메뉴로 현재 탭만 바꾸며,
+  세션 관리 화면의 `열 때 리셋` 열에서 확인·편집한다. `state.json` 의 값은 새 탭의 기본값(= 마지막으로 쓴 값)일 뿐이다
 - AI 경로는 MCP `uart_reset(bootloader)` — 타이밍이 보장돼 왕복 없이 한 번에 리셋한다
 
 ## 3. Phase 계획
@@ -132,8 +135,10 @@ ESP32 개발보드는 USB-시리얼의 **DTR→IO0, RTS→EN** 이 트랜지스�
 
 ### Phase C1b — 이름 붙인 접속 프로필 (기능 7)
 
-- `%APPDATA%\UartTerminal\sessions.json` (`{schemaVersion, sessions:[{name, port, baud}]}`) — **3필드만** 저장.
-  8N1/흐름제어/DTR·RTS 는 고정이며 특히 DTR/RTS 는 오리셋 방지 안전장치(§7 R2)라 파일에 노출하지 않는다.
+- `%APPDATA%\UartTerminal\sessions.json`
+  (`{schemaVersion, sessions:[{name, port, baud, resetOnOpen?, commandGroup?}]}`) — 접속을 재현하는 데 필요한 값만 저장.
+  8N1/흐름제어는 고정이고 오픈 시 DTR/RTS deassert 도 고정이다 — 리셋은 '펄스를 줄지'라는 의도라
+  `resetOnOpen` 한 항목으로만 노출한다(§2.2). 기본값(false)은 파일에 쓰지 않는다.
   손실 방어는 `commands.json` 과 동일(원자 저장 + `.bak`, 손상 시 `.corrupt-*`, 읽기 실패 시 저장 잠금,
   상위 `schemaVersion` 저장 거부, 저장 성공 시에만 목록 커밋)
 - 연결 다이얼로그를 **확장**(교체 아님 — 취소 안전 계약을 지키기 위해): 위쪽에 세션 목록(더블클릭 접속·삭제),

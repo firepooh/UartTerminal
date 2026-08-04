@@ -68,7 +68,7 @@
             <!-- ESP32 devkit: DTR→IO0 / RTS→EN 자동 리셋 회로. 기본은 두 선 모두 해제해 보드를 건드리지 않는다. -->
             <CheckBox x:Name="ResetOnOpenCheck" Style="{StaticResource DarkCheckBox}"
                       Content="열 때 보드 리셋 (EN 펄스 — 부팅 로그를 처음부터 보기)"
-                      Margin="0,0,0,8" Click="ResetOnOpen_Click"/>
+                      Margin="0,0,0,8"/>
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextFaint}" FontSize="11.5"
                        Text="나머지는 고정: 8비트 · 패리티 없음 · 스톱 1 · 흐름제어 없음 · 오픈 시 DTR/RTS 해제"/>
         </StackPanel>

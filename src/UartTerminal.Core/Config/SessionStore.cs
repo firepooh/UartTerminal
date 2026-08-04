@@ -5,15 +5,23 @@ using System.Text.Json.Serialization;
 namespace UartTerminal.Core.Config;
 
 /// <summary>
-/// 이름 붙인 접속 프로필. 저장하는 것은 <b>이름·포트·속도 + (선택) 명령 그룹</b>이다.
-/// 8N1/흐름제어/DTR·RTS 는 고정값이며(README §2), 특히 DTR/RTS 는 ESP32 의 의도치 않은 리셋을 막는
-/// 안전장치(§7 R2)라 사용자가 편집하는 파일에 노출하지 않는다.
+/// 이름 붙인 접속 프로필. 저장하는 것은 <b>이름·포트·속도·열 때 리셋 + (선택) 명령 그룹</b>이다.
+/// 8N1/흐름제어는 고정값이며(README §2), 오픈 시 DTR/RTS deassert 도 고정이다 —
+/// 리셋은 '펄스를 줄지 말지'라는 의도이므로 <see cref="ResetOnOpen"/> 한 항목으로만 노출한다(§2.2).
 /// </summary>
 public sealed record SessionProfile
 {
     [JsonPropertyName("name")] public string Name { get; init; } = "";
     [JsonPropertyName("port")] public string Port { get; init; } = "";
     [JsonPropertyName("baud")] public int Baud { get; init; } = 115200;
+
+    /// <summary>
+    /// 이 세션으로 접속할 때 EN 펄스로 보드를 리셋할지(ESP32 devkit 자동 리셋 회로). 기본 false.
+    /// 보드마다 다르기 때문에 세션에 함께 저장한다(예: 부팅 로그를 늘 봐야 하는 보드 ↔ 리셋되면 안 되는 보드).
+    /// </summary>
+    [JsonPropertyName("resetOnOpen")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ResetOnOpen { get; init; }
 
     /// <summary>
     /// 이 세션으로 접속할 때 자동 선택할 명령 그룹 이름(commands.json 의 그룹). 비면 자동 선택하지 않는다.
@@ -23,9 +31,9 @@ public sealed record SessionProfile
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CommandGroup { get; init; }
 
-    /// <summary>목록 표시용: "모터보드 — COM24 · 115200". 파생 값이므로 파일에 저장하지 않는다.</summary>
+    /// <summary>목록 표시용: "모터보드 — COM24 · 115200 · 리셋". 파생 값이므로 파일에 저장하지 않는다.</summary>
     [JsonIgnore]
-    public string Display => $"{Name} — {Port} · {Baud}";
+    public string Display => ResetOnOpen ? $"{Name} — {Port} · {Baud} · 리셋" : $"{Name} — {Port} · {Baud}";
 
     /// <summary>UI 자동화/스크린리더가 읽는 이름(레코드 기본 ToString 은 타입/필드 덤프라 부적합).</summary>
     public override string ToString() => Display;
@@ -234,6 +242,7 @@ public sealed class SessionStore
                 Name = name,
                 Port = port,
                 Baud = baud,
+                ResetOnOpen = s.ResetOnOpen,
                 CommandGroup = group.Length > 0 ? group : null,
             });
             if (list.Count >= MaxSessions) break;

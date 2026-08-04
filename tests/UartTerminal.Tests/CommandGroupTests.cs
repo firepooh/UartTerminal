@@ -242,4 +242,67 @@ public sealed class CommandGroupTests : IDisposable
         reload.Load();
         Assert.Null(reload.Items[0].CommandGroup);
     }
+
+    // ── 열 때 보드 리셋(세션별 접속 속성) ────────────────────────────────────────
+
+    [Fact]
+    public void SessionProfile_PersistsResetOnOpen()
+    {
+        // Sanitize 가 새 필드를 빠뜨리면(과거 CommandGroup 에서 실제로 겪은 버그) 여기서 잡힌다.
+        string sp = Path.Combine(_dir, "sessions.json");
+        var store = new SessionStore(sp);
+        store.Load();
+        Assert.True(store.AddOrReplace(new SessionProfile
+        {
+            Name = "부트 진단", Port = "COM4", Baud = 74880, ResetOnOpen = true,
+        }));
+
+        var reload = new SessionStore(sp);
+        reload.Load();
+        Assert.True(reload.Items[0].ResetOnOpen);
+    }
+
+    [Fact]
+    public void SessionProfile_ResetOnOpen_DefaultsFalse_AndIsOmittedFromFile()
+    {
+        string sp = Path.Combine(_dir, "sessions.json");
+        var store = new SessionStore(sp);
+        store.Load();
+        store.AddOrReplace(new SessionProfile { Name = "평범", Port = "COM5", Baud = 115200 });
+
+        // 기본값(false)은 파일에 쓰지 않는다 — 손으로 읽는 파일을 조용히 유지.
+        Assert.DoesNotContain("resetOnOpen", File.ReadAllText(sp));
+
+        var reload = new SessionStore(sp);
+        reload.Load();
+        Assert.False(reload.Items[0].ResetOnOpen);
+    }
+
+    [Fact]
+    public void SessionProfile_Display_ShowsResetOnly_WhenOn()
+    {
+        var on = new SessionProfile { Name = "A", Port = "COM4", Baud = 115200, ResetOnOpen = true };
+        var off = new SessionProfile { Name = "B", Port = "COM4", Baud = 115200 };
+        Assert.Contains("리셋", on.Display);
+        Assert.DoesNotContain("리셋", off.Display);
+    }
+
+    [Fact]
+    public void SessionProfile_PerSession_ValuesAreIndependent()
+    {
+        // 프로젝트마다 다른 값을 갖는 것이 이 기능의 핵심 — 전역 설정이면 이 테스트가 무의미해진다.
+        string sp = Path.Combine(_dir, "sessions.json");
+        var store = new SessionStore(sp);
+        store.Load();
+        Assert.True(store.ReplaceAll(new[]
+        {
+            new SessionProfile { Name = "리셋보드", Port = "COM4", Baud = 115200, ResetOnOpen = true },
+            new SessionProfile { Name = "유지보드", Port = "COM7", Baud = 921600, ResetOnOpen = false },
+        }));
+
+        var reload = new SessionStore(sp);
+        reload.Load();
+        Assert.True(reload.Items[0].ResetOnOpen);
+        Assert.False(reload.Items[1].ResetOnOpen);
+    }
 }

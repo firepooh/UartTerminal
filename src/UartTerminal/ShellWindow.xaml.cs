@@ -114,7 +114,8 @@ public partial class ShellWindow : Window
 
     private void NewTab()
     {
-        var dlg = new PortSelectDialog(_state.LastPort, _state.LastBaud, _sessions, _state) { Owner = this };
+        var dlg = new PortSelectDialog(_state.LastPort, _state.LastBaud, _sessions,
+                                       preselectResetOnOpen: _state.ResetOnOpen) { Owner = this };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
             return;
 
@@ -124,7 +125,7 @@ public partial class ShellWindow : Window
         Tabs.Items.Add(ti);
         Tabs.SelectedItem = ti;
         doc.SetCommandGroup(dlg.SelectedCommandGroup); // 세션에 연결된 명령 그룹으로 자동 전환
-        doc.ConnectTo(port, dlg.SelectedBaud);
+        doc.ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen);
         RenderContent();
         doc.FocusTerminal();
     }
@@ -513,7 +514,8 @@ public partial class ShellWindow : Window
         SyncSplitChrome();
         MenuAutoReconnect.IsChecked = _state.AutoReconnect;
         MenuCommandBar.IsChecked = _state.ShowCommandBar;
-        MenuResetOnOpen.IsChecked = _state.ResetOnOpen;
+        // 탭별 값이므로 활성 탭을 따른다(탭이 없으면 마지막으로 쓴 기본값).
+        MenuResetOnOpen.IsChecked = doc?.ResetOnOpen ?? _state.ResetOnOpen;
         SyncNewlineChrome();
         RefreshMcpChrome();
     }
@@ -608,17 +610,19 @@ public partial class ShellWindow : Window
     private void BoardHardReset() => _ = ActiveDoc?.HardResetAsync();
     private void BoardBootloader() => _ = ActiveDoc?.EnterBootloaderAsync();
 
+    /// <summary>
+    /// '열 때 보드 리셋'은 속도처럼 <b>탭(연결)별</b> 값이다 — 보드마다 다르고 세션에 함께 저장된다.
+    /// 그래서 전역 동기화(자동 재연결/타임스탬프 방식)를 하지 않고 활성 탭에만 적용한다.
+    /// </summary>
     private void ResetOnOpen_Click(object sender, RoutedEventArgs e)
     {
-        bool on = MenuResetOnOpen.IsChecked;
-        _state.ResetOnOpen = on;
-        _state.Save();
-        // 전역 설정 — 모든 창/탭의 접속 파라미터와 메뉴 체크를 동기화(AutoReconnect 와 같은 방침).
-        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
+        if (ActiveDoc is not { } doc)
         {
-            w.MenuResetOnOpen.IsChecked = on;
-            foreach (var d in w.AllDocs()) d.SetResetOnOpen(on);
+            MenuResetOnOpen.IsChecked = _state.ResetOnOpen; // 탭이 없으면 되돌린다(허상 체크 방지)
+            return;
         }
+        doc.SetResetOnOpen(MenuResetOnOpen.IsChecked);
+        RefreshChrome();
     }
 
     // ── 개행(New-line) 규약 ──────────────────────────────────────────────────────

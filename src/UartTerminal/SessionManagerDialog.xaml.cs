@@ -24,11 +24,20 @@ public partial class SessionManagerDialog : Window
         private string _name = "";
         private int _baud = 115200;
         private string? _group;
+        private bool _resetOnOpen;
 
         public string Name { get => _name; set { _name = value ?? ""; Raise(); } }
         public string Port { get; init; } = "";
         public int Baud { get => _baud; set { _baud = value; Raise(); } }
         public string? Group { get => _group; set { _group = value; Raise(); } }
+        public bool ResetOnOpen { get => _resetOnOpen; set { _resetOnOpen = value; Raise(); } }
+
+        /// <summary>켜짐만 눈에 띄게 — 꺼짐은 흐린 "—" 로 둬서 표가 시끄러워지지 않게.</summary>
+        public string ResetDisplay => _resetOnOpen ? "리셋" : "—";
+
+        public Brush ResetBrush => _resetOnOpen
+            ? (Brush)Application.Current.Resources["Amber"]
+            : (Brush)Application.Current.Resources["TextFaint"];
 
         /// <summary>그룹이 없으면 "(없음)" — 빈칸으로 두면 설정 누락인지 알 수 없다.</summary>
         public string GroupDisplay => string.IsNullOrEmpty(_group) ? "(없음)" : _group!;
@@ -45,6 +54,8 @@ public partial class SessionManagerDialog : Window
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GroupDisplay)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GroupBrush)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResetDisplay)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResetBrush)));
         }
     }
 
@@ -66,7 +77,11 @@ public partial class SessionManagerDialog : Window
         PathText.Text = sessions.FilePath;
 
         foreach (var s in sessions.Items)
-            _rows.Add(new Row { Name = s.Name, Port = s.Port, Baud = s.Baud, Group = s.CommandGroup });
+            _rows.Add(new Row
+            {
+                Name = s.Name, Port = s.Port, Baud = s.Baud,
+                ResetOnOpen = s.ResetOnOpen, Group = s.CommandGroup,
+            });
 
         SessionList.ItemsSource = _rows;
 
@@ -121,6 +136,7 @@ public partial class SessionManagerDialog : Window
             NameBox.Text = row?.Name ?? "";
             BaudBox.SelectedItem = row is null ? null : (object)row.Baud;
             GroupBox.SelectedItem = row is null ? null : (string.IsNullOrEmpty(row.Group) ? NoGroup : row.Group!);
+            ResetCheck.IsChecked = row?.ResetOnOpen ?? false;
         }
         finally { _syncing = false; }
     }
@@ -141,6 +157,12 @@ public partial class SessionManagerDialog : Window
     {
         if (_syncing || SessionList.SelectedItem is not Row row) return;
         if (GroupBox.SelectedItem is string g) row.Group = g == NoGroup ? null : g;
+    }
+
+    private void ResetCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_syncing || SessionList.SelectedItem is not Row row) return;
+        row.ResetOnOpen = ResetCheck.IsChecked == true;
     }
 
     private void Delete_Click(object sender, RoutedEventArgs e)
@@ -180,6 +202,7 @@ public partial class SessionManagerDialog : Window
             Name = r.Name,
             Port = r.Port,
             Baud = r.Baud,
+            ResetOnOpen = r.ResetOnOpen,
             CommandGroup = r.Group,
         });
 

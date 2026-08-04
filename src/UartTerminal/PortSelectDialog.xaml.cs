@@ -22,9 +22,6 @@ public partial class PortSelectDialog : Window
 
     private readonly SessionStore? _sessions;
 
-    /// <summary>'열 때 보드 리셋' 은 전역 설정이라 다이얼로그가 직접 읽고 쓴다(없으면 체크박스 숨김).</summary>
-    private readonly AppState? _state;
-
     /// <summary>세션 선택으로 지정된 포트(감지 목록에 없을 수도 있다 — 그 경우 자동 재연결 대기로 이어진다).</summary>
     private string? _sessionPort;
 
@@ -36,29 +33,24 @@ public partial class PortSelectDialog : Window
     /// <summary>사용자가 고른 통신 속도. 취소 시 의미 없음.</summary>
     public int SelectedBaud { get; private set; } = DefaultBaud;
 
+    /// <summary>이 연결에서 '열 때 보드 리셋'을 할지(세션에도 함께 저장되는 접속 속성). 취소 시 의미 없음.</summary>
+    public bool SelectedResetOnOpen { get; private set; }
+
     /// <summary>세션으로 접속한 경우 그 세션에 연결된 명령 그룹(없으면 null → 그룹 자동 전환 안 함).</summary>
     public string? SelectedCommandGroup { get; private set; }
 
     public PortSelectDialog(string? preselectPort = null, int preselectBaud = DefaultBaud,
-                            SessionStore? sessions = null, AppState? state = null)
+                            SessionStore? sessions = null, bool preselectResetOnOpen = false)
     {
         InitializeComponent();
         _sessions = sessions;
-        _state = state;
-        if (state is null) ResetOnOpenCheck.Visibility = Visibility.Collapsed;
-        else ResetOnOpenCheck.IsChecked = state.ResetOnOpen;
+        ResetOnOpenCheck.IsChecked = preselectResetOnOpen;
+        SelectedResetOnOpen = preselectResetOnOpen;
         BuildBaudChips(preselectBaud);
         LoadSessions();
         RefreshPorts(preselectPort);
     }
 
-    /// <summary>전역 설정이므로 즉시 저장한다(취소해도 유지 — 메뉴의 [포트 열 때 보드 리셋] 과 같은 값).</summary>
-    private void ResetOnOpen_Click(object sender, RoutedEventArgs e)
-    {
-        if (_state is null) return;
-        _state.ResetOnOpen = ResetOnOpenCheck.IsChecked == true;
-        _state.Save();
-    }
 
     // ── 세션 ─────────────────────────────────────────────────────────────────────
 
@@ -80,6 +72,7 @@ public partial class PortSelectDialog : Window
         _sessionPort = s.Port;
         _sessionCommandGroup = s.CommandGroup; // 접속 후 칩 바를 이 그룹으로 자동 전환
         SetBaud(s.Baud);
+        ResetOnOpenCheck.IsChecked = s.ResetOnOpen; // 보드마다 다른 값 — 세션이 폼을 채운다
 
         var match = (PortList.ItemsSource as IEnumerable<PortInfo>)?
             .FirstOrDefault(p => string.Equals(p.PortName, s.Port, StringComparison.OrdinalIgnoreCase));
@@ -210,6 +203,7 @@ public partial class PortSelectDialog : Window
 
         SelectedPort = port;
         SelectedBaud = CheckedBaud();
+        SelectedResetOnOpen = ResetOnOpenCheck.IsChecked == true;
         // 세션으로 접속한 경우에만 그룹을 넘긴다(포트 목록에서 직접 고른 경우 현재 그룹 유지).
         SelectedCommandGroup = string.Equals(port.PortName, _sessionPort, StringComparison.OrdinalIgnoreCase)
             ? _sessionCommandGroup : null;

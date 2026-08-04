@@ -96,7 +96,7 @@
                 <!-- ESP32 devkit 의 DTR→IO0 / RTS→EN 자동 리셋 회로를 이용한 보드 제어 -->
                 <MenuItem Header="하드웨어 리셋 (EN 펄스)" InputGestureText="Alt+R" Click="HardReset_Click"/>
                 <MenuItem Header="부트로더 모드 진입 (IO0=LOW)" InputGestureText="Alt+Shift+R" Click="Bootloader_Click"/>
-                <MenuItem x:Name="MenuResetOnOpen" Header="포트 열 때 보드 리셋"
+                <MenuItem x:Name="MenuResetOnOpen" Header="열 때 보드 리셋 (이 탭 · 세션에 저장)"
                           IsCheckable="True" Click="ResetOnOpen_Click"/>
                 <Separator/>
                 <MenuItem Header="개행(New-line)">
