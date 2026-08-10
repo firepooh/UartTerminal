@@ -320,4 +320,87 @@ public class UartBridgeTests
         Assert.False(r.Matched);
         Assert.True(r.TimedOut);
     }
+
+    // ── 조기 매칭(부분 도착) — 사용자 보고 회귀 ───────────────────────────────
+    // 수신은 스트림이라 청크가 도착할 때마다 평가된다. 값이 다 오기 전에 열린 수량자가 걸리는 함정.
+
+    [Fact]
+    public async Task Expect_StreamMode_MatchesPartialToken_ByDesign()
+    {
+        // 문서화된 기본 동작: "CDC" 의 'C' 만 도착해도 \w+ 가 성립한다.
+        var (b, fake) = Connected();
+        fake.EmitData(Encoding.ASCII.GetBytes("mode : C"));
+        var r = await b.ExpectAsync(@"mode\s+:\s+\w+", timeoutMs: 200, cursor: 0,
+            stripAnsi: true, useRegex: true, ct: default);
+
+        Assert.True(r.Matched);
+        Assert.Equal("mode : C", r.Match); // 조기 매칭 — line 모드가 필요한 이유
+    }
+
+    [Fact]
+    public async Task Expect_LineMode_WaitsForCompleteLine()
+    {
+        // 같은 패턴이라도 줄이 완성된 뒤 평가하므로 값 전체("CDC")를 얻는다.
+        var (b, fake) = Connected();
+        fake.EmitData(Encoding.ASCII.GetBytes("mode : C"));
+
+        var task = b.ExpectAsync(@"mode\s+:\s+\w+", timeoutMs: 3000, cursor: 0,
+            stripAnsi: true, useRegex: true, ct: default, lineMode: true);
+
+        await Task.Delay(120);
+        Assert.False(task.IsCompleted); // 아직 줄이 안 끝났으므로 매칭하지 않는다
+
+        fake.EmitData(Encoding.ASCII.GetBytes("DC\r\n"));
+        var r = await task;
+
+        Assert.True(r.Matched);
+        Assert.Equal("mode : CDC", r.Match);
+    }
+
+    [Fact]
+    public async Task Expect_LineMode_TimesOutOnUnterminatedPrompt()
+    {
+        // line 모드의 대가: 개행이 없는 프롬프트는 완성되지 않아 매칭되지 않는다.
+        // (그래서 기본값이 아니라 옵션이며, 툴 설명이 이 점을 안내한다.)
+        var (b, fake) = Connected();
+        fake.EmitData(Encoding.ASCII.GetBytes("xcp> "));
+        var r = await b.ExpectAsync("xcp> ", timeoutMs: 120, cursor: 0,
+            stripAnsi: true, useRegex: false, ct: default, lineMode: true);
+
+        Assert.False(r.Matched);
+        Assert.True(r.TimedOut);
+    }
+
+    // ── 청크 경계에 걸린 ANSI 이스케이프 ──────────────────────────────────────
+
+    [Fact]
+    public async Task Read_SplitEscapeSequence_DoesNotLeakLiteralTail()
+    {
+        // ESC[3 | 2m 으로 갈리면, 무상태 strip 은 뒤 조각을 리터럴 "2m" 으로 흘린다.
+        var (b, fake) = Connected();
+        fake.EmitData(Encoding.ASCII.GetBytes("A\x1b[3"));   // 시퀀스 중간에서 끊김
+
+        var first = b.Read(cursor: 0, maxBytes: 4096, stripAnsi: true);
+        Assert.Equal("A", first.Data);                        // 미완성 시퀀스는 보류
+
+        fake.EmitData(Encoding.ASCII.GetBytes("2mB"));        // 나머지 도착
+        var second = b.Read(first.Cursor, maxBytes: 4096, stripAnsi: true);
+
+        Assert.Equal("B", second.Data);                       // "2mB" 가 아니어야 한다
+        Assert.DoesNotContain("2m", first.Data + second.Data);
+    }
+
+    [Fact]
+    public async Task Expect_SplitEscapeSequence_DoesNotCauseFalseMatch()
+    {
+        var (b, fake) = Connected();
+        fake.EmitData(Encoding.ASCII.GetBytes("I (100) app: \x1b[0;3"));
+
+        // 누출되면 "2m" 이 텍스트에 섞여 이 패턴이 잘못 걸린다.
+        var r = await b.ExpectAsync(@"\d+m", timeoutMs: 150, cursor: 0,
+            stripAnsi: true, useRegex: true, ct: default);
+
+        Assert.False(r.Matched);
+        Assert.DoesNotContain("2m", r.Data);
+    }
 }

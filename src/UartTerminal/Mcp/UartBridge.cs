@@ -103,6 +103,9 @@ public sealed class UartBridge
     private const int ExpectChunk = 64 * 1024;   // expect 한 번에 훑는 최대 바이트
     private const int ExpectMaxAccum = 256 * 1024; // 정규식 매칭용 누적 텍스트 상한(문자)
 
+    /// <summary>줄 완성 판정용 개행 문자. strip_ansi 면 LF 로 정규화되지만, 원문 그대로일 땐 CR 만 오는 장비도 있다.</summary>
+    private static readonly char[] NewlineChars = { '\n', '\r' };
+
     private readonly object _gate = new();
     private readonly Encoding _utf8 = new UTF8Encoding(false);
     private readonly RxRingBuffer _ring = new(RingCapacity);
@@ -283,8 +286,17 @@ public sealed class UartBridge
         };
     }
 
+    /// <summary>
+    /// 패턴이 나타날 때까지 대기. <paramref name="lineMode"/>가 true 면 <b>완성된 줄까지만</b> 평가한다.
+    /// <para>
+    /// 스트림 평가(기본)는 청크가 도착할 때마다 매칭하므로, <c>mode\s+:\s+\w+</c> 같은 패턴이 "CDC" 의
+    /// 첫 글자만 도착한 시점에 <c>mode : C</c> 로 <b>조기 매칭</b>된다. 줄 단위 로그를 기다릴 때는
+    /// lineMode 로 이 함정을 없앨 수 있다. 다만 개행이 없는 프롬프트(<c>xcp&gt; </c>)는 영원히 완성되지
+    /// 않으므로 그런 대기에는 기본(스트림) 모드를 써야 한다 — 그래서 기본값이 아니라 옵션이다.
+    /// </para>
+    /// </summary>
     public async Task<ExpectResult> ExpectAsync(string pattern, int timeoutMs, long? cursor,
-        bool stripAnsi, bool useRegex, CancellationToken ct)
+        bool stripAnsi, bool useRegex, CancellationToken ct, bool lineMode = false)
     {
         if (pattern.Length > 2000)
             return new ExpectResult { Matched = false, TimedOut = false, Error = "bad_pattern: too long" };
@@ -326,35 +338,44 @@ public sealed class UartBridge
                 if (accum.Length > ExpectMaxAccum)
                     accum.Remove(0, accum.Length - ExpectMaxAccum);
 
-                Match m;
-                try { m = rx.Match(accum.ToString()); }
-                catch (RegexMatchTimeoutException)
+                // 줄 모드: 마지막 개행까지만 평가한다(개행이 아직 없으면 이번 회차는 평가하지 않음).
+                // 도착 중인 토큰의 앞부분에 매칭되는 조기 매칭을 막는다.
+                string haystack = accum.ToString();
+                int evalTo = lineMode ? haystack.LastIndexOfAny(NewlineChars) + 1 : haystack.Length;
+                if (evalTo > 0)
                 {
-                    return new ExpectResult
-                    {
-                        Matched = false,
-                        TimedOut = false,
-                        Data = accum.ToString(),
-                        Cursor = start,
-                        DroppedBytes = firstDropped,
-                        Error = "regex_timeout",
-                    };
-                }
+                    if (evalTo < haystack.Length) haystack = haystack[..evalTo];
 
-                if (m.Success)
-                {
-                    var groups = new string[m.Groups.Count];
-                    for (int i = 0; i < m.Groups.Count; i++) groups[i] = m.Groups[i].Value;
-                    return new ExpectResult
+                    Match m;
+                    try { m = rx.Match(haystack); }
+                    catch (RegexMatchTimeoutException)
                     {
-                        Matched = true,
-                        TimedOut = false,
-                        Match = m.Value,
-                        Groups = groups,
-                        Data = accum.ToString(),
-                        Cursor = start,
-                        DroppedBytes = firstDropped,
-                    };
+                        return new ExpectResult
+                        {
+                            Matched = false,
+                            TimedOut = false,
+                            Data = accum.ToString(),
+                            Cursor = start,
+                            DroppedBytes = firstDropped,
+                            Error = "regex_timeout",
+                        };
+                    }
+
+                    if (m.Success)
+                    {
+                        var groups = new string[m.Groups.Count];
+                        for (int i = 0; i < m.Groups.Count; i++) groups[i] = m.Groups[i].Value;
+                        return new ExpectResult
+                        {
+                            Matched = true,
+                            TimedOut = false,
+                            Match = m.Value,
+                            Groups = groups,
+                            Data = accum.ToString(),
+                            Cursor = start,
+                            DroppedBytes = firstDropped,
+                        };
+                    }
                 }
             }
 
@@ -475,8 +496,13 @@ public sealed class UartBridge
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 링버퍼 조각을 UTF-8 텍스트로 디코드하되, 멀티바이트 문자 경계에서 잘리지 않도록 불완전한 후행 바이트는
-    /// 다음 읽기로 미룬다(커서를 완전한 경계까지만 전진). strip_ansi 시 이스케이프/제어를 제거.
+    /// 링버퍼 조각을 UTF-8 텍스트로 디코드하되, <b>경계에 걸린 것은 다음 읽기로 미룬다</b>(커서를 완전한
+    /// 경계까지만 전진). 두 가지를 미룬다:
+    /// <list type="number">
+    ///   <item>불완전한 멀티바이트 UTF-8 후행 바이트 — 한글이 읽기 경계에서 깨지지 않게</item>
+    ///   <item>strip_ansi 일 때 미완성 이스케이프 시퀀스 — <c>ESC[3</c>|<c>2m</c> 처럼 갈리면
+    ///         뒤 조각(<c>2m</c>)이 리터럴 텍스트로 새어 AI 가 보는 데이터를 오염시키고 오탐 매칭을 만든다</item>
+    /// </list>
     /// </summary>
     private (string text, long nextCursor) DecodeSlice(in RxSlice slice, bool stripAnsi)
     {
@@ -490,8 +516,21 @@ public sealed class UartBridge
 
         string raw = _utf8.GetString(slice.Data, 0, complete);
         long back = len - complete;
-        string text = stripAnsi ? AnsiText.Strip(raw) : raw;
-        return (text, slice.Cursor - back);
+
+        if (!stripAnsi)
+            return (raw, slice.Cursor - back);
+
+        // 미완성 이스케이프 시퀀스는 잘라 두고 다음 읽기에서 이어 붙인다.
+        int escComplete = AnsiText.CompleteLength(raw);
+        if (escComplete < raw.Length)
+        {
+            // 라이브 엣지가 아니라면(뒤에 이미 더 있음) 보류해도 진전이 막히지 않는다.
+            // 반대로 조각 전체가 미완성 시퀀스뿐이고 더 읽을 것도 없으면 그대로 보류(다음 신호를 기다림).
+            back += _utf8.GetByteCount(raw.AsSpan(escComplete));
+            raw = raw[..escComplete];
+        }
+
+        return (AnsiText.Strip(raw), slice.Cursor - back);
     }
 
     private static string SanitizeForDisplay(string text)

@@ -46,15 +46,24 @@ public sealed class UartMcpTools
     [Description("정규식 패턴이 수신 스트림에 나타날 때까지 기다린다(폴링 왕복 최소화). " +
                  "cursor 를 생략하면 '지금 이후' 도착하는 데이터를 기다린다(예: 명령을 uart_send 한 뒤 응답 대기). " +
                  "matched=true 면 match/groups 에 결과가, timed_out=true 면 timeout 까지 못 찾은 것이다. " +
-                 "data 에는 그동안 관측한 텍스트가 담긴다.")]
+                 "data 에는 그동안 관측한 텍스트가 담긴다.\n" +
+                 "주의(조기 매칭): 수신은 스트림이라 도착하는 대로 평가한다. 따라서 열린 수량자로 끝나는 패턴은 " +
+                 "값이 다 도착하기 전에 걸린다 — 'mode\\s+:\\s+\\w+' 는 'CDC' 의 'C' 만 온 시점에 'mode : C' 로 매칭된다. " +
+                 "값이 줄 단위로 오면 match_mode=\"line\" 을 쓰거나, 패턴을 완결형으로 쓰라: " +
+                 "개행을 포함('mode\\s+:\\s+\\w+\\r?\\n') 하거나 후보를 열거('(CDC|MSC)').")]
     public Task<ExpectResult> Expect(
         [Description("찾을 패턴. regex=true(기본)면 .NET 정규식, false 면 리터럴 문자열.")] string pattern,
         [Description("대기 시간(ms). 기본 5000.")] int timeout_ms = 5000,
         [Description("탐색 시작 커서. 생략 시 지금 이후 도착분.")] long? cursor = null,
         [Description("ANSI 이스케이프 제거 여부. 기본 true.")] bool strip_ansi = true,
         [Description("패턴을 정규식으로 해석할지. 기본 true.")] bool regex = true,
+        [Description("\"stream\"(기본)=도착하는 대로 평가(프롬프트처럼 개행 없는 출력도 대기 가능). " +
+                     "\"line\"=완성된 줄까지만 평가해 조기 매칭을 없앤다. " +
+                     "단 line 은 개행이 오지 않는 프롬프트('xcp> ')에는 영원히 매칭되지 않으니 그때는 stream 을 쓸 것.")]
+        string match_mode = "stream",
         CancellationToken cancellationToken = default)
-        => _bridge.ExpectAsync(pattern, timeout_ms, cursor, strip_ansi, regex, cancellationToken);
+        => _bridge.ExpectAsync(pattern, timeout_ms, cursor, strip_ansi, regex, cancellationToken,
+                               lineMode: string.Equals(match_mode, "line", StringComparison.OrdinalIgnoreCase));
 
     [McpServerTool(Name = "uart_screen", ReadOnly = true, OpenWorld = false)]
     [Description("현재 터미널 화면(논리 라인 버퍼)의 최근 내용을 사람이 보는 형태로 스냅샷한다. " +
