@@ -528,7 +528,10 @@
         <Setter Property="FontSize" Value="11.5"/>
         <Setter Property="Padding" Value="9,0"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Focusable" Value="False"/>
+        <!-- Focusable=False 였다. 그러면 드롭다운을 열어도 키보드 포커스가 콤보로 들어오지 않아
+             (측정: Focus()=False, 포커스가 Window 에 머묾) 방향키가 터미널 type-through 에 먹혀
+             ESC[B 로 보드에 전송됐다 — 키보드로는 그룹을 바꿀 수 없었다.
+             선택 후에는 GroupSelector_SelectionChanged 가 포커스를 터미널로 돌려준다. -->
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">

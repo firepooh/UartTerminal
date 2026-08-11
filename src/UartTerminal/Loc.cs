@@ -392,6 +392,8 @@ public sealed class Loc : INotifyPropertyChanged
         // 위험 명령(restart/erase 등) 승인문. 이것만 한국어로 남아 있으면 영어 사용자가
         // 무엇을 승인하는지 못 읽고 보내게 된다 — 이 묶음에서 유일한 안전 항목이다.
         ["Doc.CommandConfirm"] = ("이 명령을 전송할까요?\n\n{0}", "Send this command?\n\n{0}"),
+        ["Doc.CommandGroupMissing"] = ("세션의 명령 그룹 '{0}' 이(가) 없습니다 — '{1}' 을 씁니다.",
+                                       "The session's command group '{0}' no longer exists — using '{1}'."),
         ["Doc.ResetOnOpenOn"] = ("열 때 보드 리셋: 켜짐 — 다음 연결부터 적용(지금 리셋은 Alt+R)", "Reset board on open: on — applies from the next connection (press Alt+R to reset now)"),
         ["Doc.ResetOnOpenOff"] = ("열 때 보드 리셋: 꺼짐", "Reset board on open: off"),
         ["Board.HardReset"] = ("하드웨어 리셋", "Hardware reset"),

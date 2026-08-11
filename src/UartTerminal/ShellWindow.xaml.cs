@@ -127,9 +127,11 @@ public partial class ShellWindow : Window
         AttachTab(ti, doc);
         Tabs.Items.Add(ti);
         Tabs.SelectedItem = ti;
-        doc.SetCommandGroup(dlg.SelectedCommandGroup); // 세션에 연결된 명령 그룹으로 자동 전환
         doc.ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen,
                       dlg.SelectedNewlineRx, dlg.SelectedNewlineTx);
+        // 그룹 전환은 연결 <b>뒤에</b> — 앞에 두면 "세션의 그룹이 없다" 는 안내가
+        // 곧바로 오는 "연결됨" 상태 메시지에 덮여 사용자가 볼 기회가 없다.
+        doc.SetCommandGroup(dlg.SelectedCommandGroup); // 세션에 연결된 명령 그룹으로 자동 전환
         RenderContent();
         doc.FocusTerminal();
     }
@@ -373,7 +375,12 @@ public partial class ShellWindow : Window
         dock.Children.Add(doc);
 
         border.Child = dock;
-        border.PreviewMouseDown += (_, _) => ActivatePanel(doc);
+        // PreviewMouseDown 은 터널링이라 클릭 대상(ComboBoxItem 등)보다 먼저 실행된다.
+        // 여기서 무조건 터미널로 포커스를 옮기면 열려 있던 드롭다운이 닫혀 항목 선택이 취소됐다
+        // (CMD 그룹을 바꿀 수 없던 원인 — 진단 로그로 확인: 항목을 누른 시점에 이미 열림=False,
+        //  MouseUp 은 팝업이 사라진 자리 아래의 입력창이 받았다).
+        border.PreviewMouseDown += (_, ev) =>
+            ActivatePanel(doc, focusTerminal: !IsInteractiveSource(ev.OriginalSource));
 
         _panelBorders[doc] = border;
         _panelTitleTexts[doc] = title;
@@ -395,12 +402,35 @@ public partial class ShellWindow : Window
         }
     }
 
-    private void ActivatePanel(UartDocumentView doc)
+    /// <summary>
+    /// 분할 패널을 활성화한다. <paramref name="focusTerminal"/> 이 false 면 포커스를 건드리지 않는다 —
+    /// 콤보 드롭다운·입력창처럼 <b>스스로 포커스를 가져야 하는 컨트롤</b>을 클릭한 경우다.
+    /// </summary>
+    private void ActivatePanel(UartDocumentView doc, bool focusTerminal = true)
     {
         var ti = TabOf(doc);
         if (ti is not null) Tabs.SelectedItem = ti; // 탭 동기화(SelectionChanged 에서 하이라이트/포커스)
         UpdateSplitHighlights();
-        doc.FocusTerminal();
+        if (focusTerminal) doc.FocusTerminal();
+    }
+
+    /// <summary>
+    /// 클릭 대상이 자기 포커스를 필요로 하는 컨트롤인지(그 안이면 터미널로 포커스를 빼앗지 않는다).
+    /// <b>논리</b> 트리를 올라간다 — 콤보 드롭다운 항목은 자체 팝업 창에 떠서 visual 조상이 끊기지만,
+    /// 논리 부모를 따라가면 ComboBox 까지 도달한다.
+    /// </summary>
+    private static bool IsInteractiveSource(object? source)
+    {
+        var d = source as DependencyObject;
+        for (int hop = 0; d is not null && hop < 40; hop++)
+        {
+            if (d is ComboBox or System.Windows.Controls.Primitives.TextBoxBase
+                  or System.Windows.Controls.Primitives.ButtonBase or MenuItem)
+                return true;
+            d = LogicalTreeHelper.GetParent(d)
+                ?? (d is FrameworkElement fe ? fe.TemplatedParent ?? VisualTreeHelper.GetParent(d) : null);
+        }
+        return false;
     }
 
     private void UpdateSplitHighlights()

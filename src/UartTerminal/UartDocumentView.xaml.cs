@@ -159,13 +159,13 @@ public partial class UartDocumentView : UserControl
             return;
         }
 
-        SetCommandGroup(dlg.SelectedCommandGroup); // 세션으로 재접속했으면 그 그룹으로 전환
         CloseCurrentSession(); // OpenSession→OpenUserInitiated 이 자동 재연결 대기를 종료한다
 
         if (_engine is null)
         {
             ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen,
                       dlg.SelectedNewlineRx, dlg.SelectedNewlineTx);
+            SetCommandGroup(dlg.SelectedCommandGroup);
             return;
         }
 
@@ -185,6 +185,8 @@ public partial class UartDocumentView : UserControl
         OpenSession();
         SaveConnectionDefaults();
         RefreshMetrics();
+        // 연결 뒤에 전환 — 안내가 "연결됨" 에 덮이지 않게(NewTab 과 같은 순서).
+        SetCommandGroup(dlg.SelectedCommandGroup);
     }
 
     public void Disconnect() => _conn?.Disconnect();
@@ -435,10 +437,26 @@ public partial class UartDocumentView : UserControl
         if (show) { SyncGroupSelector(); RebuildCommandChips(); }
     }
 
-    /// <summary>세션이 지정한 명령 그룹으로 전환(없으면 첫 그룹 유지).</summary>
+    /// <summary>
+    /// 세션이 지정한 명령 그룹으로 전환.
+    ///
+    /// 그룹이 <b>지금은 없는 이름</b>이면(그룹을 지웠거나 이름을 바꿨는데 sessions.json 은 옛 이름을
+    /// 그대로 갖고 있는 경우) 첫 그룹으로 떨어진다. 예전에는 이걸 조용히 넘겨서,
+    /// 세션마다 다른 그룹을 지정해 뒀는데도 <b>모든 탭이 첫 그룹을 보여주는</b> 상태가 되고
+    /// 사용자는 이유를 알 수 없었다. 이제 상태바로 알린다.
+    /// </summary>
     public void SetCommandGroup(string? groupName)
     {
         if (string.IsNullOrWhiteSpace(groupName)) return;
+
+        if (_commands.FindGroup(groupName) is null)
+        {
+            string used = CurrentCommandGroup ?? "";
+            SetStatus(Loc.F("Doc.CommandGroupMissing", groupName, used));
+            DiagLog.Warn($"세션의 명령 그룹 없음: '{groupName}' → '{used}' 사용");
+            return;
+        }
+
         _commandGroup = groupName;
         SyncGroupSelector();
         RebuildCommandChips();
@@ -476,6 +494,9 @@ public partial class UartDocumentView : UserControl
         _commandGroup = GroupSelector.SelectedItem as string;
         RebuildCommandChips();
         RefreshMetrics(); // 상태바의 CMD:그룹 표시 갱신
+        // 그룹을 고른 뒤에는 타이핑이 다시 터미널로 나가야 한다(type-through).
+        // 콤보가 포커스를 받을 수 있게 되면서 필요해졌다 — 안 돌려주면 키 입력이 콤보로 간다.
+        FocusTerminal();
     }
 
     private void RebuildCommandChips()
