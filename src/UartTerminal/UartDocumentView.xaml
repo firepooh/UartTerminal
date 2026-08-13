@@ -18,7 +18,7 @@
 
                 <TextBlock x:Name="Prompt" Grid.Column="0" Text="&gt;"
                            Foreground="{DynamicResource Green}"
-                           FontFamily="{StaticResource MonoFont}" FontSize="13" FontWeight="Bold"
+                           FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource Font.Emph}" FontWeight="Bold"
                            VerticalAlignment="Center" Margin="2,0,10,0"/>
 
                 <TextBox x:Name="InputBox" Grid.Column="1"
@@ -49,7 +49,7 @@
                     <!-- 명령 그룹(프로젝트) 선택. 탭별로 독립이며, 세션 접속 시 자동 선택된다. -->
                     <!-- "CMD" 라벨 + 그룹명: 지금 어떤 명령 세트가 적용됐는지 항상 읽히게 한다. -->
                     <TextBlock x:Name="GroupLabel" Text="CMD" Visibility="Collapsed"
-                               Foreground="{DynamicResource TextFaint}" FontSize="10.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}" FontWeight="SemiBold"
                                VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="GroupSelector" MinWidth="104" MaxWidth="160" Height="26"
                               Margin="0,0,8,0" VerticalContentAlignment="Center"
@@ -90,11 +90,11 @@
                     Background="{DynamicResource OverlayBg}" BorderBrush="{DynamicResource BorderStrong}"
                     BorderThickness="1" CornerRadius="8">
                 <StackPanel Orientation="Horizontal">
-                    <TextBox x:Name="FindBox" Width="220" MinHeight="26" FontSize="12"
+                    <TextBox x:Name="FindBox" Width="220" MinHeight="26" FontSize="{StaticResource Font.Body}"
                              Style="{StaticResource CommandInput}" Padding="8,3"
                              TextChanged="FindBox_TextChanged" PreviewKeyDown="FindBox_PreviewKeyDown"/>
                     <TextBlock x:Name="FindCount" VerticalAlignment="Center" Margin="9,0,7,0"
-                               MinWidth="46" Foreground="{DynamicResource TextMuted}" FontSize="11.5"
+                               MinWidth="46" Foreground="{DynamicResource TextMuted}" FontSize="{StaticResource Font.Caption}"
                                FontFamily="{StaticResource MonoFont}" Text=""/>
                     <Button Content="▲" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
                             Padding="9,0" Focusable="False" Click="FindPrev_Click" ToolTip="{loc:Str Doc.FindPrevTip}"/>
@@ -113,7 +113,7 @@
                     Background="{DynamicResource OverlayBg}" BorderBrush="{DynamicResource BorderStrong}"
                     BorderThickness="1" CornerRadius="7">
                 <TextBlock x:Name="ZoomText" Foreground="{DynamicResource Text}"
-                           FontFamily="{StaticResource MonoFont}" FontSize="13" FontWeight="Bold"/>
+                           FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource Font.Emph}" FontWeight="Bold"/>
             </Border>
 
             <ScrollBar x:Name="VScroll" Grid.Column="1" Orientation="Vertical"

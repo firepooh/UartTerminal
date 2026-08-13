@@ -27,10 +27,7 @@ public partial class App : Application
         var state = AppState.Load();
         DiagLog.Capture = state.DiagCapture; // 진단 캡처 설정 복원
 
-        // 저장된 테마 적용. App.xaml 은 다크 팔레트를 병합해 두므로 라이트일 때만 실제로 덮어쓴다.
-        // (시작 시점 적용은 확실히 동작한다 — 컨트롤이 이 뒤에 만들어진다.
-        //  실행 중 전환의 한계는 Theme.Apply 주석 참고.)
-        if (state.Theme != AppTheme.Dark) Theme.Apply(state.Theme);
+        // 팔레트는 App.xaml 이 병합한 다크 하나뿐이다(테마 전환 없음) — 복원할 것이 없다.
         Loc.SetLanguage(state.Language); // 표시 언어 복원(기본 한국어)
 
         // 저장 명령은 창 좌표 같은 휘발성 상태(state.json)와 분리된 사용자 저작 파일이다(팀 공유 = 이 파일 복사).

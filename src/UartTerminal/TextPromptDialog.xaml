@@ -12,8 +12,7 @@
         Foreground="{DynamicResource Text}"
         FontFamily="{StaticResource UiFont}">
     <StackPanel Margin="16">
-        <TextBlock x:Name="PromptText" TextWrapping="Wrap" FontSize="12.5" Margin="2,0,0,10"
-                   Foreground="{DynamicResource TextDim}"/>
+        <TextBlock x:Name="PromptText" Margin="2,0,0,10" Style="{StaticResource HintText}"/>
         <TextBox x:Name="InputBox" Style="{StaticResource CommandInput}" MaxLength="40"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="{loc:Str Common.Ok}" Style="{StaticResource SendButton}"

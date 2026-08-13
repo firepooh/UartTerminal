@@ -14,8 +14,7 @@
     <StackPanel Margin="16">
 
         <!-- 파일 경로 + 찾아보기 -->
-        <TextBlock Text="{loc:Str Log.Filename}" FontSize="12"
-                   Foreground="{DynamicResource TextFaint}" Margin="2,0,0,6"/>
+        <TextBlock Text="{loc:Str Log.Filename}" Style="{StaticResource FieldLabel}" Margin="2,0,0,6"/>
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -28,8 +27,7 @@
         </Grid>
 
         <!-- 쓰기 모드: 속도 선택과 같은 세그먼트(칩) 스타일 -->
-        <TextBlock Text="{loc:Str Log.WriteMode}" FontSize="12"
-                   Foreground="{DynamicResource TextFaint}" Margin="2,14,0,6"/>
+        <TextBlock Text="{loc:Str Log.WriteMode}" Style="{StaticResource FieldLabel}" Margin="2,14,0,6"/>
         <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="ModeNew" Content="{loc:Str Log.WriteNew}"
                          Style="{StaticResource BaudChip}" GroupName="WriteMode"/>
@@ -38,8 +36,7 @@
         </StackPanel>
 
         <!-- 기록 형식: '화면 그대로' 가 기본. 원시는 ANSI 이스케이프가 그대로 남아 사람이 읽기 어렵다 -->
-        <TextBlock Text="{loc:Str Log.Format}" FontSize="12"
-                   Foreground="{DynamicResource TextFaint}" Margin="2,14,0,6"/>
+        <TextBlock Text="{loc:Str Log.Format}" Style="{StaticResource FieldLabel}" Margin="2,14,0,6"/>
         <StackPanel Orientation="Horizontal">
             <RadioButton x:Name="FormatScreen" Content="{loc:Str Log.FormatScreen}"
                          Style="{StaticResource BaudChip}" GroupName="Format"
@@ -51,9 +48,9 @@
 
         <!-- 옵션 -->
         <CheckBox x:Name="TimestampCheck" Content="{loc:Str Log.Timestamp}"
-                  Style="{StaticResource DarkCheckBox}" Margin="2,16,0,0"/>
+                  Style="{StaticResource AppCheckBox}" Margin="2,16,0,0"/>
         <CheckBox x:Name="IncludeBufferCheck" Content="{loc:Str Log.IncludeBuffer}"
-                  Style="{StaticResource DarkCheckBox}" Margin="2,10,0,0"/>
+                  Style="{StaticResource AppCheckBox}" Margin="2,10,0,0"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button Content="{loc:Str Common.Ok}" Style="{StaticResource SendButton}"

@@ -18,8 +18,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Margin="2,0,0,10" FontSize="12.5" TextWrapping="Wrap"
-                   Foreground="{DynamicResource TextDim}"
+        <TextBlock Grid.Row="0" Margin="2,0,0,10" Style="{StaticResource HintText}"
                    Text="{loc:Str Cmd.Intro}"/>
 
         <Grid Grid.Row="1">
@@ -32,7 +31,7 @@
             <!-- ① 그룹(프로젝트) -->
             <DockPanel Grid.Column="0">
                 <TextBlock DockPanel.Dock="Top" Text="{loc:Str Cmd.Groups}" Margin="2,0,0,6"
-                           Foreground="{DynamicResource TextDim}" FontSize="12"/>
+                           Style="{StaticResource FieldLabel}"/>
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
                     <Button x:Name="AddGroupButton" Content="{loc:Str Common.Add}" Style="{StaticResource DialogButton}"
                             MinWidth="0" Padding="10,0" Click="AddGroup_Click"/>
@@ -53,7 +52,7 @@
             <!-- ② 명령 / 폴더 -->
             <DockPanel Grid.Column="1" Margin="12,0,0,0">
                 <TextBlock DockPanel.Dock="Top" x:Name="CmdHeader" Text="{loc:Str Cmd.Commands}" Margin="2,0,0,6"
-                           Foreground="{DynamicResource TextDim}" FontSize="12"/>
+                           Style="{StaticResource FieldLabel}"/>
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="AddButton" Content="{loc:Str Cmd.AddCommand}" Style="{StaticResource DialogButton}"
@@ -104,27 +103,27 @@
             <!-- ③ 상세(선택 항목 편집) -->
             <Border Grid.Column="2" x:Name="DetailPane" Margin="14,0,0,0" IsEnabled="False">
                 <StackPanel>
-                    <TextBlock Text="{loc:Str Cmd.NameLabel}" Foreground="{DynamicResource TextDim}" FontSize="12" Margin="2,0,0,6"/>
+                    <TextBlock Text="{loc:Str Cmd.NameLabel}" Style="{StaticResource FieldLabel}" Margin="2,0,0,6"/>
                     <TextBox x:Name="NameBox" Style="{StaticResource CommandInput}"
                              MaxLength="40"
                              Text="{Binding Name, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
 
                     <TextBlock x:Name="TextLabel" Text="{loc:Str Cmd.TextLabel}"
-                               Foreground="{DynamicResource TextDim}" FontSize="12" Margin="2,14,0,6"/>
+                               Style="{StaticResource FieldLabel}" Margin="2,14,0,6"/>
                     <TextBox x:Name="TextBoxCmd" Style="{StaticResource CommandInput}"
                              MaxLength="2000"
                              Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
 
-                    <CheckBox x:Name="ConfirmBox" Style="{StaticResource DarkCheckBox}" Margin="2,16,0,0"
+                    <CheckBox x:Name="ConfirmBox" Style="{StaticResource AppCheckBox}" Margin="2,16,0,0"
                               Content="{loc:Str Cmd.Confirm}"
                               IsChecked="{Binding Confirm, Mode=TwoWay}"/>
 
                     <TextBlock x:Name="FolderHint" Visibility="Collapsed" Margin="2,16,0,0"
-                               Foreground="{DynamicResource Blue}" FontSize="11.5" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Blue}" FontSize="{StaticResource Font.Caption}" TextWrapping="Wrap"
                                Text="{loc:Str Cmd.FolderHint}"/>
 
                     <TextBlock Text="{loc:Str Cmd.SecretWarn}"
-                               Foreground="{DynamicResource TextFaint}" FontSize="11" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}" TextWrapping="Wrap"
                                Margin="2,18,0,0"/>
                 </StackPanel>
             </Border>
@@ -132,7 +131,7 @@
 
         <!-- 파일 위치(팀 공유 = 이 파일 복사) -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="2,12,0,0">
-            <TextBlock x:Name="PathText" Foreground="{DynamicResource TextFaint}" FontSize="11"
+            <TextBlock x:Name="PathText" Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="620"/>
             <Button x:Name="OpenFolderButton" Content="{loc:Str Common.OpenFolder}" Style="{StaticResource DialogButton}"
                     MinWidth="0" MinHeight="24" Padding="10,0" Margin="10,0,0,0" Click="OpenFolder_Click"/>

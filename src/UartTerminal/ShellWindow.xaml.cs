@@ -29,9 +29,8 @@ public partial class ShellWindow : Window
         public required Action Mcp;
     }
 
-    // 색은 테마(DarkTheme.xaml)에만 둔다. 예전에는 같은 팔레트를 여기 복사해 놨는데,
-    // 테마를 고쳐도 이쪽은 옛 색을 계속 써서 패널 경계·상태 점이 배경에 묻어 있었다.
-    // 프로퍼티로 매번 조회하므로 테마를 바꾸면 다음 렌더부터 새 색이 적용된다.
+    // 색은 팔레트(Themes/Palette.Dark.xaml)에만 둔다. 예전에는 같은 값을 여기 복사해 놨는데,
+    // 팔레트를 고쳐도 이쪽은 옛 색을 계속 써서 패널 경계·상태 점이 배경에 묻어 있었다.
     private static Brush AccentBrush => Theme.Brush("Accent");
     private static Brush PanelBorderInactive => Theme.Brush("PanelBorderInactive");
     private static Brush PanelHeaderBg => Theme.Brush("PanelHeaderBg");
@@ -102,7 +101,7 @@ public partial class ShellWindow : Window
         MenuTimestamps.IsChecked = _state.ShowTimestamps;
         MenuResetOnOpen.IsChecked = _state.ResetOnOpen;
         SyncNewlineChrome();
-        SyncThemeChrome();
+        SyncLanguageChrome();
         if (_isPrimary)
         {
             RestoreWindowBounds();
@@ -192,16 +191,38 @@ public partial class ShellWindow : Window
         {
             Width = 7,
             Height = 7,
-            Margin = new Thickness(0, 0, 8, 0),
             VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
             Fill = DotIdle,
         };
-        DockPanel.SetDock(dot, Dock.Left);
+
+        // 점은 7px 이라 그대로는 못 누른다 — 투명한 18px 판으로 감싸 클릭 영역을 넓힌다.
+        // (Background 가 없으면 Border 는 히트 테스트에서 빠져 클릭이 오지 않는다.)
+        var dotHit = new Border
+        {
+            Width = 18,
+            Height = 18,
+            Margin = new Thickness(-4, 0, 4, 0),   // 감싸면서 늘어난 폭을 상쇄해 기존 간격을 유지
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = dot,
+        };
+        dotHit.SetBinding(ToolTipProperty, Loc.Bind("Tip.ToggleConnection"));
+        // Preview + Handled: 탭 선택(마우스 다운)보다 먼저 잡아 '점 클릭 = 연결 토글' 만 일어나게 한다.
+        // 대신 그 탭을 활성으로 만든다 — 상태 메시지가 활성 탭 것만 상태바에 보이기 때문.
+        dotHit.PreviewMouseLeftButtonDown += (_, ev) =>
+        {
+            ev.Handled = true;
+            Tabs.SelectedItem = ti;
+            DocOf(ti)?.ToggleConnection();
+        };
+        DockPanel.SetDock(dotHit, Dock.Left);
 
         var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
 
         panel.Children.Add(close);
-        panel.Children.Add(dot);
+        panel.Children.Add(dotHit);
         panel.Children.Add(text);
 
         // Header 는 바인딩으로 걸어 언어 전환을 따라오게 한다(대입하면 그 시점 언어로 굳는다).
@@ -342,15 +363,28 @@ public partial class ShellWindow : Window
 
         var dot = new Ellipse
         {
-            Width = 6, Height = 6, Margin = new Thickness(0, 0, 7, 0),
+            Width = 6, Height = 6,
             VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
             Fill = DotFor(doc),
         };
+        // 탭 머리와 같은 규칙 — 점을 누르면 연결 해제/재연결(작아서 투명 판으로 클릭 영역을 넓힌다)
+        var dotHit = new Border
+        {
+            Width = 18, Height = 18, Margin = new Thickness(-6, 0, 1, 0),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = dot,
+        };
+        dotHit.SetBinding(ToolTipProperty, Loc.Bind("Tip.ToggleConnection"));
+        dotHit.PreviewMouseLeftButtonDown += (_, ev) => { ev.Handled = true; doc.ToggleConnection(); };
+
         var title = new TextBlock
         {
             Text = doc.Title,
             FontFamily = mono,
-            FontSize = 11.5,
+            FontSize = (double)FindResource("Font.Caption"),
             FontWeight = active ? FontWeights.Bold : FontWeights.Normal,
             Foreground = active ? TitleActiveFg : TitleInactiveFg,
             VerticalAlignment = VerticalAlignment.Center,
@@ -361,7 +395,7 @@ public partial class ShellWindow : Window
             Margin = new Thickness(11, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        titleInner.Children.Add(dot);
+        titleInner.Children.Add(dotHit);
         titleInner.Children.Add(title);
 
         var titleBar = new Border
@@ -560,7 +594,7 @@ public partial class ShellWindow : Window
         // 탭별 값이므로 활성 탭을 따른다(탭이 없으면 마지막으로 쓴 기본값).
         MenuResetOnOpen.IsChecked = doc?.ResetOnOpen ?? _state.ResetOnOpen;
         SyncNewlineChrome();
-        SyncThemeChrome();
+        SyncLanguageChrome();
         RefreshMcpChrome();
     }
 
@@ -794,24 +828,8 @@ public partial class ShellWindow : Window
     private void FontLarger_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(+1);
     private void FontSmaller_Click(object sender, RoutedEventArgs e) => ActiveDoc?.AdjustFont(-1);
 
-    /// <summary>테마 전환 — 전역 설정이라 열린 모든 창의 메뉴 체크를 함께 맞춘다(적용 자체는 Theme.Apply 가 전역).</summary>
-    private void Theme_Click(object sender, RoutedEventArgs e)
+    private void SyncLanguageChrome()
     {
-        if (sender is not MenuItem { Tag: string tag } || !Enum.TryParse<AppTheme>(tag, out var theme))
-            return;
-
-        Theme.Apply(theme);
-        _state.Theme = theme;
-        _state.Save();
-
-        foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
-            w.SyncThemeChrome();
-    }
-
-    private void SyncThemeChrome()
-    {
-        MenuThemeDark.IsChecked = Theme.Current == AppTheme.Dark;
-        MenuThemeLight.IsChecked = Theme.Current == AppTheme.Light;
         MenuLangKo.IsChecked = Loc.Language == AppLanguage.Korean;
         MenuLangEn.IsChecked = Loc.Language == AppLanguage.English;
     }
@@ -830,7 +848,7 @@ public partial class ShellWindow : Window
         _state.Save();
 
         foreach (var w in Application.Current.Windows.OfType<ShellWindow>())
-            w.SyncThemeChrome();  // 메뉴 체크 표시(라디오)는 상태 동기화라 별도
+            w.SyncLanguageChrome();  // 메뉴 체크 표시(라디오)는 상태 동기화라 별도
     }
 
     /// <summary>

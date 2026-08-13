@@ -59,9 +59,8 @@ public sealed class AppState
     /// </summary>
     public bool ResetOnOpen { get; set; }
 
-    /// <summary>화면 테마(다크/라이트). 전역 설정 — 모든 창에 즉시 적용된다.</summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public AppTheme Theme { get; set; } = AppTheme.Dark;
+    // 테마 설정은 없앴다(다크 단독). 옛 state.json 에 남아 있는 "theme" 키는
+    // System.Text.Json 이 모르는 멤버로 무시하므로 마이그레이션이 필요 없다.
 
     /// <summary>표시 언어(한국어/English). 전역 설정 — 재시작 없이 즉시 적용된다.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]

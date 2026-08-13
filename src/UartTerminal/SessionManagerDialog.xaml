@@ -17,7 +17,7 @@
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -26,7 +26,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Blue}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -35,7 +35,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -43,7 +43,7 @@
             <Setter Property="Foreground" Value="{Binding GroupBrush}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -52,18 +52,18 @@
             <Setter Property="Foreground" Value="{Binding OnOpenBrush}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
         <!-- 개행: 지정 없음(기본 따라감)은 흐리게 -->
         <Style x:Key="CellNewline" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
             <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
-            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontSize" Value="{StaticResource Font.Caption}"/>
             <Setter Property="Foreground" Value="{Binding NewlineBrush}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -77,8 +77,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Margin="2,0,0,10" FontSize="12.5" TextWrapping="Wrap"
-                   Foreground="{DynamicResource TextDim}"
+        <TextBlock Grid.Row="0" Margin="2,0,0,10" Style="{StaticResource HintText}"
                    Text="{loc:Str Sess.Intro}"/>
 
         <!-- 표 머리글 -->
@@ -93,12 +92,12 @@
                     <ColumnDefinition Width="132"/>
                     <ColumnDefinition Width="126"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{loc:Str Common.Name}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="1" Text="{loc:Str Common.Port}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="2" Text="{loc:Str Common.Baud}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="4" Text="{loc:Str Sess.NewlineCol}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="5" Text="{loc:Str Common.CommandGroup}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="0" Text="{loc:Str Common.Name}" Style="{StaticResource TableHeaderText}"/>
+                <TextBlock Grid.Column="1" Text="{loc:Str Common.Port}" Style="{StaticResource TableHeaderText}"/>
+                <TextBlock Grid.Column="2" Text="{loc:Str Common.Baud}" Style="{StaticResource TableHeaderText}"/>
+                <TextBlock Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Style="{StaticResource TableHeaderText}"/>
+                <TextBlock Grid.Column="4" Text="{loc:Str Sess.NewlineCol}" Style="{StaticResource TableHeaderText}"/>
+                <TextBlock Grid.Column="5" Text="{loc:Str Common.CommandGroup}" Style="{StaticResource TableHeaderText}"/>
             </Grid>
         </Border>
 
@@ -149,10 +148,10 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Name}" Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="2,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Baud}" Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.CommandGroup}" Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Name}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Baud}" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.CommandGroup}" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
 
                 <!-- MinWidth=0: 기본 스타일의 최소폭 때문에 * 열이 줄지 못해 오른쪽 [삭제] 가 잘리는 것을 막는다 -->
                 <TextBox x:Name="NameBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
@@ -164,11 +163,11 @@
                 <!-- 접속 속성이라 여기서 편집 가능(포트와 달리 세션이 진실의 출처).
                      MCP 는 '탭마다 다른 파이프' 라 전역 설정이 될 수 없어 여기(세션)에 함께 둔다. -->
                 <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox x:Name="ResetCheck" Style="{StaticResource DarkCheckBox}"
+                    <CheckBox x:Name="ResetCheck" Style="{StaticResource AppCheckBox}"
                               Content="{loc:Str Sess.Reset}" VerticalAlignment="Center" Margin="12,0,0,0"
                               ToolTip="{loc:Str Sess.ResetTip}"
                               Click="ResetCheck_Click"/>
-                    <CheckBox x:Name="McpCheck" Style="{StaticResource DarkCheckBox}"
+                    <CheckBox x:Name="McpCheck" Style="{StaticResource AppCheckBox}"
                               Content="{loc:Str Sess.Mcp}" VerticalAlignment="Center" Margin="14,0,0,0"
                               ToolTip="{loc:Str Sess.McpTip}"
                               Click="McpCheck_Click"/>
@@ -179,9 +178,9 @@
 
                 <!-- 개행은 값이 길어 둘째 줄에 둔다. "(기본)"=지정 없음 → 접속 시 현재 값을 그대로 쓴다 -->
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Str Sess.NewlineRx}" Foreground="{DynamicResource TextDim}"
-                           FontSize="11.5" Margin="2,12,0,4"/>
+                           FontSize="{StaticResource Font.Caption}" Margin="2,12,0,4"/>
                 <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{loc:Str Sess.NewlineTx}"
-                           Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="10,12,0,4"/>
+                           Style="{StaticResource FieldLabel}" Margin="10,12,0,4"/>
                 <ComboBox x:Name="RxBox" Grid.Row="3" Grid.Column="0" Height="30" HorizontalAlignment="Left"
                           Width="210" VerticalContentAlignment="Center" Margin="2,0,0,0"
                           ToolTip="{loc:Str Sess.RxTip}"
@@ -193,7 +192,7 @@
 
                 <!-- 로그 폴더: 파일명이 아니라 '폴더' 다 — 이름은 열 때마다 규칙으로 새로 만든다 -->
                 <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="5" Text="{loc:Str Sess.LogFolder}"
-                           Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="2,12,0,4"/>
+                           Style="{StaticResource FieldLabel}" Margin="2,12,0,4"/>
                 <TextBox x:Name="LogFolderBox" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
                          Style="{StaticResource CommandInput}" MinHeight="30" MinWidth="0"
                          ToolTip="{loc:Str Sess.LogFolderTip}" TextChanged="LogFolderBox_TextChanged"/>
@@ -213,7 +212,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock x:Name="PathText" Foreground="{DynamicResource TextFaint}" FontSize="11"
+                <TextBlock x:Name="PathText" Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="380"/>
                 <Button Content="{loc:Str Common.OpenFolder}" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="24"
                         Padding="10,0" Margin="10,0,0,0" Click="OpenFolder_Click"/>

@@ -32,7 +32,7 @@
                 <Button x:Name="DeleteSessionButton" DockPanel.Dock="Right" Content="{loc:Str Common.Delete}"
                         Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="24" Padding="10,0"
                         IsEnabled="False" Click="DeleteSession_Click"/>
-                <TextBlock Text="{loc:Str Port.Sessions}" FontSize="13"
+                <TextBlock Text="{loc:Str Port.Sessions}" FontSize="{StaticResource Font.Emph}"
                            VerticalAlignment="Center" Foreground="{DynamicResource Text}"/>
             </DockPanel>
             <ListBox x:Name="SessionList" Grid.Row="1" Height="126"
@@ -41,11 +41,11 @@
                      DisplayMemberPath="Display"/>
         </Grid>
 
-        <TextBlock Grid.Row="1" Margin="2,0,0,6" FontSize="13"
+        <TextBlock Grid.Row="1" Margin="2,0,0,6" FontSize="{StaticResource Font.Emph}"
                    Foreground="{DynamicResource Text}"
                    Text="{loc:Str Port.Detected}"/>
 
-        <TextBlock Grid.Row="2" Margin="2,0,0,6" FontSize="11"
+        <TextBlock Grid.Row="2" Margin="2,0,0,6" FontSize="{StaticResource Font.Caption}"
                    Foreground="{DynamicResource TextFaint}"
                    Text="{loc:Str Port.Hint}"/>
 
@@ -57,20 +57,20 @@
         <!-- 통신 속도(README §2): ESP-IDF 기본 115200 외에 부트로더 진단(74880)·고속 로그(921600)가 실수요 -->
         <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="2,12,0,0" VerticalAlignment="Center">
             <TextBlock Text="{loc:Str Common.Baud}" VerticalAlignment="Center" Margin="0,0,10,0"
-                       Foreground="{DynamicResource TextDim}" FontSize="12"/>
+                       Style="{StaticResource FieldLabel}"/>
             <Border Style="{StaticResource SplitToolbar}">
                 <StackPanel x:Name="BaudHost" Orientation="Horizontal"/>
             </Border>
             <TextBlock Text="bps" VerticalAlignment="Center" Margin="10,0,0,0"
-                       Foreground="{DynamicResource TextFaint}" FontSize="11.5"/>
+                       Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}"/>
         </StackPanel>
 
         <StackPanel Grid.Row="5" Margin="2,10,0,12">
             <!-- ESP32 devkit: DTR→IO0 / RTS→EN 자동 리셋 회로. 기본은 두 선 모두 해제해 보드를 건드리지 않는다. -->
-            <CheckBox x:Name="ResetOnOpenCheck" Style="{StaticResource DarkCheckBox}"
+            <CheckBox x:Name="ResetOnOpenCheck" Style="{StaticResource AppCheckBox}"
                       Content="{loc:Str Port.ResetOnOpen}"
                       Margin="0,0,0,8"/>
-            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFaint}" FontSize="11.5"
+            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}"
                        Text="{loc:Str Port.Fixed}"/>
         </StackPanel>
 

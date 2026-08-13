@@ -194,6 +194,37 @@ public partial class UartDocumentView : UserControl
 
     public void Disconnect() => _conn?.Disconnect();
 
+    /// <summary>
+    /// 탭 머리의 상태 점을 눌렀을 때: 연결돼 있으면 끊고, 끊겨 있으면 <b>같은 포트·같은 설정으로</b>
+    /// 다시 연다(포트 선택 다이얼로그를 띄우지 않는다 — 그러면 '토글' 이 아니라 '재연결 마법사'다).
+    ///
+    /// 로깅 중 끊기는 되돌릴 수 없는 손실이라(그 시점부터의 수신이 파일에 안 남는다) 그때만 확인을 받는다.
+    /// 재연결 대기/AI 양보 상태도 '연결 쪽' 으로 본다 — 그 상태에서 점을 누르는 의도는 '멈춰라' 다.
+    /// </summary>
+    public void ToggleConnection()
+    {
+        if (_conn is null || string.IsNullOrEmpty(_portName)) return;
+
+        bool live = _conn.IsConnected || _conn.IsReconnecting || _conn.IsPortReleased;
+        if (live)
+        {
+            if (IsLogging)
+            {
+                var r = MessageBox.Show(OwnerWindow, Loc.F("Doc.DisconnectWhileLogging", _portName),
+                    "UartTerminal", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
+                if (r != MessageBoxResult.OK) return;
+            }
+            _conn.Disconnect();
+            SetStatus(Loc.F("Doc.DisconnectedByUser", _portName));
+            return;
+        }
+
+        // 열려 있던 세션이 남아 있을 수 있으니 정리하고 연다(OpenSession 이 상태/실패 안내를 담당).
+        CloseCurrentSession();
+        OpenSession();
+        RefreshMetrics();
+    }
+
     private void EnsureEngine()
     {
         if (_engine is not null) return;
@@ -1189,8 +1220,8 @@ public partial class UartDocumentView : UserControl
         _reconnectTimer?.Stop();
         _watchdogTimer?.Stop();
         _zoomTimer?.Stop();
-        // 렌더 타이머(60Hz)와 Theme.Changed 구독을 끊는다. 이게 없으면 Dispatcher 가 타이머를
-        // 통해 이 뷰 → 문서 → 엔진/브리지/세션 그래프 전체를 영구히 붙잡는다(탭을 닫아도).
+        // 렌더 타이머(60Hz)를 끊는다. 이게 없으면 Dispatcher 가 타이머를 통해
+        // 이 뷰 → 문서 → 엔진/브리지/세션 그래프 전체를 영구히 붙잡는다(탭을 닫아도).
         _view?.Shutdown();
         ViewHost.Child = null;
         // 연속 로깅 파일 닫기 — 화면 모드는 진행 중이던 줄을 먼저 마저 쓴다(플러시 포함)

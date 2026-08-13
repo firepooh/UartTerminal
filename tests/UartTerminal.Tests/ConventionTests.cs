@@ -64,40 +64,34 @@ public sealed class ConventionTests
              .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
-    /// 두 팔레트의 키 집합은 완전히 같아야 한다. <c>Theme.Apply</c> 는 값을 덮어쓰는 방식이라
-    /// 한쪽에만 있는 키는 <b>테마를 바꿔도 예전 색이 그대로 남는다</b>(런타임 경고만 남고 조용히 깨진다).
+    /// 팔레트는 <b>다크 하나뿐</b>이어야 한다(v1.8.0에서 테마 전환 제거).
+    /// 라이트 팔레트가 되살아나면 키 동기화·대비 검사·전환 배선이 함께 따라오므로,
+    /// 되돌리는 것 자체를 막지는 않되 <b>의식적인 결정</b>이 되도록 여기서 실패시킨다.
     /// </summary>
     [Fact]
-    public void BothPalettes_HaveIdenticalKeySets()
+    public void OnlyDarkPalette_Exists()
     {
-        var dark = PaletteKeys(Path.Combine(ThemesDir, "Palette.Dark.xaml"));
-        var light = PaletteKeys(Path.Combine(ThemesDir, "Palette.Light.xaml"));
-
-        var onlyDark = dark.Except(light).OrderBy(k => k).ToList();
-        var onlyLight = light.Except(dark).OrderBy(k => k).ToList();
-
-        Assert.True(onlyDark.Count == 0, $"다크에만 있는 키: {string.Join(", ", onlyDark)}");
-        Assert.True(onlyLight.Count == 0, $"라이트에만 있는 키: {string.Join(", ", onlyLight)}");
+        var palettes = Directory.GetFiles(ThemesDir, "Palette.*.xaml").Select(Path.GetFileName).ToList();
+        Assert.Equal(new[] { "Palette.Dark.xaml" }, palettes);
     }
 
-    /// <summary>ANSI 16색은 테마별로 있어야 한다 — 코드에 두었더니 라이트에서 로그가 안 읽혔다.</summary>
+    /// <summary>ANSI 16색은 팔레트에 있어야 한다 — 코드에 두었더니 색을 고쳐도 화면이 안 따라왔다.</summary>
     [Fact]
-    public void BothPalettes_DefineAllAnsiColors()
+    public void Palette_DefinesAllAnsiColors()
     {
-        foreach (string name in new[] { "Palette.Dark.xaml", "Palette.Light.xaml" })
-        {
-            var keys = PaletteKeys(Path.Combine(ThemesDir, name));
-            for (int i = 0; i < 16; i++)
-                Assert.True(keys.Contains($"C.Ansi{i}"), $"{name}: C.Ansi{i} 누락");
-        }
+        var keys = PaletteKeys(Path.Combine(ThemesDir, "Palette.Dark.xaml"));
+        for (int i = 0; i < 16; i++)
+            Assert.True(keys.Contains($"C.Ansi{i}"), $"C.Ansi{i} 누락");
     }
 
     /// <summary>
-    /// 팔레트 <b>브러시</b> 참조는 XAML 에서 반드시 <c>{DynamicResource}</c> 여야 한다.
-    /// StaticResource 는 로드 시점 값이 박혀서, 실행 중 테마를 바꿔도 그 컨트롤은 옛 테마 색으로
-    /// 남는다(실측: 브러시 제자리 변경은 사전이 값을 다시 Freeze 해 한 번도 실행되지 않았고,
-    /// 그래서 StaticResource 로는 메뉴·상태바가 전환을 못 따라왔다).
-    /// 폰트·지오메트리·스타일 키는 테마와 무관하므로 StaticResource 가 맞다.
+    /// 팔레트 <b>브러시</b> 참조는 XAML 에서 <c>{DynamicResource}</c> 로 통일한다.
+    ///
+    /// 테마 전환이 없어진 뒤로는 StaticResource 여도 동작은 같다. 그럼에도 규칙을 유지하는 이유는
+    /// 두 가지다: (1) 두 방식이 섞이면 "여긴 왜 다르지" 가 반복되고, 어느 쪽이 맞는지 판단하려면
+    /// 매번 테마 이력을 알아야 한다. (2) 대비 조정처럼 팔레트 값을 실행 중에 바꿔 보는 작업에서
+    /// DynamicResource 쪽이 즉시 반영된다.
+    /// 폰트 크기·지오메트리·스타일 키는 값이 바뀔 일이 없으므로 StaticResource 가 맞다.
     /// </summary>
     [Fact]
     public void PaletteBrushReferences_UseDynamicResource()
@@ -162,24 +156,16 @@ public sealed class ConventionTests
     }
 
     /// <summary>
-    /// 라이트 테마의 ANSI 16색은 흰 배경에서 본문 최소 대비(4.5:1)를 넘겨야 한다.
-    /// 다크 값을 그대로 쓰던 시절 초록 2.16:1 · 노랑 1.70:1 · bright white 1.00:1 로
-    /// ESP-IDF 로그(I/W 가 가장 흔하다)를 읽을 수 없었다 — 이 회귀를 다시 들이지 않기 위한 잠금.
+    /// 강조 배경(선택 행·기본 버튼) 위의 글자색은 본문 최소 대비(4.5:1)를 넘겨야 한다.
+    /// 예전에는 이 색이 <c>"White"</c> 리터럴로 7곳에 흩어져 있어서 팔레트 검사 밖에 있었고,
+    /// AccentDeep 을 밝게 조정하면 조용히 무너질 수 있었다 — 토큰(C.OnAccent)으로 끌어와 잠근다.
     /// </summary>
     [Fact]
-    public void LightPalette_AnsiColors_AreReadableOnTerminalBackground()
+    public void OnAccentText_IsReadableOnAccentBackground()
     {
-        string file = Path.Combine(ThemesDir, "Palette.Light.xaml");
-        var bg = PaletteColor(file, "C.TermBg");
-
-        var weak = new List<string>();
-        for (int i = 0; i < 16; i++)
-        {
-            double r = Contrast(PaletteColor(file, $"C.Ansi{i}"), bg);
-            if (r < 4.5) weak.Add($"C.Ansi{i} {r:F2}:1");
-        }
-
-        Assert.True(weak.Count == 0, $"라이트 배경 대비 미달: {string.Join(", ", weak)}");
+        string file = Path.Combine(ThemesDir, "Palette.Dark.xaml");
+        double r = Contrast(PaletteColor(file, "C.OnAccent"), PaletteColor(file, "C.AccentDeep"));
+        Assert.True(r >= 4.5, $"선택 행 글자 대비 {r:F2}:1 — 4.5:1 이상이어야 합니다");
     }
 
     /// <summary>
@@ -251,6 +237,107 @@ public sealed class ConventionTests
 
         Assert.True(offenders.Count == 0,
             "Theme.Brush(key) 로 바꾸세요:\n  " + string.Join("\n  ", offenders));
+    }
+
+    // ── 디자인 토큰(타이포·색) ───────────────────────────────────────────────
+
+    /// <summary>테마 사전을 뺀 '화면' XAML(다이얼로그·셸·문서 뷰).</summary>
+    private static List<string> ScreenXaml() =>
+        SourceFiles(".xaml")
+            .Where(p => !Path.GetDirectoryName(p)!.EndsWith("Themes", StringComparison.Ordinal))
+            .ToList();
+
+    /// <summary>
+    /// 화면 XAML 에 <c>FontSize</c> 숫자를 직접 쓰지 않는다 — <c>{StaticResource Font.*}</c> 만.
+    ///
+    /// 이 규칙이 없던 동안 화면마다 10 / 10.5 / 11 / 11.5 / 12 / 12.5 / 13 이 즉석에서 정해져
+    /// 57곳에 박혔다. 0.5px 차이는 한 화면만 보면 아무도 못 잡고, 새 화면마다 값이 하나씩
+    /// 더 늘어난다 — "프로그램이 점점 이상해진다" 의 실체가 이것이다.
+    /// </summary>
+    [Fact]
+    public void ScreenXaml_HasNoFontSizeLiterals()
+    {
+        var offenders = new List<string>();
+        foreach (string file in ScreenXaml())
+        {
+            string text = File.ReadAllText(file);
+            foreach (Match m in Regex.Matches(text, @"FontSize=""[0-9]"))
+            {
+                int line = text.Take(m.Index).Count(c => c == '\n') + 1;
+                offenders.Add($"{Rel(file)}:{line}");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "FontSize 는 Controls.xaml 의 Font.* 토큰을 쓰세요:\n  " + string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
+    /// 이름 있는 색(<c>White</c>, <c>Black</c> …)도 색 리터럴이다. <c>#RRGGBB</c> 검사는 이미
+    /// 있었지만 이름 색은 그물을 빠져나가, 선택 행 글자색 <c>"White"</c> 가 7곳에 복붙돼 있었다.
+    /// (<c>Transparent</c> 는 색이 아니라 '칠하지 않음'/히트테스트 용도라 예외.)
+    /// </summary>
+    [Fact]
+    public void Xaml_HasNoNamedColorLiterals()
+    {
+        string[] named = { "White", "Black", "Gray", "Red", "Green", "Blue", "Yellow", "Orange", "Magenta" };
+        var offenders = new List<string>();
+
+        foreach (string file in SourceFiles(".xaml"))
+        {
+            string text = File.ReadAllText(file);
+            foreach (Match m in Regex.Matches(text,
+                @"(?:Background|Foreground|BorderBrush|Fill|Stroke|Color)=""([A-Za-z]+)""|<Setter\s+Property=""(?:Background|Foreground|BorderBrush|Fill|Stroke)""\s+Value=""([A-Za-z]+)"""))
+            {
+                string v = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
+                if (!named.Contains(v, StringComparer.Ordinal)) continue;
+                int line = text.Take(m.Index).Count(c => c == '\n') + 1;
+                offenders.Add($"{Rel(file)}:{line} {v}");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "이름 있는 색도 팔레트 키로 옮기세요:\n  " + string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
+    /// XAML 이 참조하는 리소스 키는 전부 어딘가에 정의돼 있어야 한다.
+    ///
+    /// <b>왜 이 검사가 필요한가</b>: 리소스 키 오타는 컴파일이 아니라 <b>창을 여는 순간</b>
+    /// 예외로 터진다. 빌드와 단위 테스트를 다 통과하고도 사용자가 그 다이얼로그를 열었을 때
+    /// 처음 드러나는 종류의 결함이라, 정적으로 잡아 두지 않으면 잡을 방법이 사실상 없다.
+    /// (토큰·스타일 이름을 바꾸는 리팩터링에서 특히 쉽게 난다.)
+    ///
+    /// 한계: 정의 측을 모든 XAML 에서 모으므로 <b>다른 창의 Window.Resources 키</b>를 참조해도
+    /// 통과한다(그건 런타임에 실패한다). 오타·이름 변경 누락을 잡는 것이 이 검사의 목적이다.
+    /// </summary>
+    [Fact]
+    public void EveryXamlResourceReference_IsDefined()
+    {
+        // 정의 측: 모든 XAML 의 x:Key (테마 사전 + 각 화면의 Window.Resources)
+        var defined = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string file in SourceFiles(".xaml"))
+            foreach (Match m in Regex.Matches(File.ReadAllText(file), @"x:Key=""([^""]+)"""))
+                defined.Add(m.Groups[1].Value);
+
+        var missing = new List<string>();
+        int seen = 0;
+        foreach (string file in SourceFiles(".xaml"))
+        {
+            string text = File.ReadAllText(file);
+            foreach (Match m in Regex.Matches(text, @"\{(?:Static|Dynamic)Resource\s+([A-Za-z0-9_.]+)\}"))
+            {
+                seen++;
+                if (defined.Contains(m.Groups[1].Value)) continue;
+                int line = text.Take(m.Index).Count(c => c == '\n') + 1;
+                missing.Add($"{Rel(file)}:{line} {m.Groups[1].Value}");
+            }
+        }
+
+        // 정규식이 아무것도 못 잡으면 이 테스트는 조용히 무의미해진다(빈 통과 방지).
+        Assert.True(seen > 200, $"리소스 참조를 {seen}건밖에 못 찾았습니다 — 정규식을 확인하세요");
+        Assert.True(missing.Count == 0,
+            "정의되지 않은 리소스 키(창을 열 때 예외로 터진다):\n  " + string.Join("\n  ", missing));
     }
 
     // ── Loc 키 ──────────────────────────────────────────────────────────────
@@ -395,7 +482,6 @@ public sealed class ConventionTests
     /// <summary>정적 이벤트 구독은 짝이 맞아야 한다(해지가 없으면 창/뷰가 영구히 살아남는다).</summary>
     [Theory]
     [InlineData("Loc.Changed")]
-    [InlineData("Theme.Changed")]
     public void StaticEventSubscriptions_ArePaired(string evt)
     {
         var unpaired = new List<string>();

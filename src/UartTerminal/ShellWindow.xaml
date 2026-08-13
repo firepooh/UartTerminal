@@ -21,14 +21,14 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="cb" Background="Transparent" CornerRadius="4">
-                            <TextBlock Text="&#x2715;" FontSize="10"
+                            <TextBlock Text="&#x2715;" FontSize="{StaticResource Font.Glyph}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{TemplateBinding Foreground}"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="cb" Property="Background" Value="{DynamicResource Red}"/>
-                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -147,10 +147,6 @@
                 <Separator/>
                 <MenuItem x:Name="MenuTimestamps" Header="{loc:Str Menu.Timestamps}" IsCheckable="True" Click="Timestamps_Click"/>
                 <Separator/>
-                <MenuItem Header="{loc:Str Menu.Theme}">
-                    <MenuItem x:Name="MenuThemeDark" Header="{loc:Str Menu.Theme.Dark}" IsCheckable="True" Click="Theme_Click" Tag="Dark"/>
-                    <MenuItem x:Name="MenuThemeLight" Header="{loc:Str Menu.Theme.Light}" IsCheckable="True" Click="Theme_Click" Tag="Light"/>
-                </MenuItem>
                 <MenuItem Header="{loc:Str Menu.Language}">
                     <MenuItem x:Name="MenuLangKo" Header="{loc:Str Menu.Language.Korean}" IsCheckable="True" Click="Language_Click" Tag="Korean"/>
                     <MenuItem x:Name="MenuLangEn" Header="{loc:Str Menu.Language.English}" IsCheckable="True" Click="Language_Click" Tag="English"/>

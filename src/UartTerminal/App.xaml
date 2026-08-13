@@ -5,8 +5,8 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- 팔레트(색)를 먼저, 스타일을 나중에 — 스타일이 브러시 키를 StaticResource 로 찾는다.
-                     테마 전환은 Theme.Apply() 가 이 팔레트 사전의 값을 덮어쓰는 방식이다(사전 교체 아님). -->
+                <!-- 팔레트(색·타이포 토큰)를 먼저, 스타일을 나중에 — 스타일이 그 키들을 찾는다.
+                     팔레트는 다크 하나뿐이다(테마 전환 없음). -->
                 <ResourceDictionary Source="Themes/Palette.Dark.xaml"/>
                 <ResourceDictionary Source="Themes/Controls.xaml"/>
             </ResourceDictionary.MergedDictionaries>

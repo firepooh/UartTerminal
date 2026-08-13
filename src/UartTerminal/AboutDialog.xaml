@@ -22,19 +22,19 @@
                VerticalAlignment="Top" Margin="0,2,18,0" RenderOptions.BitmapScalingMode="HighQuality"/>
 
         <StackPanel Grid.Column="1">
-            <TextBlock Text="UartTerminal" FontSize="21" FontWeight="Bold"
+            <TextBlock Text="UartTerminal" FontSize="{StaticResource Font.Title}" FontWeight="Bold"
                        Foreground="{DynamicResource Text}"/>
             <TextBlock x:Name="VersionText" Margin="0,3,0,0"
-                       FontFamily="{StaticResource MonoFont}" FontSize="12.5"
+                       FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource Font.Body}"
                        Foreground="{DynamicResource TextMuted}"/>
 
-            <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12.5" LineHeight="18"
+            <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" FontSize="{StaticResource Font.Body}" LineHeight="18"
                        Foreground="{DynamicResource TextDim}"
                        Text="{loc:Str About.Summary}"/>
 
-            <TextBlock x:Name="RuntimeText" Margin="0,12,0,0" FontSize="11.5"
+            <TextBlock x:Name="RuntimeText" Margin="0,12,0,0" FontSize="{StaticResource Font.Caption}"
                        Foreground="{DynamicResource TextFaint}"/>
-            <TextBlock Margin="0,3,0,0" FontSize="11.5">
+            <TextBlock Margin="0,3,0,0" FontSize="{StaticResource Font.Caption}">
                 <Hyperlink x:Name="RepoLink" Click="Repo_Click"
                            Foreground="{DynamicResource Blue}" TextDecorations="{x:Null}">github.com/firepooh/UartTerminal</Hyperlink>
             </TextBlock>
