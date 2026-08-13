@@ -1,0 +1,64 @@
+<Window x:Class="UartTerminal.LogDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:UartTerminal"
+        Title="{loc:Str Log.Title}"
+        Icon="/UartTerminal.ico"
+        Width="520" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{DynamicResource Bg}"
+        Foreground="{DynamicResource Text}"
+        FontFamily="{StaticResource UiFont}">
+    <StackPanel Margin="16">
+
+        <!-- 파일 경로 + 찾아보기 -->
+        <TextBlock Text="{loc:Str Log.Filename}" FontSize="12"
+                   Foreground="{DynamicResource TextFaint}" Margin="2,0,0,6"/>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="PathBox" Grid.Column="0" Style="{StaticResource CommandInput}"
+                     MinHeight="30" Padding="10,0" VerticalContentAlignment="Center"/>
+            <Button Grid.Column="1" Content="…" Style="{StaticResource DialogButton}"
+                    MinWidth="38" MinHeight="30" Margin="8,0,0,0" Click="Browse_Click"/>
+        </Grid>
+
+        <!-- 쓰기 모드: 속도 선택과 같은 세그먼트(칩) 스타일 -->
+        <TextBlock Text="{loc:Str Log.WriteMode}" FontSize="12"
+                   Foreground="{DynamicResource TextFaint}" Margin="2,14,0,6"/>
+        <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="ModeNew" Content="{loc:Str Log.WriteNew}"
+                         Style="{StaticResource BaudChip}" GroupName="WriteMode"/>
+            <RadioButton x:Name="ModeAppend" Content="{loc:Str Log.WriteAppend}"
+                         Style="{StaticResource BaudChip}" GroupName="WriteMode"/>
+        </StackPanel>
+
+        <!-- 기록 형식: '화면 그대로' 가 기본. 원시는 ANSI 이스케이프가 그대로 남아 사람이 읽기 어렵다 -->
+        <TextBlock Text="{loc:Str Log.Format}" FontSize="12"
+                   Foreground="{DynamicResource TextFaint}" Margin="2,14,0,6"/>
+        <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="FormatScreen" Content="{loc:Str Log.FormatScreen}"
+                         Style="{StaticResource BaudChip}" GroupName="Format"
+                         ToolTip="{loc:Str Log.FormatScreenTip}"/>
+            <RadioButton x:Name="FormatRaw" Content="{loc:Str Log.FormatRaw}"
+                         Style="{StaticResource BaudChip}" GroupName="Format"
+                         ToolTip="{loc:Str Log.FormatRawTip}"/>
+        </StackPanel>
+
+        <!-- 옵션 -->
+        <CheckBox x:Name="TimestampCheck" Content="{loc:Str Log.Timestamp}"
+                  Style="{StaticResource DarkCheckBox}" Margin="2,16,0,0"/>
+        <CheckBox x:Name="IncludeBufferCheck" Content="{loc:Str Log.IncludeBuffer}"
+                  Style="{StaticResource DarkCheckBox}" Margin="2,10,0,0"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="{loc:Str Common.Ok}" Style="{StaticResource SendButton}"
+                    MinWidth="86" MinHeight="30" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
+            <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource DialogButton}" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -33,6 +33,13 @@ public partial class PortSelectDialog : Window
     private ReceiveNewline? _sessionNewlineRx;
     private TransmitNewline? _sessionNewlineTx;
 
+    /// <summary>세션이 '열 때 MCP 켜기'를 지정했는지. 명령 그룹과 같이 세션에서만 오는 값이라 폼에 컨트롤을 두지 않는다.</summary>
+    private bool _sessionMcpOnOpen;
+
+    /// <summary>세션 이름과 로그 폴더(로그 파일 기본 이름·저장 위치에 쓰인다).</summary>
+    private string? _sessionName;
+    private string? _sessionLogFolder;
+
     public PortInfo? SelectedPort { get; private set; }
 
     /// <summary>사용자가 고른 통신 속도. 취소 시 의미 없음.</summary>
@@ -50,6 +57,18 @@ public partial class PortSelectDialog : Window
     /// </summary>
     public ReceiveNewline? SelectedNewlineRx { get; private set; }
     public TransmitNewline? SelectedNewlineTx { get; private set; }
+
+    /// <summary>
+    /// 세션으로 접속한 경우 그 세션이 지정한 '열 때 MCP 서버 켜기'. 세션을 쓰지 않으면 항상 false —
+    /// MCP 는 켜는 순간 이름 있는 파이프가 열리므로 <b>명시적으로 저장한 세션</b>으로만 자동 활성화한다.
+    /// </summary>
+    public bool SelectedMcpOnOpen { get; private set; }
+
+    /// <summary>세션으로 접속한 경우 그 세션의 이름(로그 파일 이름의 첫 칸). 아니면 null.</summary>
+    public string? SelectedSessionName { get; private set; }
+
+    /// <summary>세션으로 접속한 경우 그 세션의 로그 폴더(로깅 다이얼로그가 미리 채운다). 아니면 null.</summary>
+    public string? SelectedLogFolder { get; private set; }
 
     public PortSelectDialog(string? preselectPort = null, int preselectBaud = DefaultBaud,
                             SessionStore? sessions = null, bool preselectResetOnOpen = false)
@@ -85,6 +104,9 @@ public partial class PortSelectDialog : Window
         _sessionCommandGroup = s.CommandGroup; // 접속 후 칩 바를 이 그룹으로 자동 전환
         _sessionNewlineRx = s.NewlineRx;       // 세션에 값이 있으면 접속 시 그 개행 규약으로 전환
         _sessionNewlineTx = s.NewlineTx;
+        _sessionMcpOnOpen = s.McpOnOpen;        // 접속 후 이 탭의 MCP 서버를 자동으로 켠다
+        _sessionName = s.Name;
+        _sessionLogFolder = s.LogFolder;
         SetBaud(s.Baud);
         ResetOnOpenCheck.IsChecked = s.ResetOnOpen; // 보드마다 다른 값 — 세션이 폼을 채운다
 
@@ -223,6 +245,9 @@ public partial class PortSelectDialog : Window
         SelectedCommandGroup = viaSession ? _sessionCommandGroup : null;
         SelectedNewlineRx = viaSession ? _sessionNewlineRx : null;
         SelectedNewlineTx = viaSession ? _sessionNewlineTx : null;
+        SelectedMcpOnOpen = viaSession && _sessionMcpOnOpen;
+        SelectedSessionName = viaSession ? _sessionName : null;
+        SelectedLogFolder = viaSession ? _sessionLogFolder : null;
         DialogResult = true;
     }
 }

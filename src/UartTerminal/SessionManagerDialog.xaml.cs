@@ -26,6 +26,8 @@ public partial class SessionManagerDialog : Window
         private int _baud = 115200;
         private string? _group;
         private bool _resetOnOpen;
+        private bool _mcpOnOpen;
+        private string? _logFolder;
         private ReceiveNewline? _nlRx;
         private TransmitNewline? _nlTx;
 
@@ -34,6 +36,10 @@ public partial class SessionManagerDialog : Window
         public int Baud { get => _baud; set { _baud = value; Raise(); } }
         public string? Group { get => _group; set { _group = value; Raise(); } }
         public bool ResetOnOpen { get => _resetOnOpen; set { _resetOnOpen = value; Raise(); } }
+        public bool McpOnOpen { get => _mcpOnOpen; set { _mcpOnOpen = value; Raise(); } }
+
+        /// <summary>로그 저장 폴더(파일명이 아니다). 비면 마지막에 쓴 폴더를 따라간다.</summary>
+        public string? LogFolder { get => _logFolder; set { _logFolder = value; Raise(); } }
 
         /// <summary>null = 지정 없음(접속 시 현재 값 유지).</summary>
         public ReceiveNewline? NewlineRx { get => _nlRx; set { _nlRx = value; Raise(); } }
@@ -48,10 +54,22 @@ public partial class SessionManagerDialog : Window
             ? (Brush)Application.Current.Resources["TextFaint"]
             : (Brush)Application.Current.Resources["TextDim"];
 
-        /// <summary>켜짐만 눈에 띄게 — 꺼짐은 흐린 "—" 로 둬서 표가 시끄러워지지 않게.</summary>
-        public string ResetDisplay => _resetOnOpen ? Loc.S("Sess.Reset") : "—";
+        /// <summary>
+        /// 열 때 하는 일을 한 칸에 모은다("리셋 · MCP"). 켜짐만 눈에 띄게 — 아무것도 없으면
+        /// 흐린 "—" 로 둬서 표가 시끄러워지지 않게(항목마다 열을 늘리면 이름 열이 먼저 잘린다).
+        /// </summary>
+        public string OnOpenDisplay
+        {
+            get
+            {
+                var on = new List<string>(2);
+                if (_resetOnOpen) on.Add(Loc.S("Sess.Reset"));
+                if (_mcpOnOpen) on.Add(Loc.S("Sess.Mcp"));
+                return on.Count == 0 ? Loc.S("Sess.OnOpenNone") : string.Join(" · ", on);
+            }
+        }
 
-        public Brush ResetBrush => _resetOnOpen
+        public Brush OnOpenBrush => _resetOnOpen || _mcpOnOpen
             ? (Brush)Application.Current.Resources["Amber"]
             : (Brush)Application.Current.Resources["TextFaint"];
 
@@ -70,8 +88,8 @@ public partial class SessionManagerDialog : Window
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GroupDisplay)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GroupBrush)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResetDisplay)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResetBrush)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OnOpenDisplay)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OnOpenBrush)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NewlineDisplay)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NewlineBrush)));
         }
@@ -121,8 +139,8 @@ public partial class SessionManagerDialog : Window
             _rows.Add(new Row
             {
                 Name = s.Name, Port = s.Port, Baud = s.Baud,
-                ResetOnOpen = s.ResetOnOpen, Group = s.CommandGroup,
-                NewlineRx = s.NewlineRx, NewlineTx = s.NewlineTx,
+                ResetOnOpen = s.ResetOnOpen, McpOnOpen = s.McpOnOpen, Group = s.CommandGroup,
+                NewlineRx = s.NewlineRx, NewlineTx = s.NewlineTx, LogFolder = s.LogFolder,
             });
 
         SessionList.ItemsSource = _rows;
@@ -181,6 +199,8 @@ public partial class SessionManagerDialog : Window
             BaudBox.SelectedItem = row is null ? null : (object)row.Baud;
             GroupBox.SelectedItem = row is null ? null : (string.IsNullOrEmpty(row.Group) ? NoGroup : row.Group!);
             ResetCheck.IsChecked = row?.ResetOnOpen ?? false;
+            McpCheck.IsChecked = row?.McpOnOpen ?? false;
+            LogFolderBox.Text = row?.LogFolder ?? "";
             RxBox.SelectedItem = RxItems.First(i => i.Value == row?.NewlineRx).Text;
             TxBox.SelectedItem = TxItems.First(i => i.Value == row?.NewlineTx).Text;
         }
@@ -210,6 +230,35 @@ public partial class SessionManagerDialog : Window
         if (_syncing || SessionList.SelectedItem is not Row row) return;
         row.ResetOnOpen = ResetCheck.IsChecked == true;
     }
+
+    private void McpCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_syncing || SessionList.SelectedItem is not Row row) return;
+        row.McpOnOpen = McpCheck.IsChecked == true;
+    }
+
+    private void LogFolderBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_syncing || SessionList.SelectedItem is not Row row) return;
+        string t = LogFolderBox.Text.Trim();
+        row.LogFolder = t.Length == 0 ? null : t;
+    }
+
+    private void LogFolderBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = Loc.S("Sess.PickLogFolder") };
+        try
+        {
+            string cur = LogFolderBox.Text.Trim();
+            if (cur.Length > 0 && Directory.Exists(cur)) dlg.InitialDirectory = cur;
+        }
+        catch { /* 손편집된 경로여도 선택창은 열려야 한다 */ }
+
+        if (dlg.ShowDialog(this) == true) LogFolderBox.Text = dlg.FolderName;
+    }
+
+    /// <summary>비우면 '지정 없음' — 로깅 시작 때 마지막에 쓴 폴더를 따라간다.</summary>
+    private void LogFolderClear_Click(object sender, RoutedEventArgs e) => LogFolderBox.Clear();
 
     private void RxBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -261,6 +310,8 @@ public partial class SessionManagerDialog : Window
             Port = r.Port,
             Baud = r.Baud,
             ResetOnOpen = r.ResetOnOpen,
+            McpOnOpen = r.McpOnOpen,
+            LogFolder = r.LogFolder,
             NewlineRx = r.NewlineRx,
             NewlineTx = r.NewlineTx,
             CommandGroup = r.Group,

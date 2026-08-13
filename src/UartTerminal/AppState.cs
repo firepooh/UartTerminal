@@ -30,6 +30,29 @@ public sealed class AppState
     /// <summary>라인별 수신 타임스탬프 표시. 모든 창/탭 공통 전역 설정, 기본 꺼짐.</summary>
     public bool ShowTimestamps { get; set; }
 
+    // ── 연속 로깅 다이얼로그의 기본값(마지막으로 고른 값) ──────────────────────
+
+    /// <summary>
+    /// 로그 파일에 줄마다 수신 시각(<c>[HH:mm:ss.fff]</c>)을 기록할지. 기본 꺼짐 —
+    /// 끄면 파일이 수신 바이트 그대로라(diff/재현용) 원본성이 유지된다. 로깅 시작 시점 값으로 고정된다.
+    /// </summary>
+    public bool LogTimestamps { get; set; }
+
+    /// <summary>true = 기존 파일 끝에 이어 쓰기. 기본은 새로 쓰기(실행마다 새 파일이 예측 가능).</summary>
+    public bool LogAppend { get; set; }
+
+    /// <summary>로깅 시작 시 현재 화면 버퍼(스크롤백)를 먼저 기록할지. 기본 꺼짐.</summary>
+    public bool LogIncludeBuffer { get; set; }
+
+    /// <summary>
+    /// true = 수신 바이트 그대로 기록. 기본 false = <b>화면 그대로</b> —
+    /// 원시 기록은 ANSI 이스케이프·NUL 이 그대로 남아 사람이 읽을 수 없다(실사용에서 확인).
+    /// </summary>
+    public bool LogRaw { get; set; }
+
+    /// <summary>마지막 로그 파일 경로 — 이어 쓰기 워크플로에서 같은 파일을 바로 다시 고르게.</summary>
+    public string? LastLogFile { get; set; }
+
     /// <summary>
     /// 포트를 열 때 EN 펄스로 보드를 리셋할지(ESP32 devkit 의 DTR/RTS 자동 리셋 회로 이용). 기본 꺼짐.
     /// 켜면 연결/재연결마다 보드가 재부팅되어 부팅 로그를 처음부터 볼 수 있다.

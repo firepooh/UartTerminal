@@ -8,8 +8,8 @@
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
         ShowInTaskbar="True"
-        Background="{StaticResource Bg}"
-        Foreground="{StaticResource Text}"
+        Background="{DynamicResource Bg}"
+        Foreground="{DynamicResource Text}"
         FontFamily="{StaticResource UiFont}">
     <Grid Margin="14">
         <Grid.RowDefinitions>
@@ -33,7 +33,7 @@
                         Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="24" Padding="10,0"
                         IsEnabled="False" Click="DeleteSession_Click"/>
                 <TextBlock Text="{loc:Str Port.Sessions}" FontSize="13"
-                           VerticalAlignment="Center" Foreground="{StaticResource Text}"/>
+                           VerticalAlignment="Center" Foreground="{DynamicResource Text}"/>
             </DockPanel>
             <ListBox x:Name="SessionList" Grid.Row="1" Height="126"
                      SelectionChanged="SessionList_SelectionChanged"
@@ -42,11 +42,11 @@
         </Grid>
 
         <TextBlock Grid.Row="1" Margin="2,0,0,6" FontSize="13"
-                   Foreground="{StaticResource Text}"
+                   Foreground="{DynamicResource Text}"
                    Text="{loc:Str Port.Detected}"/>
 
         <TextBlock Grid.Row="2" Margin="2,0,0,6" FontSize="11"
-                   Foreground="{StaticResource TextFaint}"
+                   Foreground="{DynamicResource TextFaint}"
                    Text="{loc:Str Port.Hint}"/>
 
         <ListBox x:Name="PortList" Grid.Row="3"
@@ -57,12 +57,12 @@
         <!-- 통신 속도(README §2): ESP-IDF 기본 115200 외에 부트로더 진단(74880)·고속 로그(921600)가 실수요 -->
         <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="2,12,0,0" VerticalAlignment="Center">
             <TextBlock Text="{loc:Str Common.Baud}" VerticalAlignment="Center" Margin="0,0,10,0"
-                       Foreground="{StaticResource TextDim}" FontSize="12"/>
+                       Foreground="{DynamicResource TextDim}" FontSize="12"/>
             <Border Style="{StaticResource SplitToolbar}">
                 <StackPanel x:Name="BaudHost" Orientation="Horizontal"/>
             </Border>
             <TextBlock Text="bps" VerticalAlignment="Center" Margin="10,0,0,0"
-                       Foreground="{StaticResource TextFaint}" FontSize="11.5"/>
+                       Foreground="{DynamicResource TextFaint}" FontSize="11.5"/>
         </StackPanel>
 
         <StackPanel Grid.Row="5" Margin="2,10,0,12">
@@ -70,7 +70,7 @@
             <CheckBox x:Name="ResetOnOpenCheck" Style="{StaticResource DarkCheckBox}"
                       Content="{loc:Str Port.ResetOnOpen}"
                       Margin="0,0,0,8"/>
-            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextFaint}" FontSize="11.5"
+            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFaint}" FontSize="11.5"
                        Text="{loc:Str Port.Fixed}"/>
         </StackPanel>
 

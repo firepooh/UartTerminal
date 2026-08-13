@@ -205,4 +205,92 @@ public sealed class SessionStoreTests : IDisposable
     {
         Assert.Equal("모터보드 — COM24 · 921600", P("모터보드", "COM24", 921600).Display);
     }
+
+    /// <summary>
+    /// '열 때 MCP 켜기'는 세션에 저장돼야 한다 — MCP 는 포트마다 파이프가 달라 탭 단위로만 켤 수 있고,
+    /// 그래서 "이 보드로 접속하면 늘 켠다" 를 표현할 자리가 세션밖에 없다.
+    /// </summary>
+    [Fact]
+    public void RoundTrip_PreservesMcpOnOpen()
+    {
+        var a = NewStore();
+        a.Load();
+        Assert.True(a.ReplaceAll(new[]
+        {
+            P("보드", "COM4") with { McpOnOpen = true },
+            P("센서", "COM7"),
+        }));
+
+        var b = NewStore();
+        b.Load();
+        Assert.True(b.Items[0].McpOnOpen);
+        Assert.False(b.Items[1].McpOnOpen);
+
+        // 기본값(false)은 파일에 쓰지 않는다 — 안 쓰는 사람의 sessions.json 이 조용히 유지되게
+        string json = File.ReadAllText(_path);
+        Assert.Equal(1, json.Split("\"mcpOnOpen\"").Length - 1);
+    }
+
+    /// <summary>구버전(필드 없음)/손편집 파일은 '꺼짐'으로 읽혀야 한다 — 모르는 사이에 파이프가 열리면 안 된다.</summary>
+    [Fact]
+    public void Load_MissingMcpOnOpen_DefaultsToOff()
+    {
+        File.WriteAllText(_path,
+            """{"schemaVersion":1,"sessions":[{"name":"보드","port":"COM4","baud":115200}]}""");
+
+        var s = NewStore();
+        s.Load();
+        Assert.Single(s.Items);
+        Assert.False(s.Items[0].McpOnOpen);
+    }
+
+    /// <summary>
+    /// 로그 폴더도 세션에 저장된다. 전역 '마지막 파일' 하나만 기억하면 포트를 두 개 열었을 때
+    /// 두 번째 탭이 첫 탭과 같은 파일을 제안받는다 — 보드별 폴더는 세션에만 둘 수 있다.
+    /// </summary>
+    [Fact]
+    public void RoundTrip_PreservesLogFolder()
+    {
+        var a = NewStore();
+        a.Load();
+        Assert.True(a.ReplaceAll(new[]
+        {
+            P("보드", "COM4") with { LogFolder = @"D:\logs\boardA" },
+            P("센서", "COM7"),
+        }));
+
+        var b = NewStore();
+        b.Load();
+        Assert.Equal(@"D:\logs\boardA", b.Items[0].LogFolder);
+        Assert.Null(b.Items[1].LogFolder);   // 미지정은 null(빈 문자열이 아니다)
+    }
+
+    /// <summary>존재하지 않는 폴더도 그대로 보존한다 — 네트워크/이동식 경로가 잠깐 없을 뿐일 수 있다.</summary>
+    [Fact]
+    public void LogFolder_MissingOnDisk_IsStillKept()
+    {
+        var s = NewStore();
+        s.Load();
+        s.AddOrReplace(P("보드", "COM4") with { LogFolder = @"Z:\not-mounted\logs" });
+        Assert.Equal(@"Z:\not-mounted\logs", s.Items[0].LogFolder);
+    }
+
+    /// <summary>말도 안 되게 긴 경로는 <b>자르지 않고 버린다</b> — 잘린 경로는 엉뚱한 폴더를 가리킨다.</summary>
+    [Fact]
+    public void LogFolder_TooLong_IsDroppedNotTruncated()
+    {
+        var s = NewStore();
+        s.Load();
+        s.AddOrReplace(P("보드", "COM4") with { LogFolder = @"D:\" + new string('x', SessionStore.MaxPathLength) });
+        Assert.Null(s.Items[0].LogFolder);
+    }
+
+    /// <summary>Display 는 켜진 항목만 덧붙인다(꺼진 상태는 기존 표기 그대로).</summary>
+    [Fact]
+    public void Display_ShowsMcpMarker_WhenOn()
+    {
+        var on = P("보드", "COM4") with { McpOnOpen = true };
+        Assert.Contains("MCP", on.Display);
+        Assert.DoesNotContain("MCP", P("보드", "COM4").Display);
+    }
 }

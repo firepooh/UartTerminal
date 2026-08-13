@@ -47,10 +47,29 @@ public sealed record SessionProfile
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CommandGroup { get; init; }
 
-    /// <summary>목록 표시용: "모터보드 — COM24 · 115200 · 리셋". 파생 값이므로 파일에 저장하지 않는다.</summary>
+    /// <summary>
+    /// 이 세션으로 접속할 때 MCP 서버(이름 있는 파이프)를 자동으로 켤지. 기본 false.
+    /// AI 도구를 늘 붙여 쓰는 보드와 그렇지 않은 보드가 갈리므로 세션에 함께 저장한다 —
+    /// 켜는 것은 <b>탭 단위</b>라(포트마다 파이프가 다르다) 전역 설정으로는 표현할 수 없다.
+    /// </summary>
+    [JsonPropertyName("mcpOnOpen")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool McpOnOpen { get; init; }
+
+    /// <summary>
+    /// 이 세션의 로그 저장 <b>폴더</b>(파일명이 아니다 — 이름은 열 때마다 규칙으로 새로 만든다).
+    /// 보드/프로젝트마다 로그를 모으는 자리가 다르고, 전역 '마지막 파일' 하나만 기억하면
+    /// 포트를 두 개 열었을 때 두 탭이 같은 파일을 제안받는다. 비면 마지막에 쓴 폴더를 쓴다.
+    /// </summary>
+    [JsonPropertyName("logFolder")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LogFolder { get; init; }
+
+    /// <summary>목록 표시용: "모터보드 — COM24 · 115200 · ⟳ · MCP". 파생 값이므로 파일에 저장하지 않는다.</summary>
     [JsonIgnore]
-    // 언어 중립 표기 — Core 는 문장을 만들지 않는다. ⟳ = 열 때 보드 리셋.
-    public string Display => ResetOnOpen ? $"{Name} — {Port} · {Baud} · ⟳" : $"{Name} — {Port} · {Baud}";
+    // 언어 중립 표기 — Core 는 문장을 만들지 않는다. ⟳ = 열 때 보드 리셋, MCP = 열 때 MCP 서버 켜기.
+    public string Display =>
+        $"{Name} — {Port} · {Baud}" + (ResetOnOpen ? " · ⟳" : "") + (McpOnOpen ? " · MCP" : "");
 
     /// <summary>UI 자동화/스크린리더가 읽는 이름(레코드 기본 ToString 은 타입/필드 덤프라 부적합).</summary>
     public override string ToString() => Display;
@@ -74,6 +93,9 @@ public sealed class SessionStore
     public const int SupportedSchemaVersion = 1;
     public const int MaxSessions = 50;
     public const int MaxNameLength = 40;
+
+    /// <summary>로그 폴더 경로 상한(윈도우 확장 경로까지 고려한 넉넉한 값).</summary>
+    public const int MaxPathLength = 500;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -201,6 +223,44 @@ public sealed class SessionStore
         return ReplaceAll(list);
     }
 
+    /// <summary>
+    /// 명령 그룹 이름이 바뀌었을 때 세션의 <see cref="SessionProfile.CommandGroup"/> 참조를 따라 갱신한다.
+    ///
+    /// 이 전파가 없으면 그룹 이름을 바꾸는 순간 세션이 <b>없는 그룹</b>을 가리키게 되고, 접속 시
+    /// 조용히 첫 그룹으로 떨어져 "탭마다 다른 명령 세트" 가 깨진다 — 실기에서 실제로 그 상태였고,
+    /// 사용자에게는 "탭마다 다른 그룹을 못 쓴다" 로 보였다.
+    /// </summary>
+    /// <param name="renames">옛 이름 → 새 이름. 대소문자 무시 비교를 쓰는 사전을 넘길 것.</param>
+    /// <param name="changed">참조가 바뀐 세션 수.</param>
+    /// <returns>저장까지 성공하면 true. 바뀔 것이 없으면 changed=0 · true.</returns>
+    public bool TryApplyGroupRenames(IReadOnlyDictionary<string, string> renames, out int changed)
+    {
+        changed = 0;
+        if (renames.Count == 0) return true;
+
+        var next = new List<SessionProfile>(_items.Count);
+        foreach (var s in _items)
+        {
+            if (s.CommandGroup is { Length: > 0 } g
+                && renames.TryGetValue(g, out string? to)
+                && !string.Equals(g, to, StringComparison.Ordinal))
+            {
+                next.Add(s with { CommandGroup = to });
+                changed++;
+            }
+            else
+            {
+                next.Add(s);
+            }
+        }
+
+        if (changed == 0) return true;
+        if (ReplaceAll(next)) return true;
+
+        changed = 0;   // 저장 실패 — 메모리 목록도 커밋되지 않았다(사유는 LastError)
+        return false;
+    }
+
     private bool SaveList(List<SessionProfile> items)
     {
         if (IsReadOnly)
@@ -254,6 +314,9 @@ public sealed class SessionStore
             string group = OneLine(s.CommandGroup);
             if (group.Length > MaxNameLength) group = group[..MaxNameLength];
 
+            string folder = OneLine(s.LogFolder);
+            if (folder.Length > MaxPathLength) folder = "";   // 잘린 경로는 엉뚱한 폴더를 가리킨다
+
             list.Add(new SessionProfile
             {
                 Name = name,
@@ -264,6 +327,10 @@ public sealed class SessionStore
                 NewlineRx = Enum.IsDefined(s.NewlineRx ?? (ReceiveNewline)(-1)) ? s.NewlineRx : null,
                 NewlineTx = Enum.IsDefined(s.NewlineTx ?? (TransmitNewline)(-1)) ? s.NewlineTx : null,
                 CommandGroup = group.Length > 0 ? group : null,
+                McpOnOpen = s.McpOnOpen,
+                // 존재 여부는 검사하지 않는다 — 이동식 드라이브·네트워크 경로가 잠깐 없다고
+                // 설정이 지워지면 안 된다(없으면 로깅 시작 시 만들거나 그때 알린다).
+                LogFolder = folder.Length > 0 ? folder : null,
             });
             if (list.Count >= MaxSessions) break;
         }

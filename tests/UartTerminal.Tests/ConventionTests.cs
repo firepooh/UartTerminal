@@ -92,6 +92,39 @@ public sealed class ConventionTests
         }
     }
 
+    /// <summary>
+    /// 팔레트 <b>브러시</b> 참조는 XAML 에서 반드시 <c>{DynamicResource}</c> 여야 한다.
+    /// StaticResource 는 로드 시점 값이 박혀서, 실행 중 테마를 바꿔도 그 컨트롤은 옛 테마 색으로
+    /// 남는다(실측: 브러시 제자리 변경은 사전이 값을 다시 Freeze 해 한 번도 실행되지 않았고,
+    /// 그래서 StaticResource 로는 메뉴·상태바가 전환을 못 따라왔다).
+    /// 폰트·지오메트리·스타일 키는 테마와 무관하므로 StaticResource 가 맞다.
+    /// </summary>
+    [Fact]
+    public void PaletteBrushReferences_UseDynamicResource()
+    {
+        var brushKeys = Regex.Matches(
+                File.ReadAllText(Path.Combine(ThemesDir, "Palette.Dark.xaml")),
+                @"<SolidColorBrush x:Key=""([^""]+)""")
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var offenders = new List<string>();
+        foreach (string file in SourceFiles(".xaml"))
+        {
+            if (Path.GetFileName(file).StartsWith("Palette.", StringComparison.Ordinal)) continue;
+            string text = File.ReadAllText(file);
+            foreach (Match m in Regex.Matches(text, @"\{StaticResource\s+([A-Za-z0-9_.]+)\}"))
+            {
+                if (!brushKeys.Contains(m.Groups[1].Value)) continue;
+                int line = text.Take(m.Index).Count(c => c == '\n') + 1;
+                offenders.Add($"{Rel(file)}:{line} {m.Groups[1].Value}");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "팔레트 브러시는 DynamicResource 로 참조하세요:\n  " + string.Join("\n  ", offenders));
+    }
+
     /// <summary>렌더러가 팔레트와 <b>같은 키 이름</b>으로 읽는지 확인(오타면 조용히 fallback 된다).</summary>
     [Fact]
     public void TerminalPalette_ReadsAnsiKeysFromTheme()

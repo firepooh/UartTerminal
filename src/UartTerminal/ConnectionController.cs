@@ -133,11 +133,27 @@ public sealed class ConnectionController
         return Open();
     }
 
+    /// <summary>
+    /// 수신 tee(연속 로깅용). 세션이 아니라 <b>컨트롤러</b>에 걸려 있어 자동/수동 재연결로
+    /// 세션이 바뀌어도 로깅이 이어진다. 예외는 격리 — 로깅 문제로 수신이 죽으면 안 된다.
+    /// </summary>
+    public Action<ReadOnlyMemory<byte>>? RxTee { get; set; }
+
+    /// <summary>
+    /// 수신 <b>처리 후</b> 훅(화면 그대로 로깅용). 엔진이 해석을 끝낸 뒤라야 완성된 논리 라인을
+    /// 읽을 수 있으므로 tee 와 시점이 다르다. 예외는 마찬가지로 격리한다.
+    /// </summary>
+    public Action? AfterReceive { get; set; }
+
     private void Receive(ReadOnlyMemory<byte> data)
     {
         if (DiagLog.Capture) DiagLog.Trace($"RX[{data.Length}] {DiagLog.Escape(data.Span)}");
+        try { RxTee?.Invoke(data); }
+        catch (Exception ex) { DiagLog.Exception("RxTee", ex); }
         try { _engine.Receive(data.Span); }
         catch (Exception ex) { DiagLog.Exception("Receive", ex); }
+        try { AfterReceive?.Invoke(); }
+        catch (Exception ex) { DiagLog.Exception("AfterReceive", ex); }
     }
 
     /// <summary>오픈 실패 세션 정리. Closed/DataReceived 구독을 먼저 끊어 Dispose 시 오발화를 막는다.</summary>

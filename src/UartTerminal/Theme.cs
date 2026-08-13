@@ -64,23 +64,19 @@ public static class Theme
     public static event Action? Changed;
 
     /// <summary>
-    /// 테마를 바꾼다. 사전을 교체하지 않고 <b>팔레트 값만 덮어쓴다</b>.
+    /// 테마를 바꾼다: 팔레트 사전의 <b>값을 대상 테마 값으로 교체</b>한다.
     ///
-    /// <b>측정으로 확인한 한계(2026-08-04)</b> — 아래 '브러시 인스턴스의 Color 만 바꾼다' 경로는
-    /// <b>실제로 한 번도 실행되지 않는다</b>. WPF 는 BAML 로 읽은 ResourceDictionary 의
-    /// <see cref="System.Windows.Freezable"/> 값을 자동으로 Freeze 하고, <b>사전에 새로 넣는 값도
-    /// 즉시 다시 Freeze 한다</b>(38개 전부 확인 — 변경 가능한 복제본으로 갈아 끼워도 되읽으면 frozen).
-    /// 그래서 항상 아래쪽 <c>live[key] = next</c> (사전 값 교체)로 흐르고, 진단 로그에
-    /// "브러시가 frozen 이라…" 경고 38줄이 매번 남는다.
+    /// 이 값 교체가 화면에 반영되는 경로는 둘이다.
+    ///  · XAML 은 팔레트 브러시를 전부 <c>{DynamicResource}</c> 로 참조한다 — 사전 값이 바뀌면
+    ///    WPF 가 참조 지점을 다시 평가한다.
+    ///  · 코드는 <see cref="Brush"/>·<see cref="Color"/> 로 쓰는 순간 조회한다(터미널 렌더러 포함).
     ///
-    /// 그 결과 실행 중 테마 전환이 <b>어디에 먹고 어디에 안 먹는지가 갈린다</b>:
-    ///  · 쓰는 순간 조회하는 코드(<see cref="Brush"/>·<see cref="Color"/>·<see cref="ColorOr"/>,
-    ///    터미널 렌더러)는 새 값을 읽으므로 <b>따라온다</b>.
-    ///  · XAML 의 <c>{StaticResource}</c> 는 로드 시점에 값이 박히므로 <b>따라오지 않는다</b>
-    ///    (스타일 setter 값도 마찬가지).
-    ///
-    /// 제대로 고치려면 브러시 참조를 <c>{DynamicResource}</c> 로 바꿔야 한다(앱 XAML 200여 곳,
-    /// 기계적 치환). 사전 값 교체는 DynamicResource 에는 정상적으로 전파된다.
+    /// <b>왜 이 방식인가(시행착오 기록)</b>: 처음엔 '브러시 인스턴스를 유지하고 Color 만 제자리 변경 +
+    /// StaticResource' 로 설계했는데, 측정해 보니 그 경로는 <b>한 번도 실행된 적이 없다</b> —
+    /// WPF 는 BAML 로 읽은 사전의 Freezable 을 자동 Freeze 하고, 사전에 새로 넣는 값도 즉시 다시
+    /// Freeze 한다(38/38 확인). 그래서 항상 값 교체로 흘렀고, StaticResource 는 로드 시점 값이
+    /// 박혀서 실행 중 전환이 메뉴·상태바 등엔 먹지 않았다. DynamicResource 전환으로 해결.
+    /// (사전을 통째로 교체하는 방식은 이미 렌더된 컨트롤에 반영되지 않는 것을 확인했다 — 값 교체여야 한다.)
     /// </summary>
     public static void Apply(AppTheme theme)
     {
@@ -98,27 +94,16 @@ public static class Theme
         if (target is null) return;
 
         // 키 집합이 어긋나면 한쪽 테마에서만 색이 남아 화면이 깨진다 → 진단에 남긴다.
+        // (ConventionTests 가 두 팔레트의 키 집합 동일성을 빌드 시점에 검사한다.)
         foreach (object key in live.Keys)
             if (!target.Contains(key))
                 DiagLog.Warn($"{theme} 팔레트에 키 없음: {key}");
 
         foreach (object key in target.Keys)
-        {
-            object? next = target[key];
-            object? now = live[key];
-
-            // 브러시는 '인스턴스 유지 + 색만 교체'. 이게 이 방식의 핵심이다.
-            if (now is SolidColorBrush cur && next is SolidColorBrush nb)
-            {
-                if (!cur.IsFrozen) { cur.Color = nb.Color; continue; }
-                DiagLog.Warn($"브러시가 frozen 이라 색을 바꿀 수 없습니다: {key}");
-            }
-
-            live[key] = next!;   // Color 항목 등은 값 자체를 교체(코드에서 Theme.Color 로 읽는다)
-        }
+            live[key] = target[key]!;
 
         Current = theme;
-        TerminalPalette.Reload();     // 렌더러가 스냅샷한 기본색 갱신
+        TerminalPalette.Reload();     // 렌더러가 스냅샷한 기본색·ANSI 16색 갱신
         try { Changed?.Invoke(); } catch (Exception ex) { DiagLog.Exception("Theme.Changed", ex); }
         DiagLog.Info($"테마 적용: {theme}");
     }

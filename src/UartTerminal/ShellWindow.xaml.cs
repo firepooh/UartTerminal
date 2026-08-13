@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -129,10 +131,12 @@ public partial class ShellWindow : Window
         Tabs.SelectedItem = ti;
         doc.ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen,
                       dlg.SelectedNewlineRx, dlg.SelectedNewlineTx);
-        // 그룹 전환은 연결 <b>뒤에</b> — 앞에 두면 "세션의 그룹이 없다" 는 안내가
+        // 세션 값 적용은 연결 <b>뒤에</b> — 앞에 두면 "세션의 그룹이 없다" 는 안내가
         // 곧바로 오는 "연결됨" 상태 메시지에 덮여 사용자가 볼 기회가 없다.
-        doc.SetCommandGroup(dlg.SelectedCommandGroup); // 세션에 연결된 명령 그룹으로 자동 전환
+        doc.ApplySession(dlg.SelectedSessionName, dlg.SelectedCommandGroup,
+                         dlg.SelectedLogFolder, dlg.SelectedMcpOnOpen);
         RenderContent();
+        RefreshChrome();   // 자동으로 켠 MCP 가 메뉴 체크·상태바에 즉시 반영되게
         doc.FocusTerminal();
     }
 
@@ -147,7 +151,7 @@ public partial class ShellWindow : Window
             HeaderText = text,
             HeaderDot = dot,
             Title = () => { UpdateHeaderText(text, dot, doc); UpdatePanelTitle(doc); if (ReferenceEquals(ActiveDoc, doc)) RefreshChrome(); },
-            Status = s => { if (ReferenceEquals(ActiveDoc, doc)) StatusText.Text = s; },
+            Status = s => { if (ReferenceEquals(ActiveDoc, doc)) { StatusText.Text = s; SyncStatusLink(); } },
             Metrics = s => { if (ReferenceEquals(ActiveDoc, doc)) MetricsText.Text = s; },
             Mcp = () => { if (ReferenceEquals(ActiveDoc, doc)) RefreshMcpChrome(); },
         };
@@ -547,6 +551,7 @@ public partial class ShellWindow : Window
         var doc = ActiveDoc;
         Title = doc is null ? "UartTerminal" : $"{doc.Title} - UartTerminal";
         StatusText.Text = doc?.StatusMessage ?? "";
+        SyncStatusLink();
         MetricsText.Text = doc?.MetricsMessage ?? "";
         ConnDot.Fill = doc is not null ? DotFor(doc) : DotIdle;
         SyncSplitChrome();
@@ -557,6 +562,52 @@ public partial class ShellWindow : Window
         SyncNewlineChrome();
         SyncThemeChrome();
         RefreshMcpChrome();
+    }
+
+    /// <summary>
+    /// 상태 메시지가 파일을 가리키면(로깅 시작/정지) 상태바를 <b>클릭 가능한 링크</b>로 만든다 —
+    /// 로그를 켜자마자 "그 파일이 어디 있지" 를 위해 탐색기를 따로 여는 왕복을 없앤다.
+    /// 링크가 아닐 때는 밑줄·손모양·툴팁을 모두 되돌린다(평소 상태바가 클릭될 것처럼 보이면 안 된다).
+    /// </summary>
+    private void SyncStatusLink()
+    {
+        string? path = ActiveDoc?.StatusLinkPath;
+        bool link = !string.IsNullOrEmpty(path);
+
+        StatusText.Cursor = link ? Cursors.Hand : null;
+        StatusText.TextDecorations = link ? TextDecorations.Underline : null;
+        StatusText.ToolTip = link ? Loc.S("Status.OpenFolderTip") : null;
+    }
+
+    /// <summary>상태바의 로그 경로 클릭 → 탐색기에서 그 파일을 선택한 채 폴더를 연다.</summary>
+    private void StatusText_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (ActiveDoc?.StatusLinkPath is not { Length: > 0 } path) return;
+        RevealInExplorer(path);
+    }
+
+    /// <summary>
+    /// 파일이 남아 있으면 <c>/select,</c> 로 그 파일을 고른 채 열고, 지워졌으면 폴더만 연다.
+    /// 경로는 항상 <b>따옴표로 감싸</b> 넘긴다 — 공백이 있는 폴더(바탕 화면 하위 등)에서 인자가 쪼개진다.
+    /// </summary>
+    private static void RevealInExplorer(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+                return;
+            }
+            // System.Windows.Shapes.Path 와 이름이 겹쳐 정규화해 쓴다(이 파일은 도형 Path 도 쓴다)
+            string? dir = System.IO.Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            DiagLog.Warn($"로그 폴더 열기 실패: {ex.Message}");
+        }
     }
 
     private void RefreshMcpChrome()
@@ -719,6 +770,14 @@ public partial class ShellWindow : Window
     private void ClearBuffer_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ClearBuffer();
     private void ScrollEnd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ScrollEnd();
     private void SaveLog_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveVisibleLog();
+
+    // ── 연속 로깅 ────────────────────────────────────────────────────────────────
+
+    /// <summary>메뉴를 열 때마다 활성 탭의 로깅 상태로 문구를 맞춘다(탭 전환·실패 자동정지 대응).</summary>
+    private void TerminalMenu_Opened(object sender, RoutedEventArgs e)
+        => MenuLogToggle.Header = Loc.S(ActiveDoc?.IsLogging == true ? "Menu.LogStop" : "Menu.LogStart");
+
+    private void LogToggle_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ToggleLogging();
     private void Find_Click(object sender, RoutedEventArgs e) => ActiveDoc?.ShowFind();
 
     private void DiagCapture_Click(object sender, RoutedEventArgs e)
@@ -845,7 +904,7 @@ public partial class ShellWindow : Window
     private void SaveCommand_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentInputAsCommand();
 
     private void EditCommands_Click(object sender, RoutedEventArgs e)
-        => CommandEditDialog.ShowEditor(_commands, this);
+        => CommandEditDialog.ShowEditor(_commands, this, _sessions);
 
     private void McpEnabled_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetEnabled(MenuMcpEnabled.IsChecked); RefreshMcpChrome(); }

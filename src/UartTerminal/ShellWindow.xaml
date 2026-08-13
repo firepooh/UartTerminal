@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:UartTerminal"
         Title="UartTerminal" Height="620" Width="1020"
         Icon="/UartTerminal.ico"
-        Background="{StaticResource Bg}"
+        Background="{DynamicResource Bg}"
         FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
@@ -16,7 +16,7 @@
             <Setter Property="Height" Value="16"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFaint}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -27,7 +27,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="cb" Property="Background" Value="{StaticResource Red}"/>
+                                <Setter TargetName="cb" Property="Background" Value="{DynamicResource Red}"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -38,7 +38,7 @@
 
         <!-- COM 포트 탭 헤더(둥근 상단, GitHub-dark) -->
         <Style TargetType="TabItem">
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
             <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="Template">
@@ -46,15 +46,15 @@
                     <ControlTemplate TargetType="TabItem">
                         <Border x:Name="Bd" Margin="0,3,4,-1" Padding="11,7"
                                 CornerRadius="8,8,0,0"
-                                Background="{StaticResource TabIdle}"
-                                BorderBrush="{StaticResource BorderBrush2}"
+                                Background="{DynamicResource TabIdle}"
+                                BorderBrush="{DynamicResource BorderBrush2}"
                                 BorderThickness="1,1,1,0">
                             <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Bg}"/>
-                                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Bg}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Text}"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>
                             <MultiTrigger>
@@ -62,7 +62,7 @@
                                     <Condition Property="IsSelected" Value="False"/>
                                     <Condition Property="IsMouseOver" Value="True"/>
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHover}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}"/>
                             </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -86,7 +86,7 @@
 
     <DockPanel>
         <Menu DockPanel.Dock="Top"
-              Padding="6,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderBrush2}">
+              Padding="6,2" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush2}">
             <!--
               메뉴 구성 원칙
                - 최상위는 '관심사' 단위: 연결(터미널) / 편집 / 보기 / 보드 제어 / 창·레이아웃 / 명령 / MCP / 도움말
@@ -94,7 +94,8 @@
                - 전역 Alt 단축키(Alt+N/I/B/R, Alt+Shift+R)와 겹치는 글자는 접근키로 쓸 수 없다
                  (창 PreviewKeyDown 이 먼저 처리해 메뉴가 열리지 않는다). 그래서 '보드'는 _B 가 아니라 _D.
             -->
-            <MenuItem Header="{loc:Str Menu.Terminal}">
+            <!-- SubmenuOpened: 로깅 시작/정지 문구·체크 상태를 열 때마다 활성 탭 기준으로 동기화 -->
+            <MenuItem Header="{loc:Str Menu.Terminal}" SubmenuOpened="TerminalMenu_Opened">
                 <MenuItem Header="{loc:Str Menu.NewTab}" InputGestureText="Ctrl+T" Click="NewTab_Click"/>
                 <MenuItem Header="{loc:Str Menu.Reconnect}" InputGestureText="Alt+N" Click="Reconnect_Click"/>
                 <MenuItem Header="{loc:Str Menu.Disconnect}" InputGestureText="Alt+I" Click="Disconnect_Click"/>
@@ -125,6 +126,8 @@
                 <MenuItem Header="{loc:Str Menu.ManageSessions}" Click="ManageSessions_Click"/>
                 <Separator/>
                 <MenuItem Header="{loc:Str Menu.SaveLog}" Click="SaveLog_Click"/>
+                <!-- 연속 로깅(TeraTerm 의 Log). 옵션(쓰기 모드·타임스탬프·화면 버퍼)은 시작 다이얼로그에서 고른다 -->
+                <MenuItem x:Name="MenuLogToggle" Header="{loc:Str Menu.LogStart}" Click="LogToggle_Click"/>
                 <Separator/>
                 <MenuItem Header="{loc:Str Menu.CloseTab}" InputGestureText="Ctrl+W" Click="CloseTab_Click"/>
                 <MenuItem Header="{loc:Str Menu.Exit}" Click="Exit_Click"/>
@@ -202,9 +205,13 @@
         <Border DockPanel.Dock="Bottom" Style="{StaticResource StatusBarPanel}">
             <Grid Margin="12,0">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Ellipse x:Name="ConnDot" Width="7" Height="7" Fill="{StaticResource Idle}" Margin="0,0,7,0"/>
+                    <Ellipse x:Name="ConnDot" Width="7" Height="7" Fill="{DynamicResource Idle}" Margin="0,0,7,0"/>
+                    <!-- 로그 경로가 실릴 때만 링크가 된다(밑줄·손모양은 코드에서 켜고 끈다).
+                         Background=Transparent 이 없으면 TextBlock 은 히트 테스트에서 빠져 클릭이 아예 오지 않는다. -->
                     <TextBlock x:Name="StatusText" Style="{StaticResource StatusText}"
-                               Foreground="{StaticResource Text}" Text="{loc:Str Status.Starting}"/>
+                               Background="Transparent"
+                               Foreground="{DynamicResource Text}" Text="{loc:Str Status.Starting}"
+                               MouseLeftButtonUp="StatusText_MouseLeftButtonUp"/>
                     <Rectangle Style="{StaticResource StatusDivider}" Margin="14,0"/>
                     <TextBlock x:Name="McpStatusText" Style="{StaticResource StatusText}" Text="{loc:Str Status.McpOff}"/>
                 </StackPanel>
@@ -215,8 +222,8 @@
         </Border>
 
         <!-- 탭 스트립 + 화면 분할 아이콘 툴바(오른쪽 알약) -->
-        <Border DockPanel.Dock="Top" Background="{StaticResource BgPanel}"
-                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,0,0,1">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource BgPanel}"
+                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -241,6 +248,6 @@
         </Border>
 
         <!-- 실제 문서(터미널) 렌더 영역: 탭 모드=활성 1개, 분할 모드=격자 배치 -->
-        <Grid x:Name="ContentHost" Background="{StaticResource Bg}"/>
+        <Grid x:Name="ContentHost" Background="{DynamicResource Bg}"/>
     </DockPanel>
 </Window>

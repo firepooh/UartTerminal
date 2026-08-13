@@ -16,10 +16,10 @@
     <Style x:Key="CommandInput" TargetType="TextBox">
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         <Setter Property="FontSize" Value="13"/>
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
-        <Setter Property="CaretBrush" Value="{StaticResource Green}"/>
-        <Setter Property="Background" Value="{StaticResource Surface}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource Green}"/>
+        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="12,9"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -34,12 +34,12 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
                         </Trigger>
                         <!-- 비활성(선택된 명령이 없을 때 등)임을 시각적으로 알린다 — 없으면 입력 가능한 것처럼 보인다 -->
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
-                            <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextFaint}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -58,13 +58,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" CornerRadius="8">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                <GradientStop Color="{StaticResource C.Accent}" Offset="0"/>
-                                <GradientStop Color="{StaticResource C.AccentDeep}" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
+                    <!-- 예전에는 Accent→AccentDeep 그라디언트였는데 GradientStop.Color 가
+                         StaticResource 로 굳어 테마 전환에 반응하지 않았다(Freezable 이라
+                         DynamicResource 도 안전하지 않다). 단색 Accent 로 교체 — 브러시는 테마를 따라온다. -->
+                    <Border x:Name="Bd" CornerRadius="8" Background="{DynamicResource Accent}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -82,7 +79,7 @@
 
     <!-- Secondary chip button -->
     <Style x:Key="ChipButton" TargetType="Button">
-        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         <Setter Property="FontSize" Value="11.5"/>
         <Setter Property="Padding" Value="10,0"/>
@@ -91,15 +88,15 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" CornerRadius="8"
-                            Background="{StaticResource Surface}"
-                            BorderBrush="{StaticResource BorderStrong}"
+                            Background="{DynamicResource Surface}"
+                            BorderBrush="{DynamicResource BorderStrong}"
                             BorderThickness="1">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="#FF3A4656"/>
-                            <Setter Property="Foreground" Value="{StaticResource Text}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderFocus}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Text}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -109,7 +106,7 @@
 
     <!-- 다이얼로그용 보조 버튼(취소/새로고침/추가/삭제 등). 주 동작에는 SendButton(accent)을 쓴다. -->
     <Style x:Key="DialogButton" TargetType="Button">
-        <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Padding" Value="14,0"/>
@@ -120,20 +117,20 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" CornerRadius="7"
-                            Background="{StaticResource Surface}"
-                            BorderBrush="{StaticResource BorderStrong}" BorderThickness="1">
+                            Background="{DynamicResource Surface}"
+                            BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHover}"/>
-                            <Setter Property="Foreground" Value="{StaticResource Text}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Text}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextFaint}"/>
                             <Setter TargetName="Bd" Property="Opacity" Value="0.55"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -144,7 +141,7 @@
 
     <!-- 보레이트 세그먼트 선택(SplitToolbar 알약 안에 넣어 쓴다). RadioButton 이라 배타 선택이 공짜. -->
     <Style x:Key="BaudChip" TargetType="RadioButton">
-        <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         <Setter Property="FontSize" Value="11.5"/>
         <Setter Property="Padding" Value="9,5"/>
@@ -158,12 +155,12 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHover}"/>
-                            <Setter Property="Foreground" Value="{StaticResource Text}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Text}"/>
                         </Trigger>
                         <!-- IsMouseOver 뒤에 두어 선택 상태가 호버보다 우선하게 함 -->
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentDeep}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentDeep}"/>
                             <Setter Property="Foreground" Value="White"/>
                             <Setter Property="FontWeight" Value="Bold"/>
                         </Trigger>
@@ -182,7 +179,7 @@
        · 호버는 테두리 색만 바꾸지 않고 배경까지 바꿔 클릭 가능함을 알린다
     -->
     <Style x:Key="DarkCheckBox" TargetType="CheckBox">
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -191,8 +188,8 @@
                 <ControlTemplate TargetType="CheckBox">
                     <StackPanel Orientation="Horizontal" Background="Transparent">
                         <Border x:Name="Box" Width="16" Height="16" CornerRadius="4"
-                                Background="{StaticResource Surface}"
-                                BorderBrush="{StaticResource BorderStrong}" BorderThickness="1.4"
+                                Background="{DynamicResource Surface}"
+                                BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1.4"
                                 VerticalAlignment="Center" SnapsToDevicePixels="True">
                             <Path x:Name="Check" Data="M1,4.5 L4,7.5 L9,1.5"
                                   Stroke="White" StrokeThickness="1.9" Stretch="None"
@@ -203,18 +200,18 @@
                     </StackPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}"/>
-                            <Setter TargetName="Box" Property="Background" Value="{StaticResource SurfaceHover}"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource SurfaceHover}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Box" Property="Background" Value="{StaticResource AccentDeep}"/>
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentDeep}"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}"/>
                             <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
                         </Trigger>
                         <!-- 부분 선택(3-state)은 쓰지 않지만, null 이 들어와도 빈 칸으로 보이게 둔다 -->
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Box" Property="Opacity" Value="0.5"/>
-                            <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextFaint}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -226,10 +223,10 @@
          LIST (dark) — 포트 선택 / 명령 편집 목록. 암시적 스타일이라 두 다이얼로그에 함께 적용된다.
          ============================================================ -->
     <Style TargetType="ListBox">
-        <Setter Property="Background" Value="{StaticResource Surface}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="Padding" Value="4"/>
@@ -253,7 +250,7 @@
     </Style>
 
     <Style TargetType="ListBoxItem">
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="Padding" Value="9,6"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="Template">
@@ -270,10 +267,10 @@
                                 <Condition Property="IsSelected" Value="False"/>
                                 <Condition Property="IsMouseOver" Value="True"/>
                             </MultiTrigger.Conditions>
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHover}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}"/>
                         </MultiTrigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentDeep}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentDeep}"/>
                             <Setter Property="Foreground" Value="White"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -286,8 +283,8 @@
          STATUS BAR
          ============================================================ -->
     <Style x:Key="StatusBarPanel" TargetType="Border">
-        <Setter Property="Background" Value="{StaticResource Surface}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush2}"/>
+        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush2}"/>
         <Setter Property="BorderThickness" Value="0,1,0,0"/>
         <Setter Property="Height" Value="30"/>
     </Style>
@@ -295,14 +292,14 @@
     <Style x:Key="StatusText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         <Setter Property="FontSize" Value="11.5"/>
-        <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
     <Style x:Key="StatusDivider" TargetType="Rectangle">
         <Setter Property="Width" Value="1"/>
         <Setter Property="Height" Value="14"/>
-        <Setter Property="Fill" Value="{StaticResource BorderStrong}"/>
+        <Setter Property="Fill" Value="{DynamicResource BorderStrong}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
@@ -311,23 +308,23 @@
          전체를 다크로 스타일링하고 항목이 명확히 활성으로 보이게 함.
          ============================================================ -->
     <Style TargetType="Menu">
-        <Setter Property="Background" Value="{StaticResource Bg}"/>
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="Background" Value="{DynamicResource Bg}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
     </Style>
 
     <!-- ContextMenu(우클릭/폴더 칩 팝업). 컨테이너 스타일이 없으면 WPF 기본 밝은 팝업이 그대로 떠서
          다크 배경에 흰 글씨가 흰 판에 겹쳐 내용이 보이지 않는다. -->
     <Style TargetType="ContextMenu">
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="HasDropShadow" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContextMenu">
-                    <Border Background="{StaticResource Surface}"
-                            BorderBrush="{StaticResource BorderStrong}"
+                    <Border Background="{DynamicResource Surface}"
+                            BorderBrush="{DynamicResource BorderStrong}"
                             BorderThickness="1" CornerRadius="8" Padding="4"
                             SnapsToDevicePixels="True">
                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
@@ -341,14 +338,14 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Separator">
-                    <Rectangle Height="1" Margin="30,4,6,4" Fill="{StaticResource BorderStrong}"/>
+                    <Rectangle Height="1" Margin="30,4,6,4" Fill="{DynamicResource BorderStrong}"/>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
 
     <Style TargetType="MenuItem">
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -363,22 +360,22 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="Check" Grid.Column="0" Text="&#x2713;" FontSize="11"
-                                       Foreground="{StaticResource GreenBright}"
+                                       Foreground="{DynamicResource GreenBright}"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
                                        Margin="8,0,0,0" Visibility="Collapsed"/>
                             <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
                                               VerticalAlignment="Center" Margin="8,5,12,5"/>
                             <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}"
-                                       Foreground="{StaticResource TextMuted}" FontSize="11"
+                                       Foreground="{DynamicResource TextMuted}" FontSize="11"
                                        VerticalAlignment="Center" Margin="0,0,10,0"/>
                             <Path x:Name="Arrow" Grid.Column="3" Data="M0,0 L4,4 L0,8 Z"
-                                  Fill="{StaticResource TextMuted}" VerticalAlignment="Center"
+                                  Fill="{DynamicResource TextMuted}" VerticalAlignment="Center"
                                   Margin="0,0,8,0" Visibility="Collapsed"/>
                             <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False"
                                    IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
                                    Placement="Bottom" PopupAnimation="Fade">
-                                <Border Background="{StaticResource Surface}"
-                                        BorderBrush="{StaticResource BorderStrong}" BorderThickness="1"
+                                <Border Background="{DynamicResource Surface}"
+                                        BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1"
                                         CornerRadius="6" Padding="3" Margin="0,2,10,10">
                                     <Border.Effect>
                                         <DropShadowEffect Color="#FF000000" BlurRadius="12" ShadowDepth="2" Opacity="0.5"/>
@@ -402,11 +399,11 @@
                             <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
                         </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Accent}"/>
                             <Setter Property="Foreground" Value="White"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextFaint}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -441,7 +438,7 @@
         <Setter Property="Width" Value="26"/>
         <Setter Property="Height" Value="22"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Foreground" Value="{StaticResource TextFaint}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextFaint}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
@@ -453,10 +450,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentDeep}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentDeep}"/>
                             <Setter Property="Foreground" Value="White"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -467,8 +464,8 @@
 
     <!-- 세그먼트 알약 컨테이너(분할 토글 그룹을 감싼다) -->
     <Style x:Key="SplitToolbar" TargetType="Border">
-        <Setter Property="Background" Value="{StaticResource TabIdle}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush2}"/>
+        <Setter Property="Background" Value="{DynamicResource TabIdle}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush2}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="3"/>
@@ -479,7 +476,7 @@
          칩 바의 그룹 선택 등에 쓰인다. 항목 팝업까지 함께 스타일링.
          ============================================================ -->
     <Style TargetType="ComboBoxItem">
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="Padding" Value="9,5"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -489,10 +486,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHover}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentDeep}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentDeep}"/>
                             <Setter Property="Foreground" Value="White"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -503,14 +500,14 @@
 
     <!-- ToolTip(dark) — 스타일이 없으면 WPF 기본 밝은 툴팁이 떠서 다크 UI 에서 튄다. -->
     <Style TargetType="ToolTip">
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="11.5"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToolTip">
-                    <Border Background="{StaticResource BgPanel}"
-                            BorderBrush="{StaticResource BorderStrong}" BorderThickness="1"
+                    <Border Background="{DynamicResource BgPanel}"
+                            BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1"
                             CornerRadius="6" Padding="9,6" SnapsToDevicePixels="True">
                         <ContentPresenter/>
                     </Border>
@@ -521,9 +518,9 @@
 
     <Style TargetType="ComboBox">
         <!-- 선택된 항목(현재 명령 그룹)은 '지금 무엇이 적용됐는지'를 알려주는 정보라 밝게 표시한다. -->
-        <Setter Property="Foreground" Value="{StaticResource Text}"/>
-        <Setter Property="Background" Value="{StaticResource Surface}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
+        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         <Setter Property="FontSize" Value="11.5"/>
         <Setter Property="Padding" Value="9,0"/>
@@ -545,8 +542,8 @@
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
                                     <Border x:Name="Bd" CornerRadius="8"
-                                            Background="{StaticResource Surface}"
-                                            BorderBrush="{StaticResource BorderStrong}" BorderThickness="1">
+                                            Background="{DynamicResource Surface}"
+                                            BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
@@ -556,12 +553,12 @@
                                                               VerticalAlignment="Center"
                                                               TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
                                             <Path Grid.Column="1" Data="M0,0 L8,0 L4,5 Z" Margin="0,0,9,0"
-                                                  Fill="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                  Fill="{DynamicResource TextMuted}" VerticalAlignment="Center"/>
                                         </Grid>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#FF3A4656"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderFocus}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -574,8 +571,8 @@
                                IsOpen="{TemplateBinding IsDropDownOpen}"
                                Placement="Bottom" PopupAnimation="Fade"
                                MinWidth="{TemplateBinding ActualWidth}">
-                            <Border Background="{StaticResource Surface}"
-                                    BorderBrush="{StaticResource BorderStrong}" BorderThickness="1"
+                            <Border Background="{DynamicResource Surface}"
+                                    BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1"
                                     CornerRadius="8" Padding="4" Margin="0,3,0,0"
                                     MaxHeight="{TemplateBinding MaxDropDownHeight}">
                                 <ScrollViewer>
@@ -608,13 +605,13 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Border x:Name="tb" Background="{StaticResource ScrollThumb}" CornerRadius="4" Margin="2"/>
+                    <Border x:Name="tb" Background="{DynamicResource ScrollThumb}" CornerRadius="4" Margin="2"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="tb" Property="Background" Value="{StaticResource ScrollThumbHover}"/>
+                            <Setter TargetName="tb" Property="Background" Value="{DynamicResource ScrollThumbHover}"/>
                         </Trigger>
                         <Trigger Property="IsDragging" Value="True">
-                            <Setter TargetName="tb" Property="Background" Value="{StaticResource ScrollThumbHover}"/>
+                            <Setter TargetName="tb" Property="Background" Value="{DynamicResource ScrollThumbHover}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -648,13 +645,13 @@
                     <Border x:Name="bd" Background="Transparent" CornerRadius="3">
                         <Path x:Name="ar" Width="8" Height="6" Stretch="Uniform"
                               Data="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
-                              Fill="{StaticResource TextFaint}"
+                              Fill="{DynamicResource TextFaint}"
                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bd" Property="Background" Value="{StaticResource SurfaceHover}"/>
-                            <Setter TargetName="ar" Property="Fill" Value="{StaticResource TextDim}"/>
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                            <Setter TargetName="ar" Property="Fill" Value="{DynamicResource TextDim}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -664,7 +661,7 @@
 
     <Style TargetType="{x:Type ScrollBar}">
         <Setter Property="OverridesDefaultStyle" Value="True"/>
-        <Setter Property="Background" Value="{StaticResource BgDeep}"/>
+        <Setter Property="Background" Value="{DynamicResource BgDeep}"/>
         <Setter Property="Width" Value="12"/>
         <Setter Property="MinWidth" Value="12"/>
         <Setter Property="Template">

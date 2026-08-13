@@ -65,6 +65,9 @@ public partial class UartDocumentView : UserControl
     public bool McpEnabled => _bridge?.Enabled ?? false;
     public bool McpReadOnly => _bridge?.ReadOnly ?? false;
     public string StatusMessage { get; private set; } = "";
+
+    /// <summary>지금 상태 메시지가 가리키는 파일(로그 시작/정지). 있으면 상태바가 클릭 가능해진다.</summary>
+    public string? StatusLinkPath { get; private set; }
     public string MetricsMessage { get; private set; } = "";
 
     /// <summary>탭 헤더용 제목(포트 + 연결 상태).</summary>
@@ -219,6 +222,11 @@ public partial class UartDocumentView : UserControl
             if (DiagLog.Capture) DiagLog.Trace($"TX(resp)[{mem.Length}] {DiagLog.Escape(mem.Span)}");
             _conn.Enqueue(mem);
         };
+
+        // 연속 로깅 tee: 로거가 없으면 null 체크 한 번이 전부라 상시 걸어 둔다.
+        // 컨트롤러에 걸려 있어 재연결로 세션이 바뀌어도 로깅이 이어진다.
+        _conn.RxTee = data => _logger?.Append(data.Span);                      // 원시 모드
+        _conn.AfterReceive = () => _logger?.AppendRenderedLines(_engine.Buffer); // 화면 모드
 
         // uart_close/uart_open 은 MCP 서버 스레드에서 호출되므로 UI 스레드로 마샬링해 포트를 닫고/연다.
         _bridge.SetPortController(
@@ -463,6 +471,30 @@ public partial class UartDocumentView : UserControl
         RefreshMetrics();
     }
 
+    // ── 세션 문맥(이 탭이 어떤 세션으로 열렸는지) ────────────────────────────────
+    // 접속 값(속도·리셋·개행)과 달리 '어느 프로필로 열었나' 자체를 기억한다 —
+    // 로그 파일 이름의 첫 칸과 로그 폴더가 여기서 온다.
+
+    private string? _sessionName;
+    private string? _logFolder;
+
+    /// <summary>이 탭을 연 세션 이름(세션 없이 포트만 골라 열었으면 null).</summary>
+    public string? SessionName => _sessionName;
+
+    /// <summary>
+    /// 세션으로 접속했을 때 그 세션이 지정한 것들을 <b>연결 뒤에 한 번에</b> 적용한다.
+    /// 순서가 중요하다: 그룹 안내("그룹이 없습니다")가 "연결됨" 에 덮이지 않도록 연결 뒤에 오고,
+    /// MCP 는 마지막이라 상태바에 파이프 이름이 남는다.
+    /// </summary>
+    public void ApplySession(string? name, string? commandGroup, string? logFolder, bool mcpOnOpen)
+    {
+        _sessionName = string.IsNullOrWhiteSpace(name) ? null : name!.Trim();
+        _logFolder = string.IsNullOrWhiteSpace(logFolder) ? null : logFolder!.Trim();
+        SetCommandGroup(commandGroup);
+        if (mcpOnOpen) McpEnableFromSession();
+        RaiseTitle();
+    }
+
     /// <summary>현재 선택된 그룹 이름(세션 저장 시 함께 기록).</summary>
     public string? CurrentCommandGroup =>
         _commands.FindGroup(_commandGroup)?.Name ?? (_commands.Groups.Count > 0 ? _commands.Groups[0].Name : null);
@@ -638,10 +670,13 @@ public partial class UartDocumentView : UserControl
 
         // 기본 이름은 friendly name 이 아니라 포트명 — 사용자가 보드 별칭을 직접 붙이게 한다.
         string reset = _resetOnOpen ? Loc.S("Doc.SessionResetSuffix") : "";
+        string mcp = McpEnabled ? Loc.S("Doc.SessionMcpSuffix") : "";   // 지금 켜져 있으면 세션에도 기록
         string nl = _nlRx == ReceiveNewline.CrLf && _nlTx == TransmitNewline.Cr
             ? "" : Loc.F("Doc.SessionNewlineSuffix", _nlRx.Label(), _nlTx.Label());
+        // 이 탭이 세션으로 열렸으면 그 이름을 기본값으로(같은 이름 = 갱신) — 아니면 포트명.
         string? name = TextPromptDialog.Ask(OwnerWindow, Loc.S("Doc.SessionPromptTitle"),
-            Loc.F("Doc.SessionPrompt", _portName, _params.BaudRate, reset + nl), _portName);
+            Loc.F("Doc.SessionPrompt", _portName, _params.BaudRate, reset + mcp + nl),
+            _sessionName ?? _portName);
         if (name is null) return;
 
         string? group = CurrentCommandGroup; // 현재 탭이 쓰는 명령 그룹을 세션에 함께 기록(접속 시 자동 선택)
@@ -656,16 +691,20 @@ public partial class UartDocumentView : UserControl
             NewlineRx = _nlRx,
             NewlineTx = _nlTx,
             CommandGroup = group,
+            McpOnOpen = McpEnabled,
+            LogFolder = _logFolder,   // 마지막으로 로깅한(또는 세션이 지정한) 폴더를 이어서 기록
         }))
         {
             SetStatus(Loc.FormatOrNull(_sessions.LastError) ?? Loc.S("Doc.SessionSaveFailed"));
             return;
         }
-        SetStatus(Loc.F("Doc.SessionSaved", name, _portName, _params.BaudRate, reset + nl));
+        // 이제 이 탭은 이 세션으로 연 것과 같다 — 로그 파일 이름의 첫 칸이 곧바로 따라온다.
+        _sessionName = name;
+        SetStatus(Loc.F("Doc.SessionSaved", name, _portName, _params.BaudRate, reset + mcp + nl));
     }
 
     private void EditCommands_Click(object sender, RoutedEventArgs e)
-        => CommandEditDialog.ShowEditor(_commands, OwnerWindow);
+        => CommandEditDialog.ShowEditor(_commands, OwnerWindow, _sessions);
 
     // ── 명령(셸 메뉴에서 호출) ──────────────────────────────────────────────────
 
@@ -703,22 +742,112 @@ public partial class UartDocumentView : UserControl
     public void ClearBuffer() => _engine?.Buffer.Clear();
     public void ScrollEnd() => _view?.ScrollToEnd();
 
-    /// <summary>현재 스크롤백 버퍼(논리 라인 전체)를 텍스트 파일로 1회 저장(사용자 개시). 연속 로깅과는 별개.</summary>
-    public void SaveVisibleLog()
-    {
-        if (_engine is null) { SetStatus(Loc.S("Doc.NothingToSaveLog")); return; }
+    // ── 연속 로깅(수신 원시 바이트 → 파일, 상한 없음) ─────────────────────────
+    // 스크롤백(10,000줄 상한)의 1회 저장과 달리, 시작 시점부터 수신되는 대로 전부 남긴다.
 
+    private Core.Logging.SessionLogger? _logger;
+
+    /// <summary>연속 로깅 중인지(셸 메뉴가 시작/정지 문구를 고르는 데 쓴다).</summary>
+    public bool IsLogging => _logger is not null;
+
+    public void ToggleLogging()
+    {
+        if (_logger is not null) { StopLogging(); return; }
+
+        if (_conn is null || string.IsNullOrEmpty(_portName))
+        {
+            SetStatus(Loc.S("Doc.LogNeedsConnection"));
+            return;
+        }
+
+        // 기본 이름은 '세션_포트_날짜_시각' — 여러 포트를 동시에 로깅해도 파일만 보고 구분되게(§2.6)
+        string defaultName = Core.Logging.LogFileName.Default(_sessionName, _portName, DateTime.Now);
+        var opt = LogDialog.Ask(OwnerWindow, _state, defaultName, _logFolder);
+        if (opt is null) return;
+
+        try
+        {
+            var logger = new Core.Logging.SessionLogger(opt.Path, opt.Timestamps, opt.Append,
+                                                        format: opt.Format);
+            // 쓰기 실패는 RX 워커 스레드에서 알려온다 → UI 스레드로 마샬링해 정리·안내
+            logger.Failed += msg => Dispatcher.BeginInvoke(() =>
+            {
+                if (ReferenceEquals(_logger, logger)) _logger = null;
+                SetStatus(Loc.F("Doc.LogFailed", Loc.Format(msg)));
+                RefreshMetrics();
+            });
+            bool screen = opt.Format == Core.Logging.LogFormat.Screen;
+
+            // 화면 버퍼 포함: 놓친 앞부분(스크롤백에 남은 만큼)을 파일 머리에 싣는다.
+            // tee 를 걸기 전에 써야 스냅샷과 라이브 수신의 순서가 꼬이지 않는다.
+            if (opt.IncludeScreenBuffer)
+                logger.AppendScreenSnapshot(SnapshotBufferText(completedOnly: screen));
+            // 화면 모드의 기준점은 '지금 진행 중인 줄' — 스냅샷이 끝난 바로 그 자리다.
+            if (screen && _engine is not null)
+                logger.StartAt(_engine.Buffer);
+            _logger = logger;
+        }
+        catch (Exception ex)
+        {
+            DiagLog.Exception("StartLogging", ex);
+            SetStatus(Loc.F("Doc.LogStartFailed", ex.Message));
+            return;
+        }
+
+        // 사용자가 고른 폴더를 이 탭의 로그 폴더로 삼는다 → [세션으로 저장] 시 함께 기록된다.
+        try
+        {
+            if (Path.GetDirectoryName(opt.Path) is { Length: > 0 } dir) _logFolder = dir;
+        }
+        catch { /* 경로가 이상해도 로깅 자체는 이미 시작됐다 */ }
+
+        SetStatus(Loc.F("Doc.LogStarted", opt.Path,
+                        opt.Timestamps ? Loc.S("Doc.LogWithStamps") : ""), opt.Path);
+        RefreshMetrics();
+    }
+
+    public void StopLogging()
+    {
+        var logger = _logger;
+        if (logger is null) return;
+        _logger = null;          // tee 는 null 체크로 즉시 무시된다
+        // 화면 모드는 줄이 끝나야 쓰므로, 정지 시 진행 중이던 마지막 줄을 마저 남긴다.
+        if (_engine is not null) logger.AppendRenderedLines(_engine.Buffer, flushPartial: true);
+        logger.Dispose();
+        SetStatus(Loc.F("Doc.LogStopped", logger.Path, logger.BytesWritten / 1024.0), logger.Path);
+        RefreshMetrics();
+    }
+
+    /// <summary>
+    /// 스크롤백 버퍼를 한 문자열로(버퍼 저장·로깅의 '화면 버퍼 포함'이 공유).
+    /// </summary>
+    /// <param name="completedOnly">
+    /// true 면 <b>진행 중인 마지막 줄을 뺀다</b>. 화면 모드 로깅은 그 줄을 완성된 뒤 통째로 쓰므로,
+    /// 스냅샷에도 넣으면 같은 줄이 반쪽·전체로 두 번 적힌다.
+    /// </param>
+    private string SnapshotBufferText(bool completedOnly = false)
+    {
+        if (_engine is null) return "";
         var sb = new StringBuilder();
         var buffer = _engine.Buffer;
         lock (buffer.SyncRoot)
         {
-            int n = buffer.LineCount;
+            int n = buffer.LineCount - (completedOnly ? 1 : 0);
             for (int i = 0; i < n; i++)
             {
                 sb.Append(buffer.GetLine(i).Text());
                 if (i < n - 1) sb.Append('\n');
             }
         }
+        return sb.ToString();
+    }
+
+    /// <summary>현재 스크롤백 버퍼(논리 라인 전체)를 텍스트 파일로 1회 저장(사용자 개시). 연속 로깅과는 별개.</summary>
+    public void SaveVisibleLog()
+    {
+        if (_engine is null) { SetStatus(Loc.S("Doc.NothingToSaveLog")); return; }
+
+        string snapshot = SnapshotBufferText();
 
         string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
         string port = string.IsNullOrEmpty(_portName) ? "log" : _portName;
@@ -732,7 +861,7 @@ public partial class UartDocumentView : UserControl
 
         try
         {
-            File.WriteAllText(dlg.FileName, sb.ToString(), new UTF8Encoding(false));
+            File.WriteAllText(dlg.FileName, snapshot, new UTF8Encoding(false));
             SetStatus(Loc.F("Doc.LogSaved", dlg.FileName));
         }
         catch (Exception ex)
@@ -1023,6 +1152,18 @@ public partial class UartDocumentView : UserControl
         RaiseMcpState();
     }
 
+    /// <summary>
+    /// 세션의 '열 때 MCP 켜기' 적용. <b>켜는 방향만</b> 반영한다 — 세션에 값이 없다고 해서
+    /// 이미 켜 둔 서버를 끄면 재연결 한 번에 붙어 있던 AI 도구가 조용히 떨어진다.
+    /// 켠 사실은 상태바로 알린다(자동으로 파이프가 열린 것을 모르고 지나가지 않게).
+    /// </summary>
+    public void McpEnableFromSession()
+    {
+        if (McpEnabled) return;
+        McpSetEnabled(true);
+        if (McpEnabled) SetStatus(Loc.F("Doc.McpOnBySession", McpPipeServer.PipeNameFor(_portName)));
+    }
+
     public void McpSetReadOnly(bool ro)
     {
         if (_bridge is null) return;
@@ -1052,6 +1193,10 @@ public partial class UartDocumentView : UserControl
         // 통해 이 뷰 → 문서 → 엔진/브리지/세션 그래프 전체를 영구히 붙잡는다(탭을 닫아도).
         _view?.Shutdown();
         ViewHost.Child = null;
+        // 연속 로깅 파일 닫기 — 화면 모드는 진행 중이던 줄을 먼저 마저 쓴다(플러시 포함)
+        if (_logger is { } lg && _engine is not null) lg.AppendRenderedLines(_engine.Buffer, flushPartial: true);
+        _logger?.Dispose();
+        _logger = null;
         _conn?.CloseDocument();
         try { _mcpServer?.Stop(); } catch { }
     }
@@ -1078,9 +1223,11 @@ public partial class UartDocumentView : UserControl
         string nl = nlDefault ? "" : $"  ·  NL↓{_nlRx.Label()} ↑{_nlTx.Label()}";
         // 이 탭이 '열 때 리셋'인지 — 세션마다 다른 값이라 켜져 있을 때 상태바에 남긴다.
         string rst = _resetOnOpen ? "  ·  " + Loc.S("Doc.MetricsResetOnOpen") : "";
+        // 연속 로깅 중 표시 — 로깅을 켜 둔 걸 잊고 파일이 무한히 커지지 않게 항상 보인다.
+        string lg = _logger is not null ? "  ·  LOG" : "";
         MetricsMessage = IsConnected
-            ? $"{_portName}  {_params.Summary()}{rst}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}  ·  UTF-8"
-            : $"{Loc.S("Doc.MetricsNotConnected")}{rst}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}";
+            ? $"{_portName}  {_params.Summary()}{rst}{lg}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}  ·  UTF-8"
+            : $"{Loc.S("Doc.MetricsNotConnected")}{rst}{lg}  ·  {_view?.Columns}×{_view?.Rows}{font}{group}{nl}";
         MetricsChanged?.Invoke(MetricsMessage);
     }
 
@@ -1092,9 +1239,16 @@ public partial class UartDocumentView : UserControl
         catch (Exception ex) { DiagLog.Warn($"클립보드 설정 실패: {ex.Message}"); }
     }
 
-    private void SetStatus(string text)
+    private void SetStatus(string text) => SetStatus(text, null);
+
+    /// <summary>
+    /// 상태 메시지 + (선택) 클릭하면 탐색기에서 열 파일 경로. 링크는 <b>이 메시지에만</b> 붙는다 —
+    /// 다음 상태 메시지가 오면 자동으로 지워진다(옛 경로가 상태바에 남아 클릭되는 일이 없게).
+    /// </summary>
+    private void SetStatus(string text, string? linkPath)
     {
         StatusMessage = text;
+        StatusLinkPath = linkPath;
         StatusChanged?.Invoke(text);
     }
 

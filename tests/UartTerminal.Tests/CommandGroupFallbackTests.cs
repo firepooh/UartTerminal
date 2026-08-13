@@ -88,4 +88,98 @@ public sealed class CommandGroupFallbackTests : IDisposable
         Assert.Equal("projC", reloaded.Items[0].CommandGroup);
         Assert.Null(_store.FindGroup(reloaded.Items[0].CommandGroup));  // 어긋난 상태가 저장된다
     }
+
+    // ── 그룹 이름 변경 전파 ──────────────────────────────────────────────────
+
+    private SessionStore NewSessionStore(params SessionProfile[] items)
+    {
+        var s = new SessionStore(Path.Combine(_dir, $"sess-{Guid.NewGuid():N}.json"));
+        s.Load();
+        foreach (var it in items) Assert.True(s.AddOrReplace(it));
+        return s;
+    }
+
+    private static SessionProfile Profile(string name, string? group) =>
+        new() { Name = name, Port = "COM7", Baud = 115200, CommandGroup = group };
+
+    /// <summary>
+    /// 그룹 이름을 바꾸면 그 이름을 참조하던 세션이 <b>파일까지</b> 따라 바뀌어야 한다.
+    /// 이 전파가 없어서, 이름을 바꾼 뒤 세션들이 없는 그룹을 가리키다 조용히 첫 그룹으로
+    /// 떨어졌다("탭마다 다른 그룹" 이 깨진 진짜 원인).
+    /// </summary>
+    [Fact]
+    public void GroupRename_UpdatesReferencingSessions_AndPersists()
+    {
+        var s = NewSessionStore(
+            Profile("boardA", "projA"),
+            Profile("boardB", "projB"),
+            Profile("boardC", null));
+
+        var renames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["projA"] = "myproj",
+        };
+        Assert.True(s.TryApplyGroupRenames(renames, out int changed));
+        Assert.Equal(1, changed);
+
+        var reloaded = new SessionStore(s.FilePath);
+        reloaded.Load();
+        Assert.Equal("myproj", reloaded.Items.First(x => x.Name == "boardA").CommandGroup);
+        Assert.Equal("projB", reloaded.Items.First(x => x.Name == "boardB").CommandGroup);   // 무관 세션 불변
+        Assert.Null(reloaded.Items.First(x => x.Name == "boardC").CommandGroup);
+    }
+
+    /// <summary>세션의 참조는 대소문자 무시로 대응된다(FindGroup 과 같은 규약).</summary>
+    [Fact]
+    public void GroupRename_MatchesCaseInsensitively()
+    {
+        var s = NewSessionStore(Profile("boardA", "PROJA"));
+        var renames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["projA"] = "renamed",
+        };
+
+        Assert.True(s.TryApplyGroupRenames(renames, out int changed));
+        Assert.Equal(1, changed);
+        Assert.Equal("renamed", s.Items[0].CommandGroup);
+    }
+
+    /// <summary>바꿀 것이 없으면 파일을 건드리지 않는다(불필요한 쓰기·mtime 변경 방지).</summary>
+    [Fact]
+    public void GroupRename_NoReferences_DoesNotTouchTheFile()
+    {
+        var s = NewSessionStore(Profile("boardA", "projB"));
+        var before = File.GetLastWriteTimeUtc(s.FilePath);
+
+        var renames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["projA"] = "renamed",   // 아무 세션도 projA 를 안 쓴다
+        };
+        Assert.True(s.TryApplyGroupRenames(renames, out int changed));
+
+        Assert.Equal(0, changed);
+        Assert.Equal(before, File.GetLastWriteTimeUtc(s.FilePath));
+    }
+
+    /// <summary>읽기 전용(잠금) 상태에서는 실패를 돌려주고 메모리 목록도 바꾸지 않는다.</summary>
+    [Fact]
+    public void GroupRename_Fails_WhenStoreIsReadOnly()
+    {
+        string path = Path.Combine(_dir, "locked.json");
+        // 상위 스키마 버전 → Load 가 IsReadOnly 로 잠근다
+        File.WriteAllText(path, """
+        { "schemaVersion": 99, "sessions": [ { "name": "a", "port": "COM7", "baud": 115200, "commandGroup": "projA" } ] }
+        """);
+        var s = new SessionStore(path);
+        s.Load();
+        Assert.True(s.IsReadOnly);
+
+        var renames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["projA"] = "renamed",
+        };
+        Assert.False(s.TryApplyGroupRenames(renames, out int changed));
+        Assert.Equal(0, changed);
+        Assert.NotNull(s.LastError);
+    }
 }

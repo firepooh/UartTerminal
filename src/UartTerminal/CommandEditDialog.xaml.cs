@@ -57,6 +57,14 @@ public partial class CommandEditDialog : Window
     private sealed class GroupRow
     {
         public string Name { get; set; } = "";
+
+        /// <summary>
+        /// 열 때의 그룹 이름(새 그룹은 null). 이름이 바뀐 채 저장되면 이 값으로 rename 을 판별해
+        /// 세션(<c>sessions.json</c>)의 그룹 참조를 따라 갱신한다 — 전파가 없으면 세션이
+        /// 없는 그룹을 가리키게 되어 접속 시 조용히 첫 그룹으로 떨어진다.
+        /// </summary>
+        public string? OriginalName { get; init; }
+
         /// <summary>이 그룹의 항목들(폴더는 바로 뒤에 자기 하위들이 IsChild=true 로 이어진다 — 평탄 표현).</summary>
         public ObservableCollection<Row> Rows { get; } = new();
         public override string ToString() => Name;
@@ -65,6 +73,7 @@ public partial class CommandEditDialog : Window
     private static bool _open; // 모달이라 사실상 불필요하지만 재진입 방어
 
     private readonly CommandStore _store;
+    private SessionStore? _sessions;   // 그룹 rename 전파 대상(없으면 전파 생략)
     private readonly ObservableCollection<GroupRow> _groups = new();
     private GroupRow? _current;
 
@@ -76,7 +85,7 @@ public partial class CommandEditDialog : Window
 
         foreach (var g in store.Groups)
         {
-            var gr = new GroupRow { Name = g.Name };
+            var gr = new GroupRow { Name = g.Name, OriginalName = g.Name };
             foreach (var c in g.Commands)
             {
                 if (c.IsFolder)
@@ -100,8 +109,11 @@ public partial class CommandEditDialog : Window
         UpdateButtons();
     }
 
-    /// <summary>편집기를 모달로 띄운다(앱 전역 1개). 열기 전에 파일을 다시 읽어 외부 변경을 반영.</summary>
-    public static void ShowEditor(CommandStore store, Window? owner)
+    /// <summary>
+    /// 편집기를 모달로 띄운다(앱 전역 1개). 열기 전에 파일을 다시 읽어 외부 변경을 반영.
+    /// <paramref name="sessions"/> 를 주면 그룹 이름 변경 시 세션의 그룹 참조를 따라 갱신한다.
+    /// </summary>
+    public static void ShowEditor(CommandStore store, Window? owner, SessionStore? sessions = null)
     {
         if (_open) return;
 
@@ -112,7 +124,7 @@ public partial class CommandEditDialog : Window
         _open = true;
         try
         {
-            var dlg = new CommandEditDialog(store);
+            var dlg = new CommandEditDialog(store) { _sessions = sessions };
             if (owner is not null) dlg.Owner = owner;
             else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             dlg.ShowDialog();
@@ -523,7 +535,45 @@ public partial class CommandEditDialog : Window
             return;
         }
 
+        PropagateGroupRenames();
         DialogResult = true;
+    }
+
+    /// <summary>
+    /// 이름이 바뀐 그룹의 세션 참조(<c>sessions.json</c> 의 CommandGroup)를 따라 갱신한다.
+    /// 전파가 없으면 세션이 없는 그룹을 가리키게 되어 접속 시 조용히 첫 그룹으로 떨어진다.
+    ///
+    /// 최종 이름은 <b>저장된 결과</b>(<see cref="CommandStore.Groups"/>)에서 읽는다 —
+    /// SanitizeGroups 가 중복 접미사·길이 절단으로 입력과 다른 이름을 확정할 수 있고,
+    /// 순서는 1:1 로 보존되므로 인덱스로 대응시킨다.
+    /// </summary>
+    private void PropagateGroupRenames()
+    {
+        if (_sessions is null) return;
+
+        var renames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var saved = _store.Groups;
+        int n = Math.Min(_groups.Count, saved.Count);
+        for (int i = 0; i < n; i++)
+        {
+            string? from = _groups[i].OriginalName;
+            string to = saved[i].Name;
+            if (from is { Length: > 0 } && !string.Equals(from, to, StringComparison.Ordinal))
+                renames[from] = to;
+        }
+        if (renames.Count == 0) return;
+
+        _sessions.Load();   // 다른 인스턴스/손편집 반영 위에 갱신
+        if (!_sessions.TryApplyGroupRenames(renames, out int changed))
+        {
+            MessageBox.Show(this,
+                Loc.FormatOrNull(_sessions.LastError) ?? Loc.S("Sess.SaveFailed"),
+                "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (changed > 0)
+            DiagLog.Info($"그룹 이름 변경을 세션 {changed}개에 전파: " +
+                         string.Join(", ", renames.Select(kv => $"'{kv.Key}'→'{kv.Value}'")));
     }
 
     /// <summary>평탄한 편집 행(폴더 + IsChild 하위)을 중첩된 SavedCommand 목록으로 되돌린다.</summary>

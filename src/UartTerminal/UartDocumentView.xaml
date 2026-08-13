@@ -2,12 +2,12 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:UartTerminal"
-             Background="{StaticResource Bg}">
+             Background="{DynamicResource Bg}">
     <DockPanel>
         <!-- 하단 입력 전용 행: 터미널 출력이 쏟아질 때 안정적으로 명령 입력.
              클릭해서 포커스를 주면 여기로 입력, Enter 또는 Send 로 전송. 기본 포커스는 메인 터미널(type-through). -->
-        <Border DockPanel.Dock="Bottom" Background="{StaticResource BgPanel}"
-                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,1,0,0"
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource BgPanel}"
+                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,1,0,0"
                 Padding="12,10">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -17,7 +17,7 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="Prompt" Grid.Column="0" Text="&gt;"
-                           Foreground="{StaticResource Green}"
+                           Foreground="{DynamicResource Green}"
                            FontFamily="{StaticResource MonoFont}" FontSize="13" FontWeight="Bold"
                            VerticalAlignment="Center" Margin="2,0,10,0"/>
 
@@ -36,8 +36,8 @@
         <!-- 저장 명령 칩 바(Alt+B). 입력바보다 뒤에 선언 → DockPanel 도킹 순서상 입력바 '위'에 쌓인다.
              칩은 Focusable=False 여야 클릭 직후 타이핑이 그대로 터미널(type-through)로 나간다. -->
         <Border x:Name="CommandBar" DockPanel.Dock="Bottom" Visibility="Collapsed"
-                Background="{StaticResource BgPanel}"
-                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,1,0,0"
+                Background="{DynamicResource BgPanel}"
+                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,1,0,0"
                 Padding="12,7">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -49,7 +49,7 @@
                     <!-- 명령 그룹(프로젝트) 선택. 탭별로 독립이며, 세션 접속 시 자동 선택된다. -->
                     <!-- "CMD" 라벨 + 그룹명: 지금 어떤 명령 세트가 적용됐는지 항상 읽히게 한다. -->
                     <TextBlock x:Name="GroupLabel" Text="CMD" Visibility="Collapsed"
-                               Foreground="{StaticResource TextFaint}" FontSize="10.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextFaint}" FontSize="10.5" FontWeight="SemiBold"
                                VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="GroupSelector" MinWidth="104" MaxWidth="160" Height="26"
                               Margin="0,0,8,0" VerticalContentAlignment="Center"
@@ -57,7 +57,7 @@
                               SelectionChanged="GroupSelector_SelectionChanged"/>
                     <!-- 그룹 구분선: 그룹 셀렉터와 칩 묶음을 시각적으로 분리 -->
                     <Rectangle x:Name="GroupDivider" Width="1" Height="16" Margin="0,0,8,0"
-                               Fill="{StaticResource BorderStrong}" VerticalAlignment="Center"
+                               Fill="{DynamicResource BorderStrong}" VerticalAlignment="Center"
                                Visibility="Collapsed"/>
                     <ScrollViewer Focusable="False" HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Disabled">
@@ -81,20 +81,20 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Border x:Name="ViewHost" Grid.Column="0" Background="{StaticResource Bg}"/>
+            <Border x:Name="ViewHost" Grid.Column="0" Background="{DynamicResource Bg}"/>
 
             <!-- 스크롤백 검색 바(Ctrl+F). 우상단, 매치 하이라이트 + 이전/다음 이동. Esc 로 닫기. -->
             <Border x:Name="FindBar" Grid.Column="0" Visibility="Collapsed"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,8,14,0" Padding="8,6"
-                    Background="{StaticResource OverlayBg}" BorderBrush="{StaticResource BorderStrong}"
+                    Background="{DynamicResource OverlayBg}" BorderBrush="{DynamicResource BorderStrong}"
                     BorderThickness="1" CornerRadius="8">
                 <StackPanel Orientation="Horizontal">
                     <TextBox x:Name="FindBox" Width="220" MinHeight="26" FontSize="12"
                              Style="{StaticResource CommandInput}" Padding="8,3"
                              TextChanged="FindBox_TextChanged" PreviewKeyDown="FindBox_PreviewKeyDown"/>
                     <TextBlock x:Name="FindCount" VerticalAlignment="Center" Margin="9,0,7,0"
-                               MinWidth="46" Foreground="{StaticResource TextMuted}" FontSize="11.5"
+                               MinWidth="46" Foreground="{DynamicResource TextMuted}" FontSize="11.5"
                                FontFamily="{StaticResource MonoFont}" Text=""/>
                     <Button Content="▲" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
                             Padding="9,0" Focusable="False" Click="FindPrev_Click" ToolTip="{loc:Str Doc.FindPrevTip}"/>
@@ -110,9 +110,9 @@
                     IsHitTestVisible="False"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,10,12,0" Padding="11,6"
-                    Background="{StaticResource OverlayBg}" BorderBrush="{StaticResource BorderStrong}"
+                    Background="{DynamicResource OverlayBg}" BorderBrush="{DynamicResource BorderStrong}"
                     BorderThickness="1" CornerRadius="7">
-                <TextBlock x:Name="ZoomText" Foreground="{StaticResource Text}"
+                <TextBlock x:Name="ZoomText" Foreground="{DynamicResource Text}"
                            FontFamily="{StaticResource MonoFont}" FontSize="13" FontWeight="Bold"/>
             </Border>
 

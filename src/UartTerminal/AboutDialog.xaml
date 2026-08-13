@@ -7,7 +7,7 @@
         Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" ShowInTaskbar="False"
-        Background="{StaticResource Bg}"
+        Background="{DynamicResource Bg}"
         FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
@@ -23,20 +23,20 @@
 
         <StackPanel Grid.Column="1">
             <TextBlock Text="UartTerminal" FontSize="21" FontWeight="Bold"
-                       Foreground="{StaticResource Text}"/>
+                       Foreground="{DynamicResource Text}"/>
             <TextBlock x:Name="VersionText" Margin="0,3,0,0"
                        FontFamily="{StaticResource MonoFont}" FontSize="12.5"
-                       Foreground="{StaticResource TextMuted}"/>
+                       Foreground="{DynamicResource TextMuted}"/>
 
             <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12.5" LineHeight="18"
-                       Foreground="{StaticResource TextDim}"
+                       Foreground="{DynamicResource TextDim}"
                        Text="{loc:Str About.Summary}"/>
 
             <TextBlock x:Name="RuntimeText" Margin="0,12,0,0" FontSize="11.5"
-                       Foreground="{StaticResource TextFaint}"/>
+                       Foreground="{DynamicResource TextFaint}"/>
             <TextBlock Margin="0,3,0,0" FontSize="11.5">
                 <Hyperlink x:Name="RepoLink" Click="Repo_Click"
-                           Foreground="{StaticResource Blue}" TextDecorations="{x:Null}">github.com/firepooh/UartTerminal</Hyperlink>
+                           Foreground="{DynamicResource Blue}" TextDecorations="{x:Null}">github.com/firepooh/UartTerminal</Hyperlink>
             </TextBlock>
 
             <Button x:Name="OkButton" Content="{loc:Str Common.Ok}" Width="90" Height="30"

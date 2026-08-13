@@ -7,8 +7,8 @@
         Width="900" Height="700" MinWidth="760" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{StaticResource Bg}"
-        Foreground="{StaticResource Text}"
+        Background="{DynamicResource Bg}"
+        Foreground="{DynamicResource Text}"
         FontFamily="{StaticResource UiFont}">
     <Window.Resources>
         <!-- 목록 셀: 선택된 행(파란 배경)에서는 흰색으로 — 다른 표와 같은 방침 -->
@@ -25,7 +25,7 @@
             <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         </Style>
         <Style x:Key="CellOffset" TargetType="TextBlock" BasedOn="{StaticResource CellMono}">
-            <Setter Property="Foreground" Value="{StaticResource Blue}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Blue}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                     <Setter Property="Foreground" Value="White"/>
@@ -50,12 +50,12 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ProgressBar">
-                        <Border Background="{StaticResource Surface}" CornerRadius="5"
-                                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1">
+                        <Border Background="{DynamicResource Surface}" CornerRadius="5"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1">
                             <Grid>
                                 <Rectangle x:Name="PART_Track"/>
                                 <Rectangle x:Name="PART_Indicator" HorizontalAlignment="Left"
-                                           Fill="{StaticResource Green}" RadiusX="4" RadiusY="4" Margin="1"/>
+                                           Fill="{DynamicResource Green}" RadiusX="4" RadiusY="4" Margin="1"/>
                             </Grid>
                         </Border>
                     </ControlTemplate>
@@ -64,7 +64,7 @@
         </Style>
 
         <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
             <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
@@ -85,7 +85,7 @@
 
         <!-- 0) 안내 -->
         <TextBlock Grid.Row="0" Margin="2,0,0,10" FontSize="12.5" TextWrapping="Wrap"
-                   Foreground="{StaticResource TextDim}"
+                   Foreground="{DynamicResource TextDim}"
                    Text="{loc:Str Flash.Intro}"/>
 
         <!-- 1) zip 선택 -->
@@ -130,7 +130,7 @@
                       ToolTip="{loc:Str Flash.ChipTip}"
                       SelectionChanged="ChipBox_SelectionChanged"/>
             <TextBlock x:Name="PortText" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
-                       FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource Blue}" Text="—"/>
+                       FontFamily="{StaticResource MonoFont}" Foreground="{DynamicResource Blue}" Text="—"/>
             <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="2" Width="110" Height="30" Margin="10,0,0,0"
                       VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
             <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
@@ -142,8 +142,8 @@
         </Grid>
 
         <!-- 3) 목록 머리글 -->
-        <Border Grid.Row="3" Margin="0,12,0,0" Background="{StaticResource BgPanel}"
-                BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1" CornerRadius="6,6,0,0" Padding="10,6">
+        <Border Grid.Row="3" Margin="0,12,0,0" Background="{DynamicResource BgPanel}"
+                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" CornerRadius="6,6,0,0" Padding="10,6">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="30"/>
@@ -153,11 +153,11 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="210"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="1" Text="{loc:Str Flash.Offset}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="2" Text="{loc:Str Flash.Size}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="3" Text="{loc:Str Flash.Role}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="4" Text="{loc:Str Flash.File}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="5" Text="{loc:Str Flash.Note}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="1" Text="{loc:Str Flash.Offset}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="2" Text="{loc:Str Flash.Size}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="3" Text="{loc:Str Flash.Role}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="4" Text="{loc:Str Flash.File}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="5" Text="{loc:Str Flash.Note}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
             </Grid>
         </Border>
 
@@ -198,11 +198,11 @@
 
         <!-- 5) 경고/오류 -->
         <Border x:Name="NoticePane" Grid.Row="5" Margin="0,10,0,0" Visibility="Collapsed"
-                Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderBrush2}"
+                Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
                 BorderThickness="1" CornerRadius="6" Padding="10,8">
             <ScrollViewer MaxHeight="88" VerticalScrollBarVisibility="Auto">
                 <TextBlock x:Name="NoticeText" TextWrapping="Wrap" FontSize="11.5"
-                           Foreground="{StaticResource Amber}"/>
+                           Foreground="{DynamicResource Amber}"/>
             </ScrollViewer>
         </Border>
 
@@ -215,7 +215,7 @@
             <ProgressBar x:Name="Progress" Grid.Column="0" Style="{StaticResource FlashProgress}" VerticalAlignment="Center"/>
             <TextBlock x:Name="ProgressText" Grid.Column="1" Margin="10,0,0,0" MinWidth="190"
                        TextAlignment="Right" VerticalAlignment="Center" FontSize="11.5"
-                       Foreground="{StaticResource TextDim}" Text="{loc:Str Flash.Idle}"/>
+                       Foreground="{DynamicResource TextDim}" Text="{loc:Str Flash.Idle}"/>
         </Grid>
 
         <!-- 7) 로그 -->
@@ -233,7 +233,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="ToolText" Grid.Column="0" VerticalAlignment="Center" FontSize="11"
-                       Foreground="{StaticResource TextFaint}" TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource TextFaint}" TextTrimming="CharacterEllipsis"
                        Text="{loc:Str Flash.CheckingTool}"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button x:Name="StartButton" Content="{loc:Str Flash.Start}" Style="{StaticResource SendButton}"

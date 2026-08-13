@@ -4,11 +4,11 @@
         xmlns:loc="clr-namespace:UartTerminal"
         Title="{loc:Str Sess.Title}"
         Icon="/UartTerminal.ico"
-        Width="880" Height="500" MinWidth="720" MinHeight="400"
+        Width="880" Height="580" MinWidth="720" MinHeight="460"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{StaticResource Bg}"
-        Foreground="{StaticResource Text}"
+        Background="{DynamicResource Bg}"
+        Foreground="{DynamicResource Text}"
         FontFamily="{StaticResource UiFont}">
     <Window.Resources>
         <!-- 표 셀 텍스트: 선택된 행(파란 배경)에서는 흰색으로 바꿔 대비를 유지한다.
@@ -23,7 +23,7 @@
         </Style>
         <Style x:Key="CellPort" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
             <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
-            <Setter Property="Foreground" Value="{StaticResource Blue}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Blue}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                     <Setter Property="Foreground" Value="White"/>
@@ -32,7 +32,7 @@
         </Style>
         <Style x:Key="CellBaud" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
             <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                     <Setter Property="Foreground" Value="White"/>
@@ -47,9 +47,9 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-        <!-- 열 때 리셋: 켜진 항목만 눈에 띄게(꺼짐은 흐린 "—") -->
-        <Style x:Key="CellReset" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
-            <Setter Property="Foreground" Value="{Binding ResetBrush}"/>
+        <!-- 열 때 동작(리셋·MCP): 켜진 항목만 눈에 띄게(둘 다 꺼짐은 흐린 "—") -->
+        <Style x:Key="CellOnOpen" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
+            <Setter Property="Foreground" Value="{Binding OnOpenBrush}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                     <Setter Property="Foreground" Value="White"/>
@@ -78,27 +78,27 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Margin="2,0,0,10" FontSize="12.5" TextWrapping="Wrap"
-                   Foreground="{StaticResource TextDim}"
+                   Foreground="{DynamicResource TextDim}"
                    Text="{loc:Str Sess.Intro}"/>
 
         <!-- 표 머리글 -->
-        <Border Grid.Row="1" Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderBrush2}"
+        <Border Grid.Row="1" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
                 BorderThickness="1" CornerRadius="6,6,0,0" Padding="10,6">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="90"/>
                     <ColumnDefinition Width="80"/>
-                    <ColumnDefinition Width="88"/>
+                    <ColumnDefinition Width="108"/>
                     <ColumnDefinition Width="132"/>
                     <ColumnDefinition Width="126"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{loc:Str Common.Name}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="1" Text="{loc:Str Common.Port}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="2" Text="{loc:Str Common.Baud}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="3" Text="{loc:Str Sess.ResetCol}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="4" Text="{loc:Str Sess.NewlineCol}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
-                <TextBlock Grid.Column="5" Text="{loc:Str Common.CommandGroup}" Foreground="{StaticResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="0" Text="{loc:Str Common.Name}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="1" Text="{loc:Str Common.Port}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="2" Text="{loc:Str Common.Baud}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="4" Text="{loc:Str Sess.NewlineCol}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="5" Text="{loc:Str Common.CommandGroup}" Foreground="{DynamicResource TextMuted}" FontSize="11.5" FontWeight="SemiBold"/>
             </Grid>
         </Border>
 
@@ -113,14 +113,14 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="90"/>
                             <ColumnDefinition Width="80"/>
-                            <ColumnDefinition Width="88"/>
+                            <ColumnDefinition Width="108"/>
                             <ColumnDefinition Width="132"/>
                             <ColumnDefinition Width="126"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{Binding Name}" Style="{StaticResource Cell}"/>
                         <TextBlock Grid.Column="1" Text="{Binding Port}" Style="{StaticResource CellPort}"/>
                         <TextBlock Grid.Column="2" Text="{Binding Baud}" Style="{StaticResource CellBaud}"/>
-                        <TextBlock Grid.Column="3" Text="{Binding ResetDisplay}" Style="{StaticResource CellReset}"/>
+                        <TextBlock Grid.Column="3" Text="{Binding OnOpenDisplay}" Style="{StaticResource CellOnOpen}"/>
                         <TextBlock Grid.Column="4" Text="{Binding NewlineDisplay}" Style="{StaticResource CellNewline}"/>
                         <TextBlock Grid.Column="5" Text="{Binding GroupDisplay}" Style="{StaticResource CellGroup}"/>
                     </Grid>
@@ -130,7 +130,7 @@
 
         <!-- 선택 항목 편집 -->
         <Border Grid.Row="3" x:Name="EditPane" Margin="0,12,0,0" IsEnabled="False"
-                Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderBrush2}"
+                Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
                 BorderThickness="1" CornerRadius="8" Padding="12,10">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -145,12 +145,14 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Name}" Foreground="{StaticResource TextDim}" FontSize="11.5" Margin="2,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Baud}" Foreground="{StaticResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.CommandGroup}" Foreground="{StaticResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Foreground="{StaticResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Name}" Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="2,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Baud}" Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.CommandGroup}" Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="10,0,0,4"/>
 
                 <!-- MinWidth=0: 기본 스타일의 최소폭 때문에 * 열이 줄지 못해 오른쪽 [삭제] 가 잘리는 것을 막는다 -->
                 <TextBox x:Name="NameBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
@@ -159,20 +161,27 @@
                           VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
                 <ComboBox x:Name="GroupBox" Grid.Row="1" Grid.Column="2" Width="136" Height="30" Margin="10,0,0,0"
                           VerticalContentAlignment="Center" SelectionChanged="GroupBox_SelectionChanged"/>
-                <!-- 접속 속성이라 여기서 편집 가능(포트와 달리 세션이 진실의 출처) -->
-                <CheckBox x:Name="ResetCheck" Grid.Row="1" Grid.Column="3" Style="{StaticResource DarkCheckBox}"
-                          Content="{loc:Str Sess.Reset}" VerticalAlignment="Center" Margin="12,0,0,0"
-                          ToolTip="{loc:Str Sess.ResetTip}"
-                          Click="ResetCheck_Click"/>
+                <!-- 접속 속성이라 여기서 편집 가능(포트와 달리 세션이 진실의 출처).
+                     MCP 는 '탭마다 다른 파이프' 라 전역 설정이 될 수 없어 여기(세션)에 함께 둔다. -->
+                <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox x:Name="ResetCheck" Style="{StaticResource DarkCheckBox}"
+                              Content="{loc:Str Sess.Reset}" VerticalAlignment="Center" Margin="12,0,0,0"
+                              ToolTip="{loc:Str Sess.ResetTip}"
+                              Click="ResetCheck_Click"/>
+                    <CheckBox x:Name="McpCheck" Style="{StaticResource DarkCheckBox}"
+                              Content="{loc:Str Sess.Mcp}" VerticalAlignment="Center" Margin="14,0,0,0"
+                              ToolTip="{loc:Str Sess.McpTip}"
+                              Click="McpCheck_Click"/>
+                </StackPanel>
                 <Button x:Name="DeleteButton" Grid.Row="1" Grid.Column="4" Content="{loc:Str Common.Delete}"
                         Style="{StaticResource DialogButton}" MinWidth="64" MinHeight="30" Padding="0"
                         Margin="10,0,0,0" Click="Delete_Click"/>
 
                 <!-- 개행은 값이 길어 둘째 줄에 둔다. "(기본)"=지정 없음 → 접속 시 현재 값을 그대로 쓴다 -->
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Str Sess.NewlineRx}" Foreground="{StaticResource TextDim}"
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Str Sess.NewlineRx}" Foreground="{DynamicResource TextDim}"
                            FontSize="11.5" Margin="2,12,0,4"/>
                 <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{loc:Str Sess.NewlineTx}"
-                           Foreground="{StaticResource TextDim}" FontSize="11.5" Margin="10,12,0,4"/>
+                           Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="10,12,0,4"/>
                 <ComboBox x:Name="RxBox" Grid.Row="3" Grid.Column="0" Height="30" HorizontalAlignment="Left"
                           Width="210" VerticalContentAlignment="Center" Margin="2,0,0,0"
                           ToolTip="{loc:Str Sess.RxTip}"
@@ -181,6 +190,19 @@
                           HorizontalAlignment="Left" Width="136" VerticalContentAlignment="Center" Margin="10,0,0,0"
                           ToolTip="{loc:Str Sess.TxTip}"
                           SelectionChanged="TxBox_SelectionChanged"/>
+
+                <!-- 로그 폴더: 파일명이 아니라 '폴더' 다 — 이름은 열 때마다 규칙으로 새로 만든다 -->
+                <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="5" Text="{loc:Str Sess.LogFolder}"
+                           Foreground="{DynamicResource TextDim}" FontSize="11.5" Margin="2,12,0,4"/>
+                <TextBox x:Name="LogFolderBox" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                         Style="{StaticResource CommandInput}" MinHeight="30" MinWidth="0"
+                         ToolTip="{loc:Str Sess.LogFolderTip}" TextChanged="LogFolderBox_TextChanged"/>
+                <Button x:Name="LogFolderBrowse" Grid.Row="5" Grid.Column="3" Content="…"
+                        Style="{StaticResource DialogButton}" MinWidth="40" MinHeight="30" Padding="0"
+                        Margin="10,0,0,0" Click="LogFolderBrowse_Click"/>
+                <Button x:Name="LogFolderClear" Grid.Row="5" Grid.Column="4" Content="{loc:Str Common.Clear}"
+                        Style="{StaticResource DialogButton}" MinWidth="64" MinHeight="30" Padding="0"
+                        Margin="10,0,0,0" Click="LogFolderClear_Click"/>
             </Grid>
         </Border>
 
@@ -191,7 +213,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock x:Name="PathText" Foreground="{StaticResource TextFaint}" FontSize="11"
+                <TextBlock x:Name="PathText" Foreground="{DynamicResource TextFaint}" FontSize="11"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="380"/>
                 <Button Content="{loc:Str Common.OpenFolder}" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="24"
                         Padding="10,0" Margin="10,0,0,0" Click="OpenFolder_Click"/>
