@@ -50,6 +50,7 @@ public partial class ShellWindow : Window
     private readonly AppState _state;
     private readonly CommandStore _commands;
     private readonly SessionStore _sessions;
+    private readonly Core.Parsing.ParserStore _parsers;
     private readonly bool _isPrimary;
     private readonly Dictionary<TabItem, TabHooks> _hooks = new();
 
@@ -63,12 +64,14 @@ public partial class ShellWindow : Window
     private readonly Dictionary<UartDocumentView, TextBlock> _panelTitleTexts = new();
     private readonly Dictionary<UartDocumentView, Ellipse> _panelDots = new();
 
-    public ShellWindow(AppState state, CommandStore commands, SessionStore sessions, bool isPrimary)
+    public ShellWindow(AppState state, CommandStore commands, SessionStore sessions,
+                       Core.Parsing.ParserStore parsers, bool isPrimary)
     {
         InitializeComponent();
         _state = state;
         _commands = commands;
         _sessions = sessions;
+        _parsers = parsers;
         _isPrimary = isPrimary;
         if (isPrimary) Primary = this;
 
@@ -123,7 +126,7 @@ public partial class ShellWindow : Window
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
             return;
 
-        var doc = new UartDocumentView(_state, _commands, _sessions);
+        var doc = new UartDocumentView(_state, _commands, _sessions, _parsers);
         var ti = new TabItem { Tag = doc };
         AttachTab(ti, doc);
         Tabs.Items.Add(ti);
@@ -530,7 +533,7 @@ public partial class ShellWindow : Window
             StatusText.Text = Loc.S("Shell.OnlyOneTab");
             return;
         }
-        var floatWin = new ShellWindow(_state, _commands, _sessions, isPrimary: false);
+        var floatWin = new ShellWindow(_state, _commands, _sessions, _parsers, isPrimary: false);
         floatWin.Show();
         MoveTab(ti, floatWin);
         floatWin.Activate();
@@ -649,6 +652,9 @@ public partial class ShellWindow : Window
         var doc = ActiveDoc;
         MenuMcpEnabled.IsChecked = doc?.McpEnabled ?? false;
         MenuMcpReadOnly.IsChecked = doc?.McpReadOnly ?? false;
+        // 파싱 패널 체크도 여기서 — 문서가 McpStateChanged 를 '탭 크롬 갱신' 신호로 재사용한다.
+        MenuParsePanel.IsChecked = doc?.ParsePanelVisible ?? false;
+        BtnParsePanel.IsChecked = doc?.ParsePanelVisible ?? false;
 
         // 색은 테마에서 읽는다. 예전에는 여기서 new SolidColorBrush(0xD7BA7D) 처럼 코드에 박아
         // 라이트 테마에서 1.8:1 이 되어 '읽기 전용' 안전 표시가 상태바에서 사라졌다.
@@ -929,6 +935,12 @@ public partial class ShellWindow : Window
     private void McpReadOnly_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetReadOnly(MenuMcpReadOnly.IsChecked); RefreshMcpChrome(); }
     private void McpCopyCmd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.McpCopyCommand();
+
+    private void ParsePanel_Click(object sender, RoutedEventArgs e)
+    {
+        ActiveDoc?.ToggleParsePanel();
+        RefreshMcpChrome();   // 탭이 없을 때 눌러도 체크가 허상으로 남지 않게
+    }
 
     private void About_Click(object sender, RoutedEventArgs e)
         => new AboutDialog { Owner = this }.ShowDialog();

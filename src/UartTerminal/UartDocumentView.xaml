@@ -78,10 +78,91 @@
 
         <Grid>
             <Grid.ColumnDefinitions>
+                <!-- 터미널(+스크롤바) | 스플리터 | 파싱 패널.
+                     스플리터의 PreviousAndNext 가 '터미널 열 ↔ 패널 열' 을 조절해야 하므로
+                     스크롤바는 터미널과 함께 안쪽 Grid 로 묶는다(사이에 끼면 스플리터가 스크롤바 열을 늘린다). -->
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <!-- 파싱 패널 열: 숨김일 때 0, 표시할 때 코드가 저장된 폭을 되살린다(스플리터가 이 폭을 조절) -->
+                <ColumnDefinition x:Name="ParseCol" Width="0"/>
             </Grid.ColumnDefinitions>
-            <Border x:Name="ViewHost" Grid.Column="0" Background="{DynamicResource Bg}"/>
+
+            <Grid Grid.Column="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border x:Name="ViewHost" Grid.Column="0" Background="{DynamicResource Bg}"/>
+                <ScrollBar x:Name="VScroll" Grid.Column="1" Orientation="Vertical"
+                           Minimum="0" Maximum="0" SmallChange="1" Scroll="VScroll_Scroll"/>
+            </Grid>
+
+            <!-- 파싱 패널 폭 조절 스플리터(패널과 함께 나타난다) -->
+            <GridSplitter x:Name="ParseSplitter" Grid.Column="1" Width="5" Visibility="Collapsed"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          Background="Transparent" ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Columns" Focusable="False"/>
+
+            <!-- 메시지 파싱 패널: 장비→서버 보고 라인(T블록)을 필드 정의(parsers.json)로 해석해 보여준다.
+                 기본은 최신 메시지 따라가기, 터미널에서 텍스트를 선택하면 그 메시지로 고정된다. -->
+            <Border x:Name="ParsePanel" Grid.Column="2" Visibility="Collapsed"
+                    Background="{DynamicResource BgPanel}"
+                    BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1,0,0,0">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="12,7"
+                            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- 제목 툴팁 = 현재 정의 파일 전체 경로(코드가 채운다) -->
+                            <TextBlock x:Name="ParseTitle" Grid.Column="0" Text="{loc:Str Parse.Title}"
+                                       Style="{StaticResource TableHeaderText}" VerticalAlignment="Center"/>
+                            <!-- 선택으로 고정됐을 때만 나타난다 — 누르면 다시 최신 메시지를 따라간다 -->
+                            <Button x:Name="ParseFollowButton" Grid.Column="1" Visibility="Collapsed"
+                                    Content="{loc:Str Parse.FollowLatest}" Style="{StaticResource DialogButton}"
+                                    MinWidth="0" MinHeight="22" Padding="8,0" Focusable="False"
+                                    Click="ParseFollow_Click"/>
+                            <Button Grid.Column="2" Content="{loc:Str Common.Clear}" Style="{StaticResource DialogButton}"
+                                    MinWidth="0" MinHeight="22" Padding="8,0" Margin="6,0,0,0" Focusable="False"
+                                    ToolTip="{loc:Str Parse.ClearTip}" Click="ParseClear_Click"/>
+                            <Button Grid.Column="3" Content="{loc:Str Parse.PickFile}" Style="{StaticResource DialogButton}"
+                                    MinWidth="0" MinHeight="22" Padding="8,0" Margin="6,0,0,0" Focusable="False"
+                                    ToolTip="{loc:Str Parse.PickFileTip}" Click="ParsePickFile_Click"/>
+                            <Button Grid.Column="4" Content="✕" Style="{StaticResource DialogButton}"
+                                    MinWidth="0" MinHeight="22" Padding="7,0" Margin="6,0,0,0" Focusable="False"
+                                    Click="ParseClose_Click"/>
+                        </Grid>
+                    </Border>
+                    <!-- 메시지 키 필터: 정의 파일의 키마다 체크박스 — 보고 싶은 것만 남긴다.
+                         ItemWidth 로 열이 맞춰지고(키 길이가 달라도 격자 정렬), 오른쪽에 전체/해제. -->
+                    <Border DockPanel.Dock="Top" Padding="12,6"
+                            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="0,0,0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <WrapPanel x:Name="ParseKeyFilter" Grid.Column="0" ItemWidth="62"/>
+                            <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top">
+                                <Button Content="{loc:Str Parse.SelectAll}" Style="{StaticResource DialogButton}"
+                                        MinWidth="0" MinHeight="22" Padding="8,0" Focusable="False"
+                                        Click="ParseSelectAll_Click"/>
+                                <Button Content="{loc:Str Parse.SelectNone}" Style="{StaticResource DialogButton}"
+                                        MinWidth="0" MinHeight="22" Padding="8,0" Margin="0,5,0,0" Focusable="False"
+                                        Click="ParseSelectNone_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+                        <StackPanel x:Name="ParseHost" Margin="12,8,12,12"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
 
             <!-- 스크롤백 검색 바(Ctrl+F). 우상단, 매치 하이라이트 + 이전/다음 이동. Esc 로 닫기. -->
             <Border x:Name="FindBar" Grid.Column="0" Visibility="Collapsed"
@@ -115,9 +196,6 @@
                 <TextBlock x:Name="ZoomText" Foreground="{DynamicResource Text}"
                            FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource Font.Emph}" FontWeight="Bold"/>
             </Border>
-
-            <ScrollBar x:Name="VScroll" Grid.Column="1" Orientation="Vertical"
-                       Minimum="0" Maximum="0" SmallChange="1" Scroll="VScroll_Scroll"/>
         </Grid>
     </DockPanel>
 </UserControl>

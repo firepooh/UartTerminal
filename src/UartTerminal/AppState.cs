@@ -53,6 +53,12 @@ public sealed class AppState
     /// <summary>마지막 로그 파일 경로 — 이어 쓰기 워크플로에서 같은 파일을 바로 다시 고르게.</summary>
     public string? LastLogFile { get; set; }
 
+    /// <summary>메시지 파서 정의 파일 경로. null = 기본(%APPDATA%\UartTerminal\parsers.json). 프로젝트마다 정의 파일을 골라 쓴다.</summary>
+    public string? ParserFilePath { get; set; }
+
+    /// <summary>파싱 패널에서 체크 해제한 메시지 키(예: "T12"). '해제' 를 저장해야 정의 파일에 새 키가 생겼을 때 기본으로 보인다.</summary>
+    public List<string> ParseDisabledKeys { get; set; } = new();
+
     /// <summary>
     /// 포트를 열 때 EN 펄스로 보드를 리셋할지(ESP32 devkit 의 DTR/RTS 자동 리셋 회로 이용). 기본 꺼짐.
     /// 켜면 연결/재연결마다 보드가 재부팅되어 부팅 로그를 처음부터 볼 수 있다.

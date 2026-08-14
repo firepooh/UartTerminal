@@ -478,6 +478,15 @@
         <LineGeometry StartPoint="2.5,8" EndPoint="13.5,8"/>
     </GeometryGroup>
 
+    <!-- 메시지 파싱 패널: 오른쪽 사이드 패널이 열린 모양 + 필드 줄 두 개 -->
+    <GeometryGroup x:Key="Ic.Parse">
+        <RectangleGeometry Rect="2.5,3.5,11,9" RadiusX="1.5" RadiusY="1.5"/>
+        <LineGeometry StartPoint="9.5,3.5" EndPoint="9.5,12.5"/>
+        <LineGeometry StartPoint="11,6" EndPoint="12.2,6"/>
+        <LineGeometry StartPoint="11,8" EndPoint="12.2,8"/>
+        <LineGeometry StartPoint="11,10" EndPoint="12.2,10"/>
+    </GeometryGroup>
+
     <!-- 분할 툴바용 ToggleButton: 활성 시 accent 채움. 아이콘 지오메트리는 Tag 로 전달. -->
     <Style x:Key="SplitToggle" TargetType="ToggleButton">
         <Setter Property="Width" Value="26"/>

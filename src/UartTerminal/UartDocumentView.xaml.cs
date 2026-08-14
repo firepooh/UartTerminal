@@ -24,6 +24,7 @@ public partial class UartDocumentView : UserControl
     private readonly AppState _state;
     private readonly CommandStore _commands;
     private readonly SessionStore _sessions;
+    private readonly Core.Parsing.ParserStore _parsers;
 
     // 연결 시 선택된 통신 속도를 담는다(readonly 아님). 수동 재연결·자동 재연결(TryOpenSessionCore)·
     // MCP uart_open 이 모두 이 필드를 쓰므로, 여기만 갱신하면 세 경로가 같은 속도로 일관되게 열린다.
@@ -84,12 +85,14 @@ public partial class UartDocumentView : UserControl
         }
     }
 
-    public UartDocumentView(AppState state, CommandStore commands, SessionStore sessions)
+    public UartDocumentView(AppState state, CommandStore commands, SessionStore sessions,
+                            Core.Parsing.ParserStore parsers)
     {
         InitializeComponent();
         _state = state;
         _commands = commands;
         _sessions = sessions;
+        _parsers = parsers;
         // 마지막으로 쓴 값을 새 탭의 기본값으로(세션 없이 열 때 이 값이 그대로 쓰인다)
         _resetOnOpen = state.ResetOnOpen;
         _nlRx = state.NewlineRx;
@@ -257,7 +260,11 @@ public partial class UartDocumentView : UserControl
         // 연속 로깅 tee: 로거가 없으면 null 체크 한 번이 전부라 상시 걸어 둔다.
         // 컨트롤러에 걸려 있어 재연결로 세션이 바뀌어도 로깅이 이어진다.
         _conn.RxTee = data => _logger?.Append(data.Span);                      // 원시 모드
-        _conn.AfterReceive = () => _logger?.AppendRenderedLines(_engine.Buffer); // 화면 모드
+        _conn.AfterReceive = () =>                                             // RX 워커 스레드
+        {
+            _logger?.AppendRenderedLines(_engine.Buffer);                      // 화면 모드 로깅
+            QueueParseScan();                                                  // 파싱 패널(있으면)
+        };
 
         // uart_close/uart_open 은 MCP 서버 스레드에서 호출되므로 UI 스레드로 마샬링해 포트를 닫고/연다.
         _bridge.SetPortController(
@@ -269,6 +276,7 @@ public partial class UartDocumentView : UserControl
         _view = new TerminalView(_engine.Buffer) { FontSize = _state.FontSize, ShowTimestamps = _state.ShowTimestamps };
         _view.ScrollMetricsChanged += OnScrollMetrics;
         _view.AutoCopyRequested += TrySetClipboard;
+        _view.AutoCopyRequested += MaybePinParse;   // 선택 텍스트에 정의된 메시지가 있으면 패널을 그 메시지로 고정
         _view.PasteRequested += DoPaste;
         ViewHost.Child = _view;
     }
@@ -500,6 +508,393 @@ public partial class UartDocumentView : UserControl
         SyncGroupSelector();
         RebuildCommandChips();
         RefreshMetrics();
+    }
+
+    // ── 메시지 파싱 패널 ─────────────────────────────────────────────────────────
+    // 장비→서버 보고 라인("T5=v_v_v&…" 류)을 parsers.json 의 필드 정의로 해석해 오른쪽에 보여준다.
+    // 엔진(Core.Parsing)은 프로토콜을 모른다 — 어떤 키·필드가 있는지는 전부 사용자 정의 파일이 정한다.
+    //
+    // 패널은 '마지막 라인' 이 아니라 <b>키별 최신 상태</b>를 누적해 보여준다: T5 가 갱신돼도
+    // 그 전에 온 T11·T16 은 그대로 남는다(장비 상태 대시보드). 키마다 수신 횟수를 세고,
+    // 섹션 제목 클릭으로 접고 펼친다(기본값은 정의 파일의 collapsed).
+
+    private bool _parsePinned;              // 선택으로 고정됨(최신 따라가기 중지)
+    private long _parseNextAbs = -1;        // 다음에 살필 절대 라인 번호(로거와 같은 방식)
+    private int _parseScanQueued;           // RX 스레드 → UI 디스패치 병합(0/1)
+    private double _parsePanelWidth = 320;  // 마지막으로 쓴 패널 폭(스플리터 조절값을 토글 간에 유지)
+
+    /// <summary>키 → 마지막으로 수신한 블록(누적 상태). 새 수신은 그 키만 덮어쓴다.</summary>
+    private readonly Dictionary<string, Core.Parsing.ParsedBlock> _parseBlocks = new(StringComparer.Ordinal);
+
+    /// <summary>키 → 수신 횟수(패널이 본 것 기준 — 지우기로 리셋).</summary>
+    private readonly Dictionary<string, int> _parseCounts = new(StringComparer.Ordinal);
+
+    /// <summary>키 → 사용자가 토글한 펼침 상태. 없으면 정의의 collapsed 기본값을 따른다.</summary>
+    private readonly Dictionary<string, bool> _parseExpanded = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 체크 해제된 키를 뺀 활성 정의. 스캔·고정·렌더가 모두 이걸 쓴다 —
+    /// 렌더만 거르면 "T12만 있는 라인"이 여전히 패널을 갱신해 빈 화면이 된다.
+    /// </summary>
+    private Dictionary<string, Core.Parsing.MessageSpec> ActiveSpecs()
+    {
+        var all = _parsers.ByKey;
+        if (_state.ParseDisabledKeys.Count == 0)
+            return new Dictionary<string, Core.Parsing.MessageSpec>(all, StringComparer.Ordinal);
+
+        var active = new Dictionary<string, Core.Parsing.MessageSpec>(StringComparer.Ordinal);
+        foreach (var (key, spec) in all)
+            if (!_state.ParseDisabledKeys.Contains(key)) active[key] = spec;
+        return active;
+    }
+
+    /// <summary>파싱 패널 표시 여부(셸 메뉴/툴바 체크 동기화용).</summary>
+    public bool ParsePanelVisible => ParsePanel.Visibility == Visibility.Visible;
+
+    public void ToggleParsePanel()
+    {
+        if (ParsePanelVisible) { SetParsePanelVisible(false); return; }
+
+        _parsers.Load();   // 켤 때마다 다시 읽는다 — 정의 파일을 고치고 토글이 곧 리로드다
+        if (_parsers.LastError is { } err) SetStatus(Loc.Format(err));
+
+        SetParsePanelVisible(true);
+        _parsePinned = false;
+        ParseFollowButton.Visibility = Visibility.Collapsed;
+        ParseTitle.ToolTip = _parsers.FilePath;
+        BuildParseKeyFilter();
+        // 누적 상태는 토글해도 유지된다. 숨겨진 동안 온 것은 _parseNextAbs 부터 따라잡는다
+        // (첫 열기는 -1 이라 스크롤백 전체를 흡수 — 지나간 보고도 대시보드에 실린다).
+        ScanNewLinesForParse();
+        RenderParsePanel();
+    }
+
+    /// <summary>다른 정의 파일 선택(프로젝트마다 프로토콜이 다르다). 선택 즉시 리로드·재렌더.</summary>
+    private void ParsePickFile_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = Loc.S("Parse.PickFileTip"),
+            Filter = "JSON|*.json|All|*.*",
+        };
+        try
+        {
+            if (Path.GetDirectoryName(_parsers.FilePath) is { Length: > 0 } dir && Directory.Exists(dir))
+                dlg.InitialDirectory = dir;
+        }
+        catch { }
+
+        if (dlg.ShowDialog(OwnerWindow) != true) return;
+
+        _parsers.SetPath(dlg.FileName);
+        _state.ParserFilePath = dlg.FileName;
+        _state.Save();
+
+        _parsers.Load();
+        if (_parsers.LastError is { } err) SetStatus(Loc.Format(err));
+        ParseTitle.ToolTip = _parsers.FilePath;
+        BuildParseKeyFilter();
+        _parsePinned = false;
+        ParseFollowButton.Visibility = Visibility.Collapsed;
+        // 다른 프로토콜 정의로 갈아탔다 — 옛 정의로 해석된 누적 상태는 무의미하므로 함께 비운다.
+        ClearParseState();
+        ScanNewLinesForParse();
+        RenderParsePanel();
+    }
+
+    /// <summary>정의 파일의 키마다 체크박스를 만든다(파일에 적힌 순서). 해제한 키는 전역 설정에 남는다.</summary>
+    private void BuildParseKeyFilter()
+    {
+        ParseKeyFilter.Children.Clear();
+        foreach (var spec in _parsers.Items)
+        {
+            var cb = new CheckBox
+            {
+                Content = spec.Key,   // loc:data — 프로토콜 키 그대로
+                IsChecked = !_state.ParseDisabledKeys.Contains(spec.Key),
+                Style = (Style)FindResource("AppCheckBox"),
+                Margin = new Thickness(0, 2, 0, 2),   // 열 정렬은 WrapPanel.ItemWidth 가 담당
+                Focusable = false,
+                ToolTip = spec.Name.Length > 0 ? spec.Name : null,
+            };
+            string key = spec.Key;
+            cb.Click += (_, _) =>
+            {
+                if (cb.IsChecked == true) _state.ParseDisabledKeys.Remove(key);
+                else if (!_state.ParseDisabledKeys.Contains(key)) _state.ParseDisabledKeys.Add(key);
+                ApplyParseFilterChange();
+            };
+            ParseKeyFilter.Children.Add(cb);
+        }
+    }
+
+    /// <summary>필터가 바뀐 뒤 공통 처리: 저장하고 다시 그린다(누적 상태는 유지 — 다시 켜면 그대로 보인다).</summary>
+    private void ApplyParseFilterChange()
+    {
+        _state.Save();
+        RenderParsePanel();
+    }
+
+    /// <summary>전체 선택/해제. <b>현재 정의 파일의 키만</b> 건드린다 — 다른 정의 파일에서 해제해 둔 키를 지우지 않게.</summary>
+    private void ParseSelectAll_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var spec in _parsers.Items)
+            _state.ParseDisabledKeys.Remove(spec.Key);
+        BuildParseKeyFilter();
+        ApplyParseFilterChange();
+    }
+
+    private void ParseSelectNone_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var spec in _parsers.Items)
+            if (!_state.ParseDisabledKeys.Contains(spec.Key)) _state.ParseDisabledKeys.Add(spec.Key);
+        BuildParseKeyFilter();
+        ApplyParseFilterChange();
+    }
+
+    /// <summary>누적 상태·수신 횟수 전부 삭제. 스크롤백을 다시 흡수하지 않도록 스캔 위치는 버퍼 끝으로.</summary>
+    private void ParseClear_Click(object sender, RoutedEventArgs e)
+    {
+        ClearParseState();
+        if (_engine is not null)
+        {
+            var buffer = _engine.Buffer;
+            lock (buffer.SyncRoot)
+                _parseNextAbs = buffer.TrimmedCount + buffer.LineCount - 1;
+        }
+        RenderParsePanel();
+    }
+
+    private void ClearParseState()
+    {
+        _parseBlocks.Clear();
+        _parseCounts.Clear();
+        _parseExpanded.Clear();
+    }
+
+    private void SetParsePanelVisible(bool on)
+    {
+        if (on)
+        {
+            // 저장된 폭 복원 + 스플리터로 조절 가능하게 상·하한을 건다(0까지 끌면 다시 못 잡는다).
+            // 상한은 사실상 화면이 정한다 — 터미널 열(*)이 최소 폭을 지키므로 무한정 커지지 않는다.
+            ParseCol.MinWidth = 200;
+            ParseCol.MaxWidth = 2000;
+            ParseCol.Width = new GridLength(Math.Clamp(_parsePanelWidth, 200, 2000));
+        }
+        else
+        {
+            if (ParsePanelVisible) _parsePanelWidth = ParseCol.ActualWidth;   // 조절한 폭 기억
+            ParseCol.MinWidth = 0;
+            ParseCol.MaxWidth = double.PositiveInfinity;
+            ParseCol.Width = new GridLength(0);
+        }
+        ParsePanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        ParseSplitter.Visibility = ParsePanel.Visibility;
+        McpStateChanged?.Invoke();   // 셸 체크 상태 갱신(전용 이벤트를 늘리는 대신 기존 크롬 갱신 신호를 재사용)
+    }
+
+    private void ParseClose_Click(object sender, RoutedEventArgs e) => ToggleParsePanel();
+
+    /// <summary>선택 고정 해제 — 밀린 수신을 따라잡고 다시 최신을 따라간다.</summary>
+    private void ParseFollow_Click(object sender, RoutedEventArgs e)
+    {
+        _parsePinned = false;
+        ParseFollowButton.Visibility = Visibility.Collapsed;
+        ScanNewLinesForParse();
+        RenderParsePanel();
+    }
+
+    /// <summary>수신 처리 직후(RX 워커 스레드). UI 디스패치를 1건으로 병합해 수신 속도에 영향을 주지 않는다.</summary>
+    private void QueueParseScan()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            if (Interlocked.Exchange(ref _parseScanQueued, 1) == 1) return;
+            Dispatcher.BeginInvoke(ScanNewLinesForParse, DispatcherPriority.Background);
+            return;
+        }
+        ScanNewLinesForParse();
+    }
+
+    /// <summary>
+    /// 마지막으로 본 지점 이후의 <b>완성된</b> 줄에서 정의된 키를 찾아 키별 누적 상태를 갱신한다.
+    /// 절대 라인 번호로 진행하므로 스크롤백이 잘려도 같은 줄을 두 번 세지 않는다(로거와 동일한 규칙).
+    /// </summary>
+    private void ScanNewLinesForParse()
+    {
+        Interlocked.Exchange(ref _parseScanQueued, 0);
+        if (!ParsePanelVisible || _parsePinned || _engine is null) return;
+        var specs = ActiveSpecs();
+        if (specs.Count == 0) return;
+
+        // 매칭 라인만 락 밖으로 복사해 파싱한다(첫 열기엔 스크롤백 전체가 대상일 수 있다).
+        var matched = new List<string>();
+        var buffer = _engine.Buffer;
+        lock (buffer.SyncRoot)
+        {
+            long first = buffer.TrimmedCount;
+            long endAbs = first + buffer.LineCount - 1;          // 마지막(진행 중) 줄 제외
+            if (_parseNextAbs < first) _parseNextAbs = first;
+
+            for (long abs = _parseNextAbs; abs < endAbs; abs++)
+            {
+                string text = buffer.GetLine((int)(abs - first)).Text();
+                if (Core.Parsing.MessageParser.ContainsAnyKey(text, specs))
+                    matched.Add(text);
+            }
+            _parseNextAbs = Math.Max(_parseNextAbs, endAbs);
+        }
+        if (matched.Count == 0) return;
+
+        foreach (string line in matched)
+        {
+            foreach (var block in Core.Parsing.MessageParser.ParseLine(line, specs))
+            {
+                _parseBlocks[block.Key] = block;
+                _parseCounts[block.Key] = _parseCounts.GetValueOrDefault(block.Key) + 1;
+            }
+        }
+        RenderParsePanel();
+    }
+
+    /// <summary>
+    /// 터미널에서 텍스트를 선택하면(자동 복사 경로) 그 안의 메시지로 해당 키 섹션을 덮어쓰고 고정한다.
+    /// 고정 동안은 새 수신이 반영되지 않는다(옛 메시지를 차분히 보라고 멈추는 것). 횟수는 세지 않는다 —
+    /// 수신이 아니라 다시 보기다.
+    /// </summary>
+    private void MaybePinParse(string text)
+    {
+        if (!ParsePanelVisible) return;
+        var blocks = Core.Parsing.MessageParser.ParseLine(text, ActiveSpecs());
+        if (blocks.Count == 0) return;
+
+        _parsePinned = true;
+        ParseFollowButton.Visibility = Visibility.Visible;
+        foreach (var block in blocks)
+            _parseBlocks[block.Key] = block;
+        RenderParsePanel();
+    }
+
+    private void ShowParsePlaceholder()
+    {
+        ParseHost.Children.Clear();
+        var tb = new TextBlock
+        {
+            Style = (Style)FindResource("HintText"),
+            Margin = new Thickness(2, 6, 2, 0),
+        };
+        tb.Text = _parsers.ByKey.Count == 0
+            ? Loc.F("Parse.NoSpecs", _parsers.FilePath)
+            : Loc.S("Parse.Waiting");
+        ParseHost.Children.Add(tb);
+    }
+
+    private bool IsParseExpanded(Core.Parsing.MessageSpec spec) =>
+        _parseExpanded.TryGetValue(spec.Key, out bool on) ? on : !spec.Collapsed;
+
+    /// <summary>
+    /// 누적 상태를 정의 파일 순서로 그린다. 섹션 = 제목(펼침 토글 + 수신 횟수) + (펼쳤을 때) 필드 그리드.
+    /// 수신마다 전체를 다시 만들지만(1초 주기 수십 개 TextBlock) WPF 에서 문제되지 않는 규모다.
+    /// </summary>
+    private void RenderParsePanel()
+    {
+        var specs = ActiveSpecs();
+        var visible = _parsers.Items.Where(s => specs.ContainsKey(s.Key) && _parseBlocks.ContainsKey(s.Key)).ToList();
+        if (visible.Count == 0) { ShowParsePlaceholder(); return; }
+
+        ParseHost.Children.Clear();
+        var mono = (FontFamily)FindResource("MonoFont");
+
+        foreach (var spec in visible)
+        {
+            var block = _parseBlocks[spec.Key];
+            bool expanded = IsParseExpanded(spec);
+
+            // 제목 줄: "▾ T5 — 상태 보고  [123]" — 클릭으로 접고 펼친다.
+            var header = new TextBlock
+            {
+                Style = (Style)FindResource("TableHeaderText"),
+                Background = Brushes.Transparent,   // 없으면 히트 테스트에서 빠져 클릭이 오지 않는다
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, ParseHost.Children.Count == 0 ? 4 : 12, 0, expanded ? 5 : 0),
+            };
+            header.Inlines.Add(new System.Windows.Documents.Run(expanded ? "▾ " : "▸ ")
+            { Foreground = Theme.Brush("TextFaint") });
+            header.Inlines.Add(new System.Windows.Documents.Run(
+                block.Name.Length > 0 ? $"{block.Key} — {block.Name}" : block.Key)
+            { Foreground = Theme.Brush("Accent") });
+            header.Inlines.Add(new System.Windows.Documents.Run($"  [{_parseCounts.GetValueOrDefault(spec.Key)}]")
+            { Foreground = Theme.Brush("TextMuted"), FontFamily = mono });
+
+            string key = spec.Key;
+            var specRef = spec;
+            header.MouseLeftButtonUp += (_, _) =>
+            {
+                _parseExpanded[key] = !IsParseExpanded(specRef);
+                RenderParsePanel();
+            };
+            ParseHost.Children.Add(header);
+
+            if (!expanded) continue;
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(128) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            int row = 0;
+            foreach (var f in block.Fields)
+            {
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                var name = new TextBlock
+                {
+                    Text = f.Name,
+                    Style = (Style)FindResource("CaptionText"),
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Margin = new Thickness(12, 1, 8, 1),
+                };
+                Grid.SetRow(name, row); Grid.SetColumn(name, 0);
+                grid.Children.Add(name);
+
+                // 해석이 있으면 해석을 앞에, 원시 값을 흐리게 뒤에 — 원시 값은 항상 남긴다(검증 가능해야 한다).
+                var value = new TextBlock
+                {
+                    FontFamily = mono,
+                    FontSize = (double)FindResource("Font.Caption"),
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 1, 0, 1),
+                };
+                string raw = f.Raw.Length == 0 ? "—" : f.Raw;
+                if (f.Decoded is { } dec)
+                {
+                    value.Inlines.Add(new System.Windows.Documents.Run(dec + (f.Unit is { } u1 ? " " + u1 : ""))
+                    { Foreground = Theme.Brush("Text") });
+                    value.Inlines.Add(new System.Windows.Documents.Run($"  ({raw})")
+                    { Foreground = Theme.Brush("TextFaint") });
+                }
+                else
+                {
+                    value.Inlines.Add(new System.Windows.Documents.Run(raw + (f.Unit is { } u2 ? " " + u2 : ""))
+                    { Foreground = Theme.Brush(f.Raw.Length == 0 ? "TextFaint" : "Text") });
+                }
+                Grid.SetRow(value, row); Grid.SetColumn(value, 1);
+                grid.Children.Add(value);
+                row++;
+            }
+            ParseHost.Children.Add(grid);
+
+            if (block.MissingCount > 0)
+            {
+                var missing = new TextBlock
+                {
+                    Text = Loc.F("Parse.MissingFields", block.MissingCount),
+                    Style = (Style)FindResource("CaptionText"),
+                    Margin = new Thickness(12, 3, 0, 0),
+                };
+                ParseHost.Children.Add(missing);
+            }
+        }
     }
 
     // ── 세션 문맥(이 탭이 어떤 세션으로 열렸는지) ────────────────────────────────

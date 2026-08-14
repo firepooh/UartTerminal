@@ -53,7 +53,11 @@ public partial class App : Application
             DiagLog.Exception("SessionStore.Load", ex);
         }
 
-        var shell = new ShellWindow(state, commands, sessions, isPrimary: true);
+        // 파서 정의(parsers.json)는 없어도 된다 — 패널을 켤 때 다시 읽으므로 시작 시엔 경로만 잡는다.
+        var parsers = new Core.Parsing.ParserStore(
+            state.ParserFilePath ?? Path.Combine(AppState.Dir, "parsers.json"));
+
+        var shell = new ShellWindow(state, commands, sessions, parsers, isPrimary: true);
         MainWindow = shell;
         shell.Show();
     }
