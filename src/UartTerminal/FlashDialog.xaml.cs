@@ -116,6 +116,13 @@ public partial class FlashDialog : Window
     private bool _running;
     private bool _syncing;
 
+    // ── 영역 굽기 탭 ──
+    /// <summary>주소 기본값. 안내문(Flash.RegionIntro)에도 명기돼 있다 — 바꿨다가 되돌릴 때 보라고.</summary>
+    private const string DefaultRegionAddress = "0xD90000";
+
+    private IReadOnlyList<string> _regionBins = Array.Empty<string>();   // 풀린 bin 전체 경로(BinBox 와 같은 순서)
+    private bool _srcLoading;   // 다운로드/압축 해제 중(시작 버튼 잠금)
+
     private FlashDialog(AppState state, string portName, Func<Task<bool>> releasePort, Func<Task<bool>> reopenPort)
     {
         InitializeComponent();
@@ -174,6 +181,155 @@ public partial class FlashDialog : Window
         // 지난번 zip 이 그대로 있으면 바로 불러온다(반복 작업이 대부분이다).
         if (!string.IsNullOrEmpty(_state.LastFlashZip) && File.Exists(_state.LastFlashZip!))
             LoadPackage(_state.LastFlashZip!);
+
+        // 주소: 마지막으로 쓴 값, 없으면 기본값. 소스는 복원만 한다 —
+        // 실제 불러오기는 영역 탭에 들어올 때(탭 전환 핸들러) 일어난다.
+        AddrBox.Text = string.IsNullOrWhiteSpace(_state.LastRegionAddress)
+            ? DefaultRegionAddress : _state.LastRegionAddress!;
+        if (!string.IsNullOrEmpty(_state.LastRegionSource)) SrcBox.Text = _state.LastRegionSource!;
+
+        UpdateButtons();
+    }
+
+    // ── 영역 굽기: 소스(bin/zip/http) 해석 ──────────────────────────────────────
+
+    private void SrcBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = Loc.S("Flash.RegionSourcePick"),
+            Filter = Loc.S("Flash.RegionSourceFilter"),
+            CheckFileExists = true,
+        };
+        try
+        {
+            string cur = SrcBox.Text.Trim();
+            if (cur.Length > 0 && !RegionSourceResolver.IsUrl(cur)
+                && Path.GetDirectoryName(cur) is { Length: > 0 } dir && Directory.Exists(dir))
+                dlg.InitialDirectory = dir;
+        }
+        catch { }
+        if (dlg.ShowDialog(this) != true) return;
+
+        SrcBox.Text = dlg.FileName;
+        _ = ResolveSourceAsync();
+    }
+
+    private void SrcLoad_Click(object sender, RoutedEventArgs e) => _ = ResolveSourceAsync();
+
+    private void SrcBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter) { e.Handled = true; _ = ResolveSourceAsync(); }
+    }
+
+    /// <summary>소스를 바꾸면 이미 준비된 BIN 은 낡은 것이다 — 비우고 [불러오기] 유도로 되돌린다.</summary>
+    private void SrcBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_srcLoading || _running) return;
+        if (_regionBins.Count > 0)
+        {
+            _regionBins = Array.Empty<string>();
+            BinBox.ItemsSource = null;
+        }
+        UpdateButtons();
+    }
+
+    /// <summary>
+    /// 소스를 로컬 bin 목록으로 푼다: http 링크면 내려받고, zip 이면 풀고(*.bin 만), bin 이면 그대로.
+    /// bin 이 여럿이면 사용자가 고른다 — 잘못된 파일을 잘못된 주소에 구우면 장비가 손상되므로 추측하지 않는다.
+    /// </summary>
+    private async Task ResolveSourceAsync()
+    {
+        if (_srcLoading || _running) return;
+        string input = SrcBox.Text.Trim();
+        if (input.Length == 0) return;
+
+        _srcLoading = true;
+        _regionBins = Array.Empty<string>();
+        BinBox.ItemsSource = null;
+        BinInfoText.Text = "";
+        UpdateButtons();
+        try
+        {
+            string file = input;
+            if (RegionSourceResolver.IsUrl(input))
+            {
+                Log(Loc.F("Flash.Log.Downloading", input));
+                file = await RegionSourceResolver.DownloadAsync(
+                    input, Path.Combine(AppState.Dir, "flash", "download"), CancellationToken.None);
+                Log(Loc.F("Flash.Log.Downloaded", Path.GetFileName(file), new FileInfo(file).Length / 1024.0));
+            }
+            else if (!File.Exists(file))
+            {
+                AppendNotice(Loc.F("Flash.Msg.SourceMissing", file));
+                return;
+            }
+
+            var bins = await Task.Run(() =>
+                RegionSourceResolver.ResolveBins(file, Path.Combine(AppState.Dir, "flash")));
+
+            _regionBins = bins;
+            BinBox.ItemsSource = bins.Select(p => Path.GetFileName(p)).ToList();
+            BinBox.SelectedIndex = bins.Count > 0 ? 0 : -1;
+            if (bins.Count == 0) AppendNotice(Loc.S("Flash.Msg.NoBin"));
+            else if (bins.Count > 1) Log(Loc.F("Flash.Log.PickBin", bins.Count));
+
+            _state.LastRegionSource = input;
+            _state.Save();
+        }
+        catch (Exception ex)
+        {
+            AppendNotice(Loc.F("Flash.Msg.SourceFailed", ex.Message));
+            DiagLog.Exception("FlashRegionSource", ex);   // 점 없는 태그 — Loc 키 린트에 걸리지 않게
+        }
+        finally
+        {
+            _srcLoading = false;
+            UpdateButtons();
+        }
+    }
+
+    private string? SelectedBinPath =>
+        BinBox.SelectedIndex >= 0 && BinBox.SelectedIndex < _regionBins.Count
+            ? _regionBins[BinBox.SelectedIndex] : null;
+
+    /// <summary>입력된 주소(파싱 성공 시). 실패면 null — 시작 버튼이 잠긴다.</summary>
+    private uint? RegionAddress =>
+        FlashAddress.TryParse(AddrBox.Text, out uint addr) ? addr : null;
+
+    private void AddrBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_syncing) return;
+        // 파싱 안 되는 주소는 즉시 색으로 알린다(시작 버튼이 왜 죽었는지 화면이 설명하게).
+        AddrBox.Foreground = RegionAddress is null ? Theme.Brush("Red") : Theme.Brush("Text");
+        if (RegionAddress is not null) { _state.LastRegionAddress = AddrBox.Text.Trim(); _state.Save(); }
+        UpdateButtons();
+    }
+
+    private void BinBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => UpdateButtons();   // 크기/유도 문구는 UpdateButtons 가 상태에 맞게 채운다
+
+    private string? _autoResolvedSource;   // 탭 전환 자동 불러오기의 재시도 폭주 방지(같은 소스는 1회만)
+
+    private void ModeTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.Source, ModeTabs)) return;
+
+        // 영역 탭에 들어오면 마지막 소스가 유효할 때 바로 불러오기까지 진행한다 —
+        // "탭 열기 → 시작" 두 클릭이 반복 작업의 전부가 되게. 같은 소스는 한 번만
+        // (죽은 링크로 탭을 오갈 때마다 재다운로드·오류 반복을 막는다). 실패해도 [불러오기]로 수동 재시도.
+        if (ReferenceEquals(ModeTabs.SelectedItem, RegionTab)
+            && !_running && !_srcLoading && _regionBins.Count == 0)
+        {
+            string src = SrcBox.Text.Trim();
+            bool valid = src.Length > 0
+                && (RegionSourceResolver.IsUrl(src) || File.Exists(src));
+            if (valid && !string.Equals(_autoResolvedSource, src, StringComparison.Ordinal))
+            {
+                _autoResolvedSource = src;
+                _ = ResolveSourceAsync();
+            }
+        }
 
         UpdateButtons();
     }
@@ -292,22 +448,66 @@ public partial class FlashDialog : Window
 
     private void UpdateButtons()
     {
-        bool ready = !_running
-                     && _tool is not null
-                     && _package is { Errors.Count: 0 }
-                     && _rows.Any(r => r.Selected && r.FileName is not null)
-                     && !string.IsNullOrEmpty(_portName);
-        StartButton.IsEnabled = ready;
+        bool packageReady = _package is { Errors.Count: 0 }
+                            && _rows.Any(r => r.Selected && r.FileName is not null);
+        bool regionReady = !_srcLoading
+                           && RegionAddress is not null
+                           && SelectedBinPath is { } bin && File.Exists(bin);
+        bool onRegionTab = ReferenceEquals(ModeTabs.SelectedItem, RegionTab);
+
+        StartButton.IsEnabled = !_running
+                                && _tool is not null
+                                && !string.IsNullOrEmpty(_portName)
+                                && (onRegionTab ? regionReady : packageReady);
         StopButton.IsEnabled = _running;
         CloseButton.IsEnabled = !_running;
         BrowseButton.IsEnabled = !_running;
         ChipBox.IsEnabled = !_running;
         BaudBox.IsEnabled = !_running;
         ItemList.IsEnabled = !_running;
+        ModeTabs.IsEnabled = !_running;          // 실행 중 탭 전환 = 다른 모드의 시작 조건으로 바뀌는 혼란
+        SrcBox.IsEnabled = !_running && !_srcLoading;
+        SrcBrowseButton.IsEnabled = !_running && !_srcLoading;
+        SrcLoadButton.IsEnabled = !_running && !_srcLoading;
+        AddrBox.IsEnabled = !_running;
+        BinBox.IsEnabled = !_running && !_srcLoading;
+
+        // '다음에 눌러야 할 버튼' 을 강조색으로: 소스는 있는데 BIN 이 아직 준비 안 됐으면
+        // [불러오기] 가 파란 버튼이 된다 — 시작 버튼이 왜 비활성인지 화면이 스스로 설명하게.
+        bool needLoad = !_running && !_srcLoading
+                        && SrcBox.Text.Trim().Length > 0 && _regionBins.Count == 0;
+        SrcLoadButton.Style = (Style)FindResource(needLoad ? "SendButton" : "DialogButton");
+
+        // BIN 칸 옆 상태 문구: 크기(준비됨) / 불러오는 중 / 불러오기 유도
+        if (SelectedBinPath is { } binPath && File.Exists(binPath))
+        {
+            BinInfoText.Text = $"{new FileInfo(binPath).Length / 1024.0:N1} KB";
+            BinInfoText.Foreground = Theme.Brush("TextDim");
+        }
+        else if (_srcLoading)
+        {
+            BinInfoText.Text = Loc.S("Flash.RegionLoading");
+            BinInfoText.Foreground = Theme.Brush("TextDim");
+        }
+        else if (SrcBox.Text.Trim().Length > 0)
+        {
+            BinInfoText.Text = Loc.S("Flash.RegionNeedLoad");
+            BinInfoText.Foreground = Theme.Brush("Amber");
+        }
+        else
+        {
+            BinInfoText.Text = "";
+        }
     }
 
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
+        if (ReferenceEquals(ModeTabs.SelectedItem, RegionTab))
+        {
+            await StartRegionAsync();
+            return;
+        }
+
         if (_running || _tool is null || _package is null) return;
 
         var selected = _rows.Where(r => r.Selected && r.FileName is not null).ToList();
@@ -338,6 +538,79 @@ public partial class FlashDialog : Window
             Loc.S("Flash.Msg.ConfirmTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK);
         if (confirm != MessageBoxResult.OK) return;
 
+        await RunFlashAsync(reconnectAfter, async ct =>
+        {
+            // 압축 해제(재사용)
+            string root = Path.Combine(AppState.Dir, "flash", FlashExtractor.WorkFolderName(zipPath));
+            Log(Loc.F("Flash.Log.Extract", root));
+            var map = await Task.Run(() => FlashExtractor.Extract(zipPath, root), ct);
+
+            var files = new List<(uint Offset, string File)>();
+            foreach (var p in plan)
+            {
+                if (!map.TryGetValue(p.Name, out string? full))
+                    throw new FileNotFoundException(Loc.F("Flash.Msg.ExtractMissing", p.Name));
+                files.Add((p.Offset, full));
+            }
+
+            var request = new FlashRequest
+            {
+                Port = _portName,
+                Baud = baud,
+                Chip = chip,
+                Files = files,
+                KeepFlashSettings = keepSettings,
+                FlashMode = _package!.Args.FlashMode,
+                FlashFreq = _package.Args.FlashFreq,
+                FlashSize = _package.Args.FlashSize,
+            };
+            return (request, plan.Select(p => p.Size).ToList());
+        });
+    }
+
+    /// <summary>영역 굽기: 선택한 bin 하나를 입력한 주소에 쓴다(칩은 esptool 자동 감지). 실행 경로는 패키지 굽기와 공유.</summary>
+    private async Task StartRegionAsync()
+    {
+        if (_running || _tool is null) return;
+        if (RegionAddress is not { } address || SelectedBinPath is not { } bin || !File.Exists(bin)) return;
+
+        long size = new FileInfo(bin).Length;
+        bool reconnectAfter = ReconnectBox.IsChecked == true;
+        bool keepSettings = KeepBox.IsChecked == true;
+        int baud = BaudBox.SelectedItem is int b ? b : 576000;
+
+        // 주소는 사용자가 직접 입력한 값이다 — 잘못 구우면 장비가 손상될 수 있으므로
+        // 확인창이 마지막 검증 자리다(안내문의 기본값 0xD90000 과 대조할 수 있게 hex 로 보여 준다).
+        var confirm = MessageBox.Show(this,
+            Loc.F("Flash.Msg.RegionConfirm", _portName, Path.GetFileName(bin), $"{size / 1024.0:N1}",
+                  $"0x{address:X}", baud),
+            Loc.S("Flash.Msg.ConfirmTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK);
+        if (confirm != MessageBoxResult.OK) return;
+
+        await RunFlashAsync(reconnectAfter, _ =>
+        {
+            var request = new FlashRequest
+            {
+                Port = _portName,
+                Baud = baud,
+                Chip = EspChip.Unknown,        // --chip 생략 → esptool 이 접속해서 자동 감지
+                Files = new[] { (address, bin) },
+                KeepFlashSettings = keepSettings,
+            };
+            return Task.FromResult((request, new List<long> { size }));
+        });
+    }
+
+    /// <summary>
+    /// 공용 실행 경로: 준비(<paramref name="prepare"/>) → 포트 양보 → esptool → 포트 복귀.
+    /// 패키지/영역 두 모드가 요청만 다르고 수명주기는 같아야 하므로 한곳에 둔다 —
+    /// 복귀(finally)가 두 벌이면 한쪽만 고쳐지는 날이 온다.
+    /// </summary>
+    private async Task RunFlashAsync(bool reconnectAfter,
+        Func<CancellationToken, Task<(FlashRequest Request, List<long> Sizes)>> prepare)
+    {
+        if (_tool is null) return;
+
         _running = true;
         _cts = new CancellationTokenSource();
         LogBox.Clear();
@@ -348,18 +621,8 @@ public partial class FlashDialog : Window
         bool released = false;
         try
         {
-            // 1) 압축 해제(재사용)
-            string root = Path.Combine(AppState.Dir, "flash", FlashExtractor.WorkFolderName(zipPath));
-            Log(Loc.F("Flash.Log.Extract", root));
-            var map = await Task.Run(() => FlashExtractor.Extract(zipPath, root), _cts.Token);
-
-            var files = new List<(uint Offset, string File)>();
-            foreach (var p in plan)
-            {
-                if (!map.TryGetValue(p.Name, out string? full))
-                    throw new FileNotFoundException(Loc.F("Flash.Msg.ExtractMissing", p.Name));
-                files.Add((p.Offset, full));
-            }
+            // 1) 준비(압축 해제·요청 구성 — 모드별)
+            var (request, sizes) = await prepare(_cts.Token);
 
             // 2) 포트 양보
             SetProgressText("Flash.Phase.Releasing", 0);
@@ -374,17 +637,6 @@ public partial class FlashDialog : Window
             }
 
             // 3) esptool 실행
-            var request = new FlashRequest
-            {
-                Port = _portName,
-                Baud = baud,
-                Chip = chip,
-                Files = files,
-                KeepFlashSettings = keepSettings,
-                FlashMode = _package.Args.FlashMode,
-                FlashFreq = _package.Args.FlashFreq,
-                FlashSize = _package.Args.FlashSize,
-            };
             var args = EsptoolCommand.BuildWriteFlash(request, _tool.UsesHyphenSyntax);
             Log(EsptoolCommand.ToDisplayLine(_tool.Path, args));
             Log("");
@@ -397,7 +649,7 @@ public partial class FlashDialog : Window
                 SetProgressText(p.Phase, p.Fraction);
             });
 
-            var result = await runner.RunAsync(args, plan.Select(p => p.Size).ToList(), _cts.Token);
+            var result = await runner.RunAsync(args, sizes, _cts.Token);
 
             if (result.Ok)
             {

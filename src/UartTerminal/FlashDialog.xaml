@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:UartTerminal"
         Title="{loc:Str Flash.Title}"
         Icon="/UartTerminal.ico"
-        Width="900" Height="700" MinWidth="760" MinHeight="560"
+        Width="900" Height="860" MinWidth="760" MinHeight="680"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource Bg}"
@@ -33,7 +33,7 @@
             </Style.Triggers>
         </Style>
         <Style x:Key="CellNote" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{StaticResource Font.Caption}"/>
             <Setter Property="Foreground" Value="{Binding NoteBrush}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
@@ -62,77 +62,232 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
-            <Setter Property="FontSize" Value="{StaticResource Font.Caption}"/>
-            <Setter Property="Margin" Value="0,0,0,4"/>
-        </Style>
     </Window.Resources>
 
     <Grid Margin="14">
         <Grid.RowDefinitions>
+            <!-- 탭(패키지 표 포함)에 2.2, 로그에 1 — 진입 시 바이너리 목록이 잘리지 않는 것이
+                 빈 로그 칸보다 우선이다(로그는 실행하면 채워지고, 필요하면 창을 늘린다). -->
+            <RowDefinition Height="2.2*"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="1.1*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- 0) 안내 -->
-        <TextBlock Grid.Row="0" Margin="2,0,0,10" Style="{StaticResource HintText}"
-                   Text="{loc:Str Flash.Intro}"/>
+        <!-- 0) 모드 탭: 펌웨어 패키지(zip 전체) / 영역 굽기(bin 하나를 고정 주소에).
+             MinHeight = 영역 탭 콘텐츠가 다 보이는 높이 — 경고 패널이 떠서 공간을 뺏어도
+             탭 내용(구울 BIN 행까지)이 잘리지 않는다. 부족분은 로그(*)가 줄어드는 걸로 흡수. -->
+        <TabControl x:Name="ModeTabs" Grid.Row="0" Style="{StaticResource DialogTabControl}"
+                    MinHeight="350"
+                    SelectionChanged="ModeTabs_SelectionChanged">
+            <TabItem x:Name="PackageTab" Header="{loc:Str Flash.Tab.Package}" Style="{StaticResource DialogTabItem}">
+                <Border Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
+                        BorderThickness="1" CornerRadius="0,8,8,8" Padding="12">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-        <!-- 1) zip 선택 -->
-        <Grid Grid.Row="1">
+                        <TextBlock Grid.Row="0" Margin="2,0,0,10" Style="{StaticResource HintText}"
+                                   Text="{loc:Str Flash.Intro}"/>
+
+                        <!-- zip 선택 -->
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Flash.Package}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
+                            <!-- Height 고정: CommandInput 은 여러 줄 입력용이라 그냥 두면 세로로 늘어난다 -->
+                            <TextBox x:Name="ZipBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
+                                     MinWidth="0" Height="30" Padding="10,0" VerticalContentAlignment="Center"
+                                     IsReadOnly="True" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                            <Button x:Name="BrowseButton" Grid.Row="1" Grid.Column="1" Content="{loc:Str Common.Browse}" Style="{StaticResource DialogButton}"
+                                    MinWidth="72" Height="30" Margin="8,0,0,0" VerticalAlignment="Bottom" Click="Browse_Click"/>
+                        </Grid>
+
+                        <!-- 칩(패키지 해석에 쓰인다 — 영역 탭은 영역 정의가 칩을 정한다) -->
+                        <Grid Grid.Row="2" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Flash.Chip}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
+                            <ComboBox x:Name="ChipBox" Grid.Row="1" Grid.Column="0" Width="230" Height="30"
+                                      VerticalContentAlignment="Center" Margin="2,0,0,0"
+                                      ToolTip="{loc:Str Flash.ChipTip}"
+                                      SelectionChanged="ChipBox_SelectionChanged"/>
+                        </Grid>
+
+                        <!-- 목록 머리글 -->
+                        <Border Grid.Row="3" Margin="0,12,0,0" Background="{DynamicResource Bg}"
+                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" CornerRadius="6,6,0,0" Padding="10,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="30"/>
+                                    <ColumnDefinition Width="92"/>
+                                    <ColumnDefinition Width="96"/>
+                                    <ColumnDefinition Width="124"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="210"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1" Text="{loc:Str Flash.Offset}" Style="{StaticResource TableHeaderText}"/>
+                                <TextBlock Grid.Column="2" Text="{loc:Str Flash.Size}" Style="{StaticResource TableHeaderText}"/>
+                                <TextBlock Grid.Column="3" Text="{loc:Str Flash.Role}" Style="{StaticResource TableHeaderText}"/>
+                                <TextBlock Grid.Column="4" Text="{loc:Str Flash.File}" Style="{StaticResource TableHeaderText}"/>
+                                <TextBlock Grid.Column="5" Text="{loc:Str Flash.Note}" Style="{StaticResource TableHeaderText}"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- 목록 -->
+                        <ListBox x:Name="ItemList" Grid.Row="4" HorizontalContentAlignment="Stretch">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <!-- 머리글 Grid 와 폭이 같아야 한다(다르면 열이 어긋난다) -->
+                                            <ColumnDefinition Width="30"/>
+                                            <ColumnDefinition Width="92"/>
+                                            <ColumnDefinition Width="96"/>
+                                            <ColumnDefinition Width="124"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="210"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Grid.Column="0" Style="{StaticResource AppCheckBox}" VerticalAlignment="Center"
+                                                  IsChecked="{Binding Selected, Mode=TwoWay}" IsEnabled="{Binding CanSelect}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding OffsetText}" Style="{StaticResource CellOffset}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding SizeText}" Style="{StaticResource CellMono}"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Role}" Style="{StaticResource Cell}"/>
+                                        <Grid Grid.Column="4" Margin="0,0,8,0">
+                                            <!-- 후보가 여럿이면(앱 사본 등) 고르게, 하나면 그냥 표시 -->
+                                            <TextBlock Text="{Binding FileDisplay}" Style="{StaticResource Cell}"
+                                                       Visibility="{Binding PlainVisibility}"/>
+                                            <ComboBox ItemsSource="{Binding Candidates}" SelectedItem="{Binding FileName, Mode=TwoWay}"
+                                                      Height="26" VerticalContentAlignment="Center"
+                                                      Visibility="{Binding ChoiceVisibility}"/>
+                                        </Grid>
+                                        <!-- 비고는 별도 열 — 파일명과 같은 칸에 두면 이름이 길 때 글자가 겹친다 -->
+                                        <TextBlock Grid.Column="5" Text="{Binding NoteText}" Style="{StaticResource CellNote}"
+                                                   Margin="0,0,10,0" TextWrapping="NoWrap"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </TabItem>
+
+            <TabItem x:Name="RegionTab" Header="{loc:Str Flash.Tab.Region}" Style="{StaticResource DialogTabItem}">
+                <Border Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
+                        BorderThickness="1" CornerRadius="0,8,8,8" Padding="12">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Margin="2,0,0,10" Style="{StaticResource HintText}"
+                                   Text="{loc:Str Flash.RegionIntro}"/>
+
+                        <!-- 소스: bin / zip / http 링크 -->
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Flash.RegionSource}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
+                            <TextBox x:Name="SrcBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
+                                     MinWidth="0" Height="30" Padding="10,0" VerticalContentAlignment="Center"
+                                     ToolTip="{loc:Str Flash.RegionSourceTip}"
+                                     TextChanged="SrcBox_TextChanged"
+                                     KeyDown="SrcBox_KeyDown"/>
+                            <Button x:Name="SrcBrowseButton" Grid.Row="1" Grid.Column="1" Content="{loc:Str Common.Browse}" Style="{StaticResource DialogButton}"
+                                    MinWidth="72" Height="30" Margin="8,0,0,0" Click="SrcBrowse_Click"/>
+                            <Button x:Name="SrcLoadButton" Grid.Row="1" Grid.Column="2" Content="{loc:Str Flash.RegionLoad}" Style="{StaticResource DialogButton}"
+                                    MinWidth="72" Height="30" Margin="8,0,0,0" Click="SrcLoad_Click"/>
+                        </Grid>
+
+                        <!-- 쓸 주소 직접 입력(칩은 esptool 이 자동 감지). 기본값은 안내문에 명기 — 바꿨다가 되돌릴 때 보라고 -->
+                        <Grid Grid.Row="2" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Flash.RegionAddr}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
+                            <TextBox x:Name="AddrBox" Grid.Row="1" Grid.Column="0" Width="160" Height="30"
+                                     Style="{StaticResource CommandInput}" MinWidth="0" Padding="10,0"
+                                     VerticalContentAlignment="Center" HorizontalAlignment="Left" Margin="2,0,0,0"
+                                     ToolTip="{loc:Str Flash.RegionAddrTip}"
+                                     TextChanged="AddrBox_TextChanged"/>
+                        </Grid>
+
+                        <!-- 풀린 bin 선택(여럿일 때) + 크기 -->
+                        <Grid Grid.Row="3" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Flash.RegionBin}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
+                            <ComboBox x:Name="BinBox" Grid.Row="1" Grid.Column="0" MinWidth="360" Height="30"
+                                      VerticalContentAlignment="Center" Margin="2,0,0,0"
+                                      SelectionChanged="BinBox_SelectionChanged"/>
+                            <TextBlock x:Name="BinInfoText" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
+                                       FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource Font.Caption}"
+                                       Foreground="{DynamicResource TextDim}" Text=""/>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </TabItem>
+        </TabControl>
+
+        <!-- 1) 공용: 포트 / 속도 / 옵션 (두 탭 모두에 적용) -->
+        <Grid Grid.Row="1" Margin="2,12,0,0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Flash.Package}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
-            <!-- Height 고정: CommandInput 은 여러 줄 입력용이라 그냥 두면 세로로 늘어난다 -->
-            <!-- Padding 재정의: CommandInput 의 넉넉한 여백을 그대로 두면 30px 높이에서 글자가 잘려 안 보인다 -->
-            <TextBox x:Name="ZipBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
-                     MinWidth="0" Height="30" Padding="10,0" VerticalContentAlignment="Center"
-                     IsReadOnly="True" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-            <Button x:Name="BrowseButton" Grid.Row="1" Grid.Column="1" Content="{loc:Str Common.Browse}" Style="{StaticResource DialogButton}"
-                    MinWidth="72" Height="30" Margin="8,0,0,0" Click="Browse_Click"/>
-        </Grid>
-
-        <!-- 2) 칩 / 포트 / 속도 / 옵션 -->
-        <Grid Grid.Row="2" Margin="0,12,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Flash.Chip}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Port}" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
-            <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.BaudBps}" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
-
-            <ComboBox x:Name="ChipBox" Grid.Row="1" Grid.Column="0" Width="210" Height="30"
-                      VerticalContentAlignment="Center" Margin="2,0,0,0"
-                      ToolTip="{loc:Str Flash.ChipTip}"
-                      SelectionChanged="ChipBox_SelectionChanged"/>
-            <TextBlock x:Name="PortText" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Port}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.BaudBps}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
+            <TextBlock x:Name="PortText" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"
                        FontFamily="{StaticResource MonoFont}" Foreground="{DynamicResource Blue}" Text="—"/>
-            <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="2" Width="110" Height="30" Margin="10,0,0,0"
+            <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="1" Width="110" Height="30" Margin="12,0,0,0"
                       VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
-            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+            <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
                 <CheckBox x:Name="KeepBox" Style="{StaticResource AppCheckBox}" IsChecked="True" Content="{loc:Str Flash.Keep}"
                           ToolTip="{loc:Str Flash.KeepTip}"/>
                 <CheckBox x:Name="ReconnectBox" Style="{StaticResource AppCheckBox}" IsChecked="True"
@@ -140,63 +295,8 @@
             </StackPanel>
         </Grid>
 
-        <!-- 3) 목록 머리글 -->
-        <Border Grid.Row="3" Margin="0,12,0,0" Background="{DynamicResource BgPanel}"
-                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" CornerRadius="6,6,0,0" Padding="10,6">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="92"/>
-                    <ColumnDefinition Width="96"/>
-                    <ColumnDefinition Width="124"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="210"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="1" Text="{loc:Str Flash.Offset}" Style="{StaticResource TableHeaderText}"/>
-                <TextBlock Grid.Column="2" Text="{loc:Str Flash.Size}" Style="{StaticResource TableHeaderText}"/>
-                <TextBlock Grid.Column="3" Text="{loc:Str Flash.Role}" Style="{StaticResource TableHeaderText}"/>
-                <TextBlock Grid.Column="4" Text="{loc:Str Flash.File}" Style="{StaticResource TableHeaderText}"/>
-                <TextBlock Grid.Column="5" Text="{loc:Str Flash.Note}" Style="{StaticResource TableHeaderText}"/>
-            </Grid>
-        </Border>
-
-        <!-- 4) 목록 -->
-        <ListBox x:Name="ItemList" Grid.Row="4" HorizontalContentAlignment="Stretch">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <Grid Margin="0,3">
-                        <Grid.ColumnDefinitions>
-                            <!-- 머리글 Grid 와 폭이 같아야 한다(다르면 열이 어긋난다) -->
-                            <ColumnDefinition Width="30"/>
-                            <ColumnDefinition Width="92"/>
-                            <ColumnDefinition Width="96"/>
-                            <ColumnDefinition Width="124"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="210"/>
-                        </Grid.ColumnDefinitions>
-                        <CheckBox Grid.Column="0" Style="{StaticResource AppCheckBox}" VerticalAlignment="Center"
-                                  IsChecked="{Binding Selected, Mode=TwoWay}" IsEnabled="{Binding CanSelect}"/>
-                        <TextBlock Grid.Column="1" Text="{Binding OffsetText}" Style="{StaticResource CellOffset}"/>
-                        <TextBlock Grid.Column="2" Text="{Binding SizeText}" Style="{StaticResource CellMono}"/>
-                        <TextBlock Grid.Column="3" Text="{Binding Role}" Style="{StaticResource Cell}"/>
-                        <Grid Grid.Column="4" Margin="0,0,8,0">
-                            <!-- 후보가 여럿이면(앱 사본 등) 고르게, 하나면 그냥 표시 -->
-                            <TextBlock Text="{Binding FileDisplay}" Style="{StaticResource Cell}"
-                                       Visibility="{Binding PlainVisibility}"/>
-                            <ComboBox ItemsSource="{Binding Candidates}" SelectedItem="{Binding FileName, Mode=TwoWay}"
-                                      Height="26" VerticalContentAlignment="Center"
-                                      Visibility="{Binding ChoiceVisibility}"/>
-                        </Grid>
-                        <!-- 비고는 별도 열 — 파일명과 같은 칸에 두면 이름이 길 때 글자가 겹친다 -->
-                        <TextBlock Grid.Column="5" Text="{Binding NoteText}" Style="{StaticResource CellNote}"
-                                   Margin="0,0,10,0" TextWrapping="NoWrap"/>
-                    </Grid>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-
-        <!-- 5) 경고/오류 -->
-        <Border x:Name="NoticePane" Grid.Row="5" Margin="0,10,0,0" Visibility="Collapsed"
+        <!-- 2) 경고/오류 -->
+        <Border x:Name="NoticePane" Grid.Row="2" Margin="0,10,0,0" Visibility="Collapsed"
                 Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
                 BorderThickness="1" CornerRadius="6" Padding="10,8">
             <ScrollViewer MaxHeight="88" VerticalScrollBarVisibility="Auto">
@@ -205,8 +305,8 @@
             </ScrollViewer>
         </Border>
 
-        <!-- 6) 진행률 -->
-        <Grid Grid.Row="6" Margin="0,12,0,0">
+        <!-- 3) 진행률 -->
+        <Grid Grid.Row="3" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -217,16 +317,16 @@
                        Foreground="{DynamicResource TextDim}" Text="{loc:Str Flash.Idle}"/>
         </Grid>
 
-        <!-- 7) 로그 -->
-        <TextBox x:Name="LogBox" Grid.Row="7" Margin="0,10,0,0" IsReadOnly="True"
+        <!-- 4) 로그 -->
+        <TextBox x:Name="LogBox" Grid.Row="4" Margin="0,10,0,0" IsReadOnly="True"
                  Style="{StaticResource CommandInput}" MinWidth="0"
                  FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource Font.Caption}"
                  TextWrapping="NoWrap" AcceptsReturn="True"
                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                  VerticalContentAlignment="Top"/>
 
-        <!-- 8) 버튼 -->
-        <Grid Grid.Row="8" Margin="0,12,0,0">
+        <!-- 5) 버튼 -->
+        <Grid Grid.Row="5" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>

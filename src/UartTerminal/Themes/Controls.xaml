@@ -116,6 +116,10 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.8"/>
                         </Trigger>
+                        <!-- 비활성 상태가 없으면 '눌러도 되는 파란 버튼' 으로 보인다(플래시 시작 버튼에서 실제로 혼란) -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.3"/>
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -477,6 +481,47 @@
         <LineGeometry StartPoint="8,3.5" EndPoint="8,12.5"/>
         <LineGeometry StartPoint="2.5,8" EndPoint="13.5,8"/>
     </GeometryGroup>
+
+    <!-- ============================================================
+         다이얼로그용 TabControl(다크). 기본 WPF 탭은 밝은 배경이라 다크에서 튄다.
+         셸의 터미널 탭과 달리 표준 TabControl 을 쓰는 화면(플래시 등)용.
+         ============================================================ -->
+    <Style x:Key="DialogTabControl" TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+
+    <Style x:Key="DialogTabItem" TargetType="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
+        <Setter Property="FontSize" Value="{StaticResource Font.Body}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="Bd" Padding="14,7" Margin="0,0,4,0"
+                            Background="Transparent" CornerRadius="7,7,0,0"
+                            BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1,1,1,0">
+                        <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BgPanel}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Text}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="False"/>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <!-- 메시지 파싱 패널: 오른쪽 사이드 패널이 열린 모양 + 필드 줄 두 개 -->
     <GeometryGroup x:Key="Ic.Parse">

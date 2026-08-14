@@ -59,6 +59,12 @@ public sealed class AppState
     /// <summary>파싱 패널에서 체크 해제한 메시지 키(예: "T12"). '해제' 를 저장해야 정의 파일에 새 키가 생겼을 때 기본으로 보인다.</summary>
     public List<string> ParseDisabledKeys { get; set; } = new();
 
+    /// <summary>영역 굽기의 마지막 소스(bin/zip 경로 또는 http 링크) — 반복 작업이 대부분이다.</summary>
+    public string? LastRegionSource { get; set; }
+
+    /// <summary>영역 굽기의 마지막 주소(입력 문자열 그대로). 비면 기본값(다이얼로그가 채움).</summary>
+    public string? LastRegionAddress { get; set; }
+
     /// <summary>
     /// 포트를 열 때 EN 펄스로 보드를 리셋할지(ESP32 devkit 의 DTR/RTS 자동 리셋 회로 이용). 기본 꺼짐.
     /// 켜면 연결/재연결마다 보드가 재부팅되어 부팅 로그를 처음부터 볼 수 있다.
