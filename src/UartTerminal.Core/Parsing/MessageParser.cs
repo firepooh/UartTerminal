@@ -115,6 +115,9 @@ public static class MessageParser
         if (f.Enum is { } map && map.TryGetValue(raw, out string? label))
             return label;
 
+        if (f.Bits is { Count: > 0 } bits && DecodeBits(f, bits, raw) is { } names)
+            return names;
+
         if (f.Format == "datetime" && raw.Length == 14
             && DateTime.TryParseExact(raw, "yyyyMMddHHmmss", CultureInfo.InvariantCulture,
                                       DateTimeStyles.None, out var dt))
@@ -132,5 +135,42 @@ public static class MessageParser
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 켜진 비트의 라벨을 비트 번호 순으로 나열한다. 값 0·파싱 실패·이름 있는 비트가 하나도
+    /// 안 켜졌으면 null(원시 값만 표시). 이름 없는 비트는 조용히 무시하지 않고 <c>b{n}</c> 으로
+    /// 남긴다 — 정의에 없는 비트가 켜졌다는 것 자체가 봐야 할 정보다.
+    /// </summary>
+    private static string? DecodeBits(FieldSpec f, Dictionary<string, string> bits, string raw)
+    {
+        long value;
+        if (f.Radix == 16)
+        {
+            if (!long.TryParse(raw, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value))
+                return null;
+        }
+        else if (!long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+        {
+            return null;
+        }
+        if (value <= 0) return null;
+
+        var names = new List<string>();
+        bool anyNamed = false;
+        for (int bit = 0; bit < 63; bit++)
+        {
+            if ((value & (1L << bit)) == 0) continue;
+            if (bits.TryGetValue(bit.ToString(CultureInfo.InvariantCulture), out string? name))
+            {
+                names.Add(name);
+                anyNamed = true;
+            }
+            else
+            {
+                names.Add($"b{bit}");
+            }
+        }
+        return anyNamed ? string.Join(", ", names) : null;
     }
 }

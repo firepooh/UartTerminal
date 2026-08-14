@@ -33,6 +33,20 @@ public sealed record FieldSpec
     [JsonPropertyName("enum")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string>? Enum { get; init; }
+
+    /// <summary>
+    /// 비트필드 해석: 비트 번호(문자열) → 라벨. 켜진 비트의 라벨을 나열해 보여준다
+    /// (예: 21963 → "모뎀, GNSS 유효, …"). <b>enum 이 먼저다</b> — 255=미지원 같은 센티널이
+    /// 비트 해석("모든 비트 켜짐")으로 오독되지 않게.
+    /// </summary>
+    [JsonPropertyName("bits")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? Bits { get; init; }
+
+    /// <summary>원시 값의 진법(비트 해석용). 기본 10 — "FF"·"55CB" 처럼 hex 로 오는 필드는 16.</summary>
+    [JsonPropertyName("radix")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Radix { get; init; }
 }
 
 /// <summary>키 하나(예: "T5")로 식별되는 메시지의 정의.</summary>

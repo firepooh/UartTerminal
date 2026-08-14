@@ -532,6 +532,50 @@ public partial class UartDocumentView : UserControl
     /// <summary>키 → 사용자가 토글한 펼침 상태. 없으면 정의의 collapsed 기본값을 따른다.</summary>
     private readonly Dictionary<string, bool> _parseExpanded = new(StringComparer.Ordinal);
 
+    // ── 변경 하이라이트(CAN 모니터식) ──
+    // 직전 수신과 값이 달라진 필드를 강조색으로 켰다가 잠시 뒤 끈다 — 흐르는 데이터에서
+    // "무엇이 살아 움직이는가" 를 눈으로 잡게 한다. 수신 횟수 [n] 은 수신 자체가 변화이므로
+    // 매 수신마다 깜빡인다(메시지가 살아있다는 표시).
+
+    /// <summary>키 → 직전 수신과 값이 달라진 필드 인덱스들(최신 변화만 유지).</summary>
+    private readonly Dictionary<string, HashSet<int>> _parseChangedFields = new(StringComparer.Ordinal);
+
+    /// <summary>키 → 필드 변화 시각(하이라이트 수명 판정).</summary>
+    private readonly Dictionary<string, DateTime> _parseChangedAt = new(StringComparer.Ordinal);
+
+    /// <summary>키 → 마지막 수신 시각(카운터 [n] 깜빡임 판정).</summary>
+    private readonly Dictionary<string, DateTime> _parseCountAt = new(StringComparer.Ordinal);
+
+    private static readonly TimeSpan ParseHighlightSpan = TimeSpan.FromSeconds(5);
+
+    private static bool IsHot(Dictionary<string, DateTime> at, string key) =>
+        at.TryGetValue(key, out var t) && DateTime.Now - t < ParseHighlightSpan;
+
+    /// <summary>
+    /// 변경 하이라이트 배경: 남은 수명 동안 강조색 → 투명으로 <b>서서히</b> 사라진다(CAN 모니터의
+    /// 감쇠 쉐이딩). WPF 색 애니메이션이라 재렌더 타이머가 필요 없다 — 시작만 시키면 컴포지션이
+    /// 알아서 감쇠시키고, 다 꺼진 뒤에는 아무 비용도 없다. 렌더 도중(다른 키 수신) 다시 만들어져도
+    /// 경과 시간만큼 옅어진 지점에서 이어 간다.
+    /// </summary>
+    private Brush? FadingHighlight(Dictionary<string, DateTime> at, string key)
+    {
+        if (!at.TryGetValue(key, out var t)) return null;
+        TimeSpan age = DateTime.Now - t;
+        TimeSpan remaining = ParseHighlightSpan - age;
+        if (remaining <= TimeSpan.Zero) return null;
+
+        Color full = Theme.Color("C.AccentDeep");
+        byte alpha = (byte)(255 * remaining.Ticks / ParseHighlightSpan.Ticks);
+        var brush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(alpha, full.R, full.G, full.B));
+        brush.BeginAnimation(SolidColorBrush.ColorProperty,
+            new System.Windows.Media.Animation.ColorAnimation
+            {
+                To = System.Windows.Media.Color.FromArgb(0, full.R, full.G, full.B),
+                Duration = new Duration(remaining),
+            });
+        return brush;
+    }
+
     /// <summary>
     /// 체크 해제된 키를 뺀 활성 정의. 스캔·고정·렌더가 모두 이걸 쓴다 —
     /// 렌더만 거르면 "T12만 있는 라인"이 여전히 패널을 갱신해 빈 화면이 된다.
@@ -670,6 +714,9 @@ public partial class UartDocumentView : UserControl
         _parseBlocks.Clear();
         _parseCounts.Clear();
         _parseExpanded.Clear();
+        _parseChangedFields.Clear();
+        _parseChangedAt.Clear();
+        _parseCountAt.Clear();
     }
 
     private void SetParsePanelVisible(bool on)
@@ -747,12 +794,33 @@ public partial class UartDocumentView : UserControl
         }
         if (matched.Count == 0) return;
 
-        foreach (string line in matched)
+        var now = DateTime.Now;
+        foreach (string line in matched)   // 하이라이트 소멸은 색 애니메이션이 담당 — 타이머 없음
         {
             foreach (var block in Core.Parsing.MessageParser.ParseLine(line, specs))
             {
+                // 직전 블록과 값이 달라진 필드를 표시(첫 수신은 '변화' 가 아니다 — 켜자마자
+                // 스크롤백을 흡수할 때 전체가 파랗게 물드는 것을 막는다).
+                if (_parseBlocks.TryGetValue(block.Key, out var prev))
+                {
+                    var changed = new HashSet<int>();
+                    int common = Math.Min(prev.Fields.Count, block.Fields.Count);
+                    for (int i = 0; i < common; i++)
+                        if (!string.Equals(prev.Fields[i].Raw, block.Fields[i].Raw, StringComparison.Ordinal))
+                            changed.Add(i);
+                    for (int i = common; i < block.Fields.Count; i++)
+                        changed.Add(i);   // 새로 생긴 필드도 변화다
+
+                    if (changed.Count > 0)
+                    {
+                        _parseChangedFields[block.Key] = changed;
+                        _parseChangedAt[block.Key] = now;
+                    }
+                }
+
                 _parseBlocks[block.Key] = block;
                 _parseCounts[block.Key] = _parseCounts.GetValueOrDefault(block.Key) + 1;
+                _parseCountAt[block.Key] = now;   // 수신 자체가 변화 — [n] 이 깜빡인다
             }
         }
         RenderParsePanel();
@@ -783,6 +851,8 @@ public partial class UartDocumentView : UserControl
         {
             Style = (Style)FindResource("HintText"),
             Margin = new Thickness(2, 6, 2, 0),
+            // WrapPanel 은 자식을 무한 폭으로 재기 때문에 MaxWidth 가 없으면 줄바꿈이 영영 안 된다
+            MaxWidth = 460,
         };
         tb.Text = _parsers.ByKey.Count == 0
             ? Loc.F("Parse.NoSpecs", _parsers.FilePath)
@@ -793,9 +863,33 @@ public partial class UartDocumentView : UserControl
     private bool IsParseExpanded(Core.Parsing.MessageSpec spec) =>
         _parseExpanded.TryGetValue(spec.Key, out bool on) ? on : !spec.Collapsed;
 
+    // ── 카드 + 자동 다단 레이아웃 상수 ──
+    // 열 하나 = 이름(128) + 값(~150). 카드 폭 = 열 수 × FieldColWidth + 안쪽 여백.
+    // 행/열 설정을 사용자에게 받지 않는다 — 메시지마다 최적값이 달라 전역 설정은 맞을 수 없고,
+    // 패널 폭(스플리터)이 곧 레이아웃 조절이다. 목표 행수만 고정한다.
+    private const double FieldColWidth = 300;
+    private const int TargetRows = 12;
+
+    private int _parseLastCols = -1;   // 마지막 렌더의 가용 열 수(폭 변경 시 경계를 넘을 때만 재렌더)
+
+    /// <summary>패널 폭이 열 경계(300px)를 넘을 때만 다시 그린다 — 드래그 중 매 픽셀 재렌더 방지.</summary>
+    private void ParseHost_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!ParsePanelVisible || !e.WidthChanged) return;
+        if (AvailableParseCols() != _parseLastCols) RenderParsePanel();
+    }
+
+    private int AvailableParseCols()
+    {
+        double w = ParseHost.ActualWidth;
+        if (w < 1) w = Math.Max(200, _parsePanelWidth) - 24;   // 첫 렌더(레이아웃 전)엔 저장된 폭으로 추정
+        return Math.Max(1, (int)(w / (FieldColWidth + 8)));
+    }
+
     /// <summary>
-    /// 누적 상태를 정의 파일 순서로 그린다. 섹션 = 제목(펼침 토글 + 수신 횟수) + (펼쳤을 때) 필드 그리드.
-    /// 수신마다 전체를 다시 만들지만(1초 주기 수십 개 TextBlock) WPF 에서 문제되지 않는 규모다.
+    /// 누적 상태를 정의 파일 순서대로 <b>카드</b>로 그린다. 1열짜리 작은 카드(T12류)는 WrapPanel 이
+    /// 자동으로 한 줄에 나란히 놓고, 필드가 많은 카드는 내부에서 다단(위→아래, 다음 열)으로 펼친다.
+    /// 수신마다 전체를 다시 만들지만(1초 주기 수십~수백 TextBlock) WPF 에서 문제되지 않는 규모다.
     /// </summary>
     private void RenderParsePanel()
     {
@@ -803,98 +897,151 @@ public partial class UartDocumentView : UserControl
         var visible = _parsers.Items.Where(s => specs.ContainsKey(s.Key) && _parseBlocks.ContainsKey(s.Key)).ToList();
         if (visible.Count == 0) { ShowParsePlaceholder(); return; }
 
+        int availCols = AvailableParseCols();
+        _parseLastCols = availCols;
+
         ParseHost.Children.Clear();
+        foreach (var spec in visible)
+            ParseHost.Children.Add(BuildParseCard(spec, _parseBlocks[spec.Key], availCols));
+    }
+
+    private FrameworkElement BuildParseCard(Core.Parsing.MessageSpec spec, Core.Parsing.ParsedBlock block, int availCols)
+    {
+        bool expanded = IsParseExpanded(spec);
         var mono = (FontFamily)FindResource("MonoFont");
 
-        foreach (var spec in visible)
+        // 제목 줄: "▾ T5 — 상태 보고  [123]" — 클릭으로 접고 펼친다.
+        var header = new TextBlock
         {
-            var block = _parseBlocks[spec.Key];
-            bool expanded = IsParseExpanded(spec);
+            Background = Brushes.Transparent,   // 없으면 히트 테스트에서 빠져 클릭이 오지 않는다
+            Cursor = Cursors.Hand,
+            FontSize = (double)FindResource("Font.Caption"),
+            FontWeight = FontWeights.SemiBold,
+        };
+        header.Inlines.Add(new System.Windows.Documents.Run(expanded ? "▾ " : "▸ ")
+        { Foreground = Theme.Brush("TextFaint") });
+        // 제목은 보라 — 변경 하이라이트가 파랑(AccentDeep)이라 제목까지 파랑이면 구분이 안 된다.
+        header.Inlines.Add(new System.Windows.Documents.Run(
+            block.Name.Length > 0 ? $"{block.Key} — {block.Name}" : block.Key)
+        { Foreground = Theme.Brush("Purple") });
+        // 수신 횟수: 수신 순간 강조가 켜지고 서서히 사라진다(메시지가 살아있다는 표시 —
+        // CAN 모니터의 Count 열과 같은 관례). 글자색은 늘 그대로, 배경만 감쇠한다.
+        var countRun = new System.Windows.Documents.Run($" [{_parseCounts.GetValueOrDefault(spec.Key)}] ")
+        { FontFamily = mono, Foreground = Theme.Brush("Text") };
+        if (FadingHighlight(_parseCountAt, spec.Key) is { } countBg) countRun.Background = countBg;
+        else countRun.Foreground = Theme.Brush("TextMuted");
+        header.Inlines.Add(new System.Windows.Documents.Run(" "));
+        header.Inlines.Add(countRun);
 
-            // 제목 줄: "▾ T5 — 상태 보고  [123]" — 클릭으로 접고 펼친다.
-            var header = new TextBlock
+        string key = spec.Key;
+        var specRef = spec;
+        header.MouseLeftButtonUp += (_, _) =>
+        {
+            _parseExpanded[key] = !IsParseExpanded(specRef);
+            RenderParsePanel();
+        };
+
+        var body = new StackPanel();
+        body.Children.Add(header);
+
+        if (expanded)
+        {
+            // 직전 수신과 달라진 필드(하이라이트 수명 안일 때만)
+            HashSet<int>? hot = IsHot(_parseChangedAt, spec.Key)
+                && _parseChangedFields.TryGetValue(spec.Key, out var ch) ? ch : null;
+
+            // 다단: 목표 행수를 채우면 옆 열로. 패널이 감당하는 열 수를 넘으면 행수를 늘려 맞춘다.
+            int count = block.Fields.Count;
+            int cols = Math.Clamp((count + TargetRows - 1) / TargetRows, 1, availCols);
+            int rows = (count + cols - 1) / cols;
+
+            var columnsGrid = new Grid { Margin = new Thickness(0, 5, 0, 0) };
+            for (int c = 0; c < cols; c++)
+                columnsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(FieldColWidth) });
+
+            for (int c = 0; c < cols; c++)
             {
-                Style = (Style)FindResource("TableHeaderText"),
-                Background = Brushes.Transparent,   // 없으면 히트 테스트에서 빠져 클릭이 오지 않는다
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(0, ParseHost.Children.Count == 0 ? 4 : 12, 0, expanded ? 5 : 0),
-            };
-            header.Inlines.Add(new System.Windows.Documents.Run(expanded ? "▾ " : "▸ ")
-            { Foreground = Theme.Brush("TextFaint") });
-            header.Inlines.Add(new System.Windows.Documents.Run(
-                block.Name.Length > 0 ? $"{block.Key} — {block.Name}" : block.Key)
-            { Foreground = Theme.Brush("Accent") });
-            header.Inlines.Add(new System.Windows.Documents.Run($"  [{_parseCounts.GetValueOrDefault(spec.Key)}]")
-            { Foreground = Theme.Brush("TextMuted"), FontFamily = mono });
+                var colGrid = new Grid { VerticalAlignment = VerticalAlignment.Top };
+                colGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(128) });
+                colGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                if (c > 0) colGrid.Margin = new Thickness(14, 0, 0, 0);   // 열 사이 간격
 
-            string key = spec.Key;
-            var specRef = spec;
-            header.MouseLeftButtonUp += (_, _) =>
-            {
-                _parseExpanded[key] = !IsParseExpanded(specRef);
-                RenderParsePanel();
-            };
-            ParseHost.Children.Add(header);
-
-            if (!expanded) continue;
-
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(128) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            int row = 0;
-            foreach (var f in block.Fields)
-            {
-                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-                var name = new TextBlock
+                int row = 0;
+                for (int i = c * rows; i < Math.Min(count, (c + 1) * rows); i++)
                 {
-                    Text = f.Name,
-                    Style = (Style)FindResource("CaptionText"),
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                    Margin = new Thickness(12, 1, 8, 1),
-                };
-                Grid.SetRow(name, row); Grid.SetColumn(name, 0);
-                grid.Children.Add(name);
+                    var f = block.Fields[i];
+                    colGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-                // 해석이 있으면 해석을 앞에, 원시 값을 흐리게 뒤에 — 원시 값은 항상 남긴다(검증 가능해야 한다).
-                var value = new TextBlock
-                {
-                    FontFamily = mono,
-                    FontSize = (double)FindResource("Font.Caption"),
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 1, 0, 1),
-                };
-                string raw = f.Raw.Length == 0 ? "—" : f.Raw;
-                if (f.Decoded is { } dec)
-                {
-                    value.Inlines.Add(new System.Windows.Documents.Run(dec + (f.Unit is { } u1 ? " " + u1 : ""))
-                    { Foreground = Theme.Brush("Text") });
-                    value.Inlines.Add(new System.Windows.Documents.Run($"  ({raw})")
-                    { Foreground = Theme.Brush("TextFaint") });
+                    var name = new TextBlock
+                    {
+                        Text = f.Name,
+                        Style = (Style)FindResource("CaptionText"),
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        Margin = new Thickness(0, 1, 8, 1),
+                    };
+                    Grid.SetRow(name, row); Grid.SetColumn(name, 0);
+                    colGrid.Children.Add(name);
+
+                    // 해석이 있으면 해석을 앞에, 원시 값을 흐리게 뒤에 — 원시 값은 항상 남긴다(검증 가능해야 한다).
+                    var value = new TextBlock
+                    {
+                        FontFamily = mono,
+                        FontSize = (double)FindResource("Font.Caption"),
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 1, 0, 1),
+                    };
+                    // 직전 수신과 달라진 값: 강조 배경이 서서히 사라진다. 글자색은 바꾸지 않는다 —
+                    // 배경이 옅어지는 도중에 글자색까지 바뀌면 두 번 깜빡이는 것처럼 보인다.
+                    if (hot?.Contains(i) == true && FadingHighlight(_parseChangedAt, spec.Key) is { } bg)
+                        value.Background = bg;
+                    Brush mainFg = Theme.Brush("Text");
+                    Brush subFg = Theme.Brush("TextFaint");
+
+                    string raw = f.Raw.Length == 0 ? "—" : f.Raw;
+                    if (f.Decoded is { } dec)
+                    {
+                        value.Inlines.Add(new System.Windows.Documents.Run(dec + (f.Unit is { } u1 ? " " + u1 : ""))
+                        { Foreground = mainFg });
+                        value.Inlines.Add(new System.Windows.Documents.Run($"  ({raw})")
+                        { Foreground = subFg });
+                    }
+                    else
+                    {
+                        value.Inlines.Add(new System.Windows.Documents.Run(raw + (f.Unit is { } u2 ? " " + u2 : ""))
+                        { Foreground = f.Raw.Length == 0 ? subFg : mainFg });
+                    }
+                    Grid.SetRow(value, row); Grid.SetColumn(value, 1);
+                    colGrid.Children.Add(value);
+                    row++;
                 }
-                else
-                {
-                    value.Inlines.Add(new System.Windows.Documents.Run(raw + (f.Unit is { } u2 ? " " + u2 : ""))
-                    { Foreground = Theme.Brush(f.Raw.Length == 0 ? "TextFaint" : "Text") });
-                }
-                Grid.SetRow(value, row); Grid.SetColumn(value, 1);
-                grid.Children.Add(value);
-                row++;
+
+                Grid.SetColumn(colGrid, c);
+                columnsGrid.Children.Add(colGrid);
             }
-            ParseHost.Children.Add(grid);
+            body.Children.Add(columnsGrid);
 
             if (block.MissingCount > 0)
             {
-                var missing = new TextBlock
+                body.Children.Add(new TextBlock
                 {
                     Text = Loc.F("Parse.MissingFields", block.MissingCount),
                     Style = (Style)FindResource("CaptionText"),
-                    Margin = new Thickness(12, 3, 0, 0),
-                };
-                ParseHost.Children.Add(missing);
+                    Margin = new Thickness(0, 3, 0, 0),
+                });
             }
         }
+
+        // 카드: 접히면 제목 크기만큼만(작은 카드들이 한 줄에 모임), 펼치면 열 수만큼의 폭.
+        return new Border
+        {
+            Background = Theme.Brush("Bg"),
+            BorderBrush = Theme.Brush("BorderBrush2"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(10, 6, 10, expanded ? 8 : 6),
+            Margin = new Thickness(0, 0, 8, 8),
+            Child = body,
+        };
     }
 
     // ── 세션 문맥(이 탭이 어떤 세션으로 열렸는지) ────────────────────────────────

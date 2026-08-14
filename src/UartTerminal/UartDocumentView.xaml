@@ -159,7 +159,9 @@
                         </Grid>
                     </Border>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
-                        <StackPanel x:Name="ParseHost" Margin="12,8,12,12"/>
+                        <!-- 섹션은 '카드' 로 흐른다: 작은 메시지(T12류)는 한 줄에 나란히, 큰 메시지(T5류)는
+                             내부에서 다단으로 펼쳐진다. 열 수는 패널 폭이 정하므로(SizeChanged) 설정이 없다. -->
+                        <WrapPanel x:Name="ParseHost" Margin="12,8,12,12" SizeChanged="ParseHost_SizeChanged"/>
                     </ScrollViewer>
                 </DockPanel>
             </Border>

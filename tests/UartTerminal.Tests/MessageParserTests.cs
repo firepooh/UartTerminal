@@ -101,6 +101,61 @@ public sealed class MessageParserTests
         Assert.Equal("9", b.Fields[3].Raw);
     }
 
+    // ── 비트필드 ────────────────────────────────────────────────────────────
+
+    private static MessageSpec B1 => new()
+    {
+        Key = "B1",
+        Name = "bits",
+        Fields = new List<FieldSpec>
+        {
+            new() { Name = "dec", Bits = new() { ["0"] = "modem", ["3"] = "gps", ["14"] = "kbox" } },
+            new()
+            {
+                Name = "hex", Radix = 16,
+                Bits = new() { ["2"] = "volt", ["6"] = "soh" },
+                Enum = new() { ["FF"] = "not-supported" },   // enum 이 비트 해석보다 먼저
+            },
+        },
+    };
+
+    [Fact]
+    public void Bits_ListSetBitLabels_InBitOrder()
+    {
+        // 9 = bit0 + bit3
+        var b = MessageParser.ParseLine("B1=9_44", Specs(B1))[0];
+        Assert.Equal("modem, gps", b.Fields[0].Decoded);
+        // hex "44" = 0x44 = bit2 + bit6
+        Assert.Equal("volt, soh", b.Fields[1].Decoded);
+    }
+
+    /// <summary>정의에 없는 비트가 켜지면 b{n} 으로 드러낸다 — 조용히 삼키면 정의가 낡은 게 안 보인다.</summary>
+    [Fact]
+    public void Bits_UnnamedSetBits_AppearAsBn()
+    {
+        // 11 = bit0 + bit1(이름 없음) + bit3
+        var b = MessageParser.ParseLine("B1=11_0", Specs(B1))[0];
+        Assert.Equal("modem, b1, gps", b.Fields[0].Decoded);
+    }
+
+    /// <summary>0·파싱 불가·이름 있는 비트가 하나도 안 켜진 값은 해석하지 않는다(원시 값만).</summary>
+    [Fact]
+    public void Bits_ZeroOrUnknown_KeepRawOnly()
+    {
+        Assert.Null(MessageParser.ParseLine("B1=0_0", Specs(B1))[0].Fields[0].Decoded);
+        Assert.Null(MessageParser.ParseLine("B1=abc_0", Specs(B1))[0].Fields[0].Decoded);
+        // 2 = bit1 뿐 — 이름 있는 비트가 없다
+        Assert.Null(MessageParser.ParseLine("B1=2_0", Specs(B1))[0].Fields[0].Decoded);
+    }
+
+    /// <summary>255=미지원 같은 센티널은 비트 해석("전부 켜짐")으로 오독되면 안 된다 — enum 이 먼저.</summary>
+    [Fact]
+    public void Bits_EnumSentinel_TakesPrecedence()
+    {
+        var b = MessageParser.ParseLine("B1=1_FF", Specs(B1))[0];
+        Assert.Equal("not-supported", b.Fields[1].Decoded);
+    }
+
     [Fact]
     public void Epoch_DecodesToLocalTime()
     {
