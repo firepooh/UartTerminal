@@ -424,6 +424,7 @@ public sealed class Loc : INotifyPropertyChanged
         ["Parse.NoSpecs"] = ("파서 정의 파일이 없습니다:\n{0}\n\n이 파일에 메시지 키·필드 정의를 넣으면 패널이 해석을 시작합니다. 형식은 README 참조.",
                              "No parser definition file:\n{0}\n\nAdd message keys and field definitions to this file and the panel starts decoding. See README for the format."),
         ["Parse.MissingFields"] = ("(정의보다 값이 {0}개 적음 — 펌웨어/정의 버전 차이)", "({0} fewer values than defined — firmware/definition version mismatch)"),
+        ["Parse.Zoom"] = ("파싱 {0}%", "Parse {0}%"),
         ["Parse.Err.Corrupt"] = ("parsers.json 을 읽을 수 없습니다: {0}", "Cannot read parsers.json: {0}"),
         ["Parse.Err.NewerSchema"] = ("parsers.json 의 schemaVersion({0})이 이 버전보다 높습니다.", "parsers.json schemaVersion ({0}) is newer than this app supports."),
         ["Doc.DisconnectWhileLogging"] = ("{0} 은(는) 지금 로깅 중입니다. 연결을 해제하면 그 시점부터의 수신은 파일에 남지 않습니다.\n\n해제할까요?",

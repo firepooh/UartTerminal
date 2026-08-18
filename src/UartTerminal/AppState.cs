@@ -59,6 +59,12 @@ public sealed class AppState
     /// <summary>파싱 패널에서 체크 해제한 메시지 키(예: "T12"). '해제' 를 저장해야 정의 파일에 새 키가 생겼을 때 기본으로 보인다.</summary>
     public List<string> ParseDisabledKeys { get; set; } = new();
 
+    /// <summary>
+    /// 파싱 패널 글자 배율(1.0 = 기본). 패널 위에서 Ctrl+휠로 조절 — 터미널 폰트(FontSize)와는
+    /// 독립이다: 터미널은 로그를 가까이서 읽고 패널은 대시보드처럼 떨어져서 보는 경우가 많다.
+    /// </summary>
+    public double ParseFontScale { get; set; } = 1.0;
+
     /// <summary>영역 굽기의 마지막 소스(bin/zip 경로 또는 http 링크) — 반복 작업이 대부분이다.</summary>
     public string? LastRegionSource { get; set; }
 

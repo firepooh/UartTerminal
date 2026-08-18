@@ -156,6 +156,113 @@ public sealed class MessageParserTests
         Assert.Equal("not-supported", b.Fields[1].Decoded);
     }
 
+    // ── match / afterLine (콘솔 명령 응답 — "KEY=본문" 꼴이 아닌 출력) ──────
+
+    private static MessageSpec R1 => new()
+    {
+        Key = "R1",
+        Name = "regex-status",
+        Match = @"-status:\s*([0-9A-Fa-f]{8})",
+        Fields = new List<FieldSpec>
+        {
+            new() { Name = "flags", Radix = 16, Bits = new() { ["0"] = "alpha", ["4"] = "beta" } },
+        },
+    };
+
+    private static MessageSpec N1 => new()
+    {
+        Key = "N1",
+        Name = "next-line",
+        Separator = " ",
+        AfterLine = "current sensor info",
+        Fields = new List<FieldSpec>
+        {
+            new() { Name = "id" },
+            new() { Name = "flags", Radix = 16 },
+        },
+    };
+
+    /// <summary>match 정의: 정규식 그룹 1 이 본문 — "-status: 00000011" 류의 명령 응답 라인.</summary>
+    [Fact]
+    public void Match_CapturesGroupAsBody()
+    {
+        var blocks = MessageParser.ParseLine("-status: 00000011", Specs(R1));
+        Assert.Single(blocks);
+        Assert.Equal("00000011", blocks[0].Fields[0].Raw);
+        Assert.Equal("alpha, beta", blocks[0].Fields[0].Decoded);   // 0x11 = bit0 + bit4
+
+        Assert.Empty(MessageParser.ParseLine("-other: 00000011", Specs(R1)));
+        Assert.True(MessageParser.ContainsAnyKey("-status: 00000011", Specs(R1)));
+    }
+
+    /// <summary>afterLine 정의: 직전 줄이 헤더와 매치될 때만 현재 줄 전체가 본문이다.</summary>
+    [Fact]
+    public void AfterLine_BodyComesFromNextLine()
+    {
+        var blocks = MessageParser.ParseLine("7 3F", Specs(N1), prevLine: "current sensor info : ");
+        Assert.Single(blocks);
+        Assert.Equal("7", blocks[0].Fields[0].Raw);
+        Assert.Equal("3F", blocks[0].Fields[1].Raw);
+
+        // 직전 줄이 헤더가 아니면 같은 내용이라도 블록이 아니다 — 맨숫자 줄 오검출 방지.
+        Assert.Empty(MessageParser.ParseLine("7 3F", Specs(N1), prevLine: "boot done"));
+        Assert.Empty(MessageParser.ParseLine("7 3F", Specs(N1)));
+    }
+
+    /// <summary>여러 줄 텍스트(터미널 선택)는 줄 단위로 훑는다 — afterLine 이 줄 경계를 본다.</summary>
+    [Fact]
+    public void ParseText_HandlesMultiLineSelection()
+    {
+        var blocks = MessageParser.ParseText("current sensor info : \r\n7 3F\r\nS1=dev7_20260814023452_120_1", Specs(N1, S1));
+        Assert.Equal(2, blocks.Count);
+        Assert.Contains(blocks, b => b.Key == "N1");
+        Assert.Contains(blocks, b => b.Key == "S1");
+    }
+
+    // ── subfields (마스크 비트 묶음 — 설정 워드 해석) ───────────────────────
+
+    private static MessageSpec W1 => new()
+    {
+        Key = "W1",
+        Name = "config-word",
+        Fields = new List<FieldSpec>
+        {
+            new()
+            {
+                Name = "word", Radix = 16,
+                Subfields = new List<SubfieldSpec>
+                {
+                    // 3비트 묶음(mask 0xE0, shift 5) + enum: 0 도 표시(기본값도 정보다)
+                    new() { Name = "fuel", Mask = "0xE0", Enum = new() { ["0"] = "gasoline", ["4"] = "ev" } },
+                    // 단일 비트 + enum 없음: 켜졌을 때 이름만(플래그)
+                    new() { Name = "turbo", Mask = "0x10" },
+                    // 여러 비트 + enum 없음: 0 이 아닐 때 "이름=값"
+                    new() { Name = "level", Mask = "0x03" },
+                },
+            },
+        },
+    };
+
+    [Fact]
+    public void Subfields_MaskShiftAndEnum()
+    {
+        // 0x92 = fuel(0xE0→4=ev) + turbo(0x10) + level(0x03→2)
+        var b = MessageParser.ParseLine("W1=92", Specs(W1))[0];
+        Assert.Equal("fuel=ev, turbo, level=2", b.Fields[0].Decoded);
+
+        // 0x00: enum 있는 fuel 만 표시(기본값), 플래그·무명 묶음은 생략
+        var z = MessageParser.ParseLine("W1=0", Specs(W1))[0];
+        Assert.Equal("fuel=gasoline", z.Fields[0].Decoded);
+    }
+
+    /// <summary>"0x" 접두 값은 진법 설정과 무관하게 hex 로 읽는다 — 펌웨어가 %d·%X·0x%x 를 섞어 찍는다.</summary>
+    [Fact]
+    public void HexPrefix_IsAcceptedRegardlessOfRadix()
+    {
+        var b = MessageParser.ParseLine("W1=0x92", Specs(W1))[0];
+        Assert.Equal("fuel=ev, turbo, level=2", b.Fields[0].Decoded);
+    }
+
     [Fact]
     public void Epoch_DecodesToLocalTime()
     {
@@ -242,6 +349,21 @@ public sealed class ParserStoreTests : IDisposable
     public void Load_CorruptFile_ReportsError()
     {
         File.WriteAllText(_path, "{ not json ");
+        var s = new ParserStore(_path);
+        s.Load();
+        Assert.Empty(s.ByKey);
+        Assert.NotNull(s.LastError);
+    }
+
+    /// <summary>잘못된 match 정규식은 Load 에서 걸린다 — 수신 스캔 도중 처음 터지면 원인을 못 찾는다.</summary>
+    [Fact]
+    public void Load_InvalidRegex_ReportsError()
+    {
+        File.WriteAllText(_path, """
+            { "schemaVersion": 1, "messages": [
+                { "key": "R1", "match": "([unclosed", "fields": [] }
+            ] }
+            """);
         var s = new ParserStore(_path);
         s.Load();
         Assert.Empty(s.ByKey);

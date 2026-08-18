@@ -704,11 +704,14 @@ public partial class ShellWindow : Window
         }
     }
 
-    /// <summary>Ctrl+마우스휠 → 활성 창(패널)의 폰트 크기 조절(스크롤 대신). Ctrl 없으면 뷰가 스크롤 처리.</summary>
+    /// <summary>
+    /// Ctrl+마우스휠 → 폰트 크기 조절(스크롤 대신). 마우스가 어디 있느냐로 대상이 갈린다 —
+    /// 파싱 패널 위면 패널 배율, 그 밖이면 터미널 폰트. Ctrl 없으면 뷰가 스크롤 처리.
+    /// </summary>
     private void OnPreviewMouseWheel(object? sender, MouseWheelEventArgs e)
     {
         if ((Keyboard.Modifiers & ModifierKeys.Control) == 0 || e.Delta == 0) return;
-        ActiveDoc?.AdjustFont(e.Delta > 0 ? +1 : -1);
+        ActiveDoc?.WheelFontZoom(e.Delta > 0 ? +1 : -1);
         e.Handled = true; // TerminalView 의 휠 스크롤로 전달되지 않게
     }
 

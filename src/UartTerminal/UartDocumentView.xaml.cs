@@ -273,6 +273,9 @@ public partial class UartDocumentView : UserControl
         _mcpServer = new McpPipeServer(_bridge, _portName);
         RaiseMcpState();
 
+        // 옛 state.json(값 없음 → 0 아님, 기본 1.0)과 손으로 고친 이상값을 한 번에 흡수한다.
+        _parseFontScale = Math.Clamp(_state.ParseFontScale, ParseScaleMin, ParseScaleMax);
+
         _view = new TerminalView(_engine.Buffer) { FontSize = _state.FontSize, ShowTimestamps = _state.ShowTimestamps };
         _view.ScrollMetricsChanged += OnScrollMetrics;
         _view.AutoCopyRequested += TrySetClipboard;
@@ -520,6 +523,7 @@ public partial class UartDocumentView : UserControl
 
     private bool _parsePinned;              // 선택으로 고정됨(최신 따라가기 중지)
     private long _parseNextAbs = -1;        // 다음에 살필 절대 라인 번호(로거와 같은 방식)
+    private string? _parseCarryLine;        // 지난 스캔의 마지막 완성 줄(afterLine 이 스캔 경계를 넘게)
     private int _parseScanQueued;           // RX 스레드 → UI 디스패치 병합(0/1)
     private double _parsePanelWidth = 320;  // 마지막으로 쓴 패널 폭(스플리터 조절값을 토글 간에 유지)
 
@@ -776,7 +780,8 @@ public partial class UartDocumentView : UserControl
         if (specs.Count == 0) return;
 
         // 매칭 라인만 락 밖으로 복사해 파싱한다(첫 열기엔 스크롤백 전체가 대상일 수 있다).
-        var matched = new List<string>();
+        // 직전 줄도 함께 든다 — afterLine 정의(헤더 다음 줄에 값)가 줄 경계를 본다.
+        var matched = new List<(string? Prev, string Text)>();
         var buffer = _engine.Buffer;
         lock (buffer.SyncRoot)
         {
@@ -784,20 +789,27 @@ public partial class UartDocumentView : UserControl
             long endAbs = first + buffer.LineCount - 1;          // 마지막(진행 중) 줄 제외
             if (_parseNextAbs < first) _parseNextAbs = first;
 
+            // 직전 줄: 버퍼에 남아 있으면 거기서, 잘렸거나 스캔 경계면 지난 스캔의 마지막 줄에서.
+            string? prev = _parseNextAbs - 1 >= first && _parseNextAbs - 1 < endAbs
+                ? buffer.GetLine((int)(_parseNextAbs - 1 - first)).Text()
+                : _parseCarryLine;
+
             for (long abs = _parseNextAbs; abs < endAbs; abs++)
             {
                 string text = buffer.GetLine((int)(abs - first)).Text();
-                if (Core.Parsing.MessageParser.ContainsAnyKey(text, specs))
-                    matched.Add(text);
+                if (Core.Parsing.MessageParser.ContainsAnyKey(text, specs, prev))
+                    matched.Add((prev, text));
+                prev = text;
             }
+            if (endAbs > _parseNextAbs) _parseCarryLine = prev;  // 다음 스캔의 첫 줄이 볼 직전 줄
             _parseNextAbs = Math.Max(_parseNextAbs, endAbs);
         }
         if (matched.Count == 0) return;
 
         var now = DateTime.Now;
-        foreach (string line in matched)   // 하이라이트 소멸은 색 애니메이션이 담당 — 타이머 없음
+        foreach (var (prevLine, line) in matched)   // 하이라이트 소멸은 색 애니메이션이 담당 — 타이머 없음
         {
-            foreach (var block in Core.Parsing.MessageParser.ParseLine(line, specs))
+            foreach (var block in Core.Parsing.MessageParser.ParseLine(line, specs, prevLine))
             {
                 // 직전 블록과 값이 달라진 필드를 표시(첫 수신은 '변화' 가 아니다 — 켜자마자
                 // 스크롤백을 흡수할 때 전체가 파랗게 물드는 것을 막는다).
@@ -834,7 +846,8 @@ public partial class UartDocumentView : UserControl
     private void MaybePinParse(string text)
     {
         if (!ParsePanelVisible) return;
-        var blocks = Core.Parsing.MessageParser.ParseLine(text, ActiveSpecs());
+        // 선택은 여러 줄일 수 있다(afterLine 정의는 줄 경계가 필요) — 줄 단위로 훑는다.
+        var blocks = Core.Parsing.MessageParser.ParseText(text, ActiveSpecs());
         if (blocks.Count == 0) return;
 
         _parsePinned = true;
@@ -870,6 +883,12 @@ public partial class UartDocumentView : UserControl
     private const double FieldColWidth = 300;
     private const int TargetRows = 12;
 
+    // 패널 글자 배율(Ctrl+휠, AppState 에 저장). 폭 상수들에 곱해져 글자와 배치가 같이 커진다.
+    private const double ParseScaleMin = 0.7, ParseScaleMax = 2.0;
+    private double _parseFontScale = 1.0;
+    private double ParseFontPt => (double)FindResource("Font.Caption") * _parseFontScale;
+    private double ParseColWidth => FieldColWidth * _parseFontScale;
+
     private int _parseLastCols = -1;   // 마지막 렌더의 가용 열 수(폭 변경 시 경계를 넘을 때만 재렌더)
 
     /// <summary>패널 폭이 열 경계(300px)를 넘을 때만 다시 그린다 — 드래그 중 매 픽셀 재렌더 방지.</summary>
@@ -883,7 +902,7 @@ public partial class UartDocumentView : UserControl
     {
         double w = ParseHost.ActualWidth;
         if (w < 1) w = Math.Max(200, _parsePanelWidth) - 24;   // 첫 렌더(레이아웃 전)엔 저장된 폭으로 추정
-        return Math.Max(1, (int)(w / (FieldColWidth + 8)));
+        return Math.Max(1, (int)(w / (ParseColWidth + 8)));
     }
 
     /// <summary>
@@ -915,7 +934,7 @@ public partial class UartDocumentView : UserControl
         {
             Background = Brushes.Transparent,   // 없으면 히트 테스트에서 빠져 클릭이 오지 않는다
             Cursor = Cursors.Hand,
-            FontSize = (double)FindResource("Font.Caption"),
+            FontSize = ParseFontPt,
             FontWeight = FontWeights.SemiBold,
         };
         header.Inlines.Add(new System.Windows.Documents.Run(expanded ? "▾ " : "▸ ")
@@ -957,12 +976,12 @@ public partial class UartDocumentView : UserControl
 
             var columnsGrid = new Grid { Margin = new Thickness(0, 5, 0, 0) };
             for (int c = 0; c < cols; c++)
-                columnsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(FieldColWidth) });
+                columnsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ParseColWidth) });
 
             for (int c = 0; c < cols; c++)
             {
                 var colGrid = new Grid { VerticalAlignment = VerticalAlignment.Top };
-                colGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(128) });
+                colGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(128 * _parseFontScale) });
                 colGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 if (c > 0) colGrid.Margin = new Thickness(14, 0, 0, 0);   // 열 사이 간격
 
@@ -976,6 +995,7 @@ public partial class UartDocumentView : UserControl
                     {
                         Text = f.Name,
                         Style = (Style)FindResource("CaptionText"),
+                        FontSize = ParseFontPt,   // 로컬 값이 스타일 Setter 를 이겨 배율이 적용된다
                         TextTrimming = TextTrimming.CharacterEllipsis,
                         Margin = new Thickness(0, 1, 8, 1),
                     };
@@ -986,7 +1006,7 @@ public partial class UartDocumentView : UserControl
                     var value = new TextBlock
                     {
                         FontFamily = mono,
-                        FontSize = (double)FindResource("Font.Caption"),
+                        FontSize = ParseFontPt,
                         TextWrapping = TextWrapping.Wrap,
                         Margin = new Thickness(0, 1, 0, 1),
                     };
@@ -1026,6 +1046,7 @@ public partial class UartDocumentView : UserControl
                 {
                     Text = Loc.F("Parse.MissingFields", block.MissingCount),
                     Style = (Style)FindResource("CaptionText"),
+                    FontSize = ParseFontPt,
                     Margin = new Thickness(0, 3, 0, 0),
                 });
             }
@@ -1444,6 +1465,32 @@ public partial class UartDocumentView : UserControl
         }
     }
 
+    /// <summary>
+    /// Ctrl+휠 라우팅: 마우스가 파싱 패널 위면 패널 글자 배율, 그 밖이면 터미널 폰트.
+    /// 터미널(가까이서 읽는 로그)과 패널(떨어져서 보는 대시보드)은 읽는 거리가 달라 크기를 따로 둔다.
+    /// </summary>
+    public void WheelFontZoom(int step)
+    {
+        if (ParsePanelVisible && ParsePanel.IsMouseOver) AdjustParseFont(step);
+        else AdjustFont(step);
+    }
+
+    /// <summary>
+    /// 파싱 패널 글자 배율 조절(10%p 씩, 70~200%). 글자만 키우면 이름이 잘리고 값이 접히므로
+    /// 열 폭(FieldColWidth·이름 폭)도 같은 배율로 키워 배치를 유지한다.
+    /// </summary>
+    private void AdjustParseFont(int step)
+    {
+        double next = Math.Clamp(Math.Round(_parseFontScale + step * 0.1, 2), ParseScaleMin, ParseScaleMax);
+        if (Math.Abs(next - _parseFontScale) >= 0.001)
+        {
+            _parseFontScale = next;
+            _state.ParseFontScale = next;
+            RenderParsePanel();
+        }
+        ShowZoomIndicator(Loc.F("Parse.Zoom", (int)Math.Round(next * 100)));
+    }
+
     /// <summary>폰트 크기 조절(Ctrl+± / Ctrl+휠). 6~48pt 로 clamp, 크기를 잠깐 오버레이로 표시.</summary>
     public void AdjustFont(double delta)
     {
@@ -1461,9 +1508,11 @@ public partial class UartDocumentView : UserControl
     // 폰트 크기 오버레이 + 상태 저장 디바운스(줌 제스처가 끝난 뒤 1회 저장).
     private DispatcherTimer? _zoomTimer;
 
-    private void ShowZoomIndicator(double size)
+    private void ShowZoomIndicator(double size) => ShowZoomIndicator($"{size:0.#} pt");
+
+    private void ShowZoomIndicator(string text)
     {
-        ZoomText.Text = $"{size:0.#} pt";
+        ZoomText.Text = text;
         ZoomIndicator.Visibility = Visibility.Visible;
         if (_zoomTimer is null)
         {

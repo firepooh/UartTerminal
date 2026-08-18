@@ -1,7 +1,28 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace UartTerminal.Core.Parsing;
+
+/// <summary>
+/// 한 값 안에 눌러 담긴 하위 필드(마스크 비트 묶음)의 정의. 시프트는 따로 받지 않는다 —
+/// 마스크의 최하위 1비트 위치가 곧 시프트라서, 펌웨어 헤더의 <c>*_MASK</c> 상수를 그대로 옮기면 된다.
+/// </summary>
+public sealed record SubfieldSpec
+{
+    [JsonPropertyName("name")] public string Name { get; init; } = "";
+
+    /// <summary>비트 마스크(hex 문자열, "0x" 접두 허용. 예: "0xE0" = 비트 5~7).</summary>
+    [JsonPropertyName("mask")] public string Mask { get; init; } = "";
+
+    /// <summary>
+    /// 시프트 후 값 → 라벨(키는 십진 문자열). 있으면 항상 표시(0 도 의미다 — "타입=기본").
+    /// 없으면 0 이 아닐 때만 표시하고, 단일 비트 마스크는 이름만 나열한다(플래그).
+    /// </summary>
+    [JsonPropertyName("enum")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? Enum { get; init; }
+}
 
 /// <summary>
 /// 메시지 한 필드의 정의. 이름 외에는 전부 선택 —
@@ -47,6 +68,14 @@ public sealed record FieldSpec
     [JsonPropertyName("radix")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Radix { get; init; }
+
+    /// <summary>
+    /// 마스크 비트 묶음 해석 — 설정 워드처럼 한 값에 여러 필드가 눌러 담긴 경우
+    /// (<see cref="Bits"/> 는 비트 하나 = 플래그 하나일 때만 맞다). enum 다음, bits 앞 순서로 시도.
+    /// </summary>
+    [JsonPropertyName("subfields")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<SubfieldSpec>? Subfields { get; init; }
 }
 
 /// <summary>키 하나(예: "T5")로 식별되는 메시지의 정의.</summary>
@@ -69,7 +98,34 @@ public sealed record MessageSpec
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Collapsed { get; init; }
 
+    /// <summary>
+    /// 정규식 매치(선택). 있으면 "KEY=" 탐지 대신 이 정규식이 라인에서 블록을 찾는다 —
+    /// 콘솔 명령 응답처럼 <c>KEY=본문</c> 꼴이 아닌 출력용(예: <c>-status:\s*([0-9A-Fa-f]{8})</c>).
+    /// 본문 = 그룹 1(있으면), 없으면 매치 전체. 키는 카드 식별자로만 쓰인다.
+    /// </summary>
+    [JsonPropertyName("match")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Match { get; init; }
+
+    /// <summary>
+    /// 직전 줄 정규식(선택). 있으면 <b>직전 줄</b>이 이 정규식과 매치될 때 현재 줄 전체가 본문이다 —
+    /// 헤더 한 줄 뒤에 값들이 다음 줄로 오는 콘솔 출력용. match 보다 우선한다.
+    /// </summary>
+    [JsonPropertyName("afterLine")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AfterLine { get; init; }
+
     [JsonPropertyName("fields")] public List<FieldSpec> Fields { get; init; } = new();
+
+    private Regex? _matchRe, _afterRe;
+
+    /// <summary>컴파일된 match 정규식(없으면 null). 잘못된 패턴은 Load 검증에서 걸러진다.</summary>
+    [JsonIgnore] public Regex? MatchRegex =>
+        Match is null ? null : _matchRe ??= new Regex(Match, RegexOptions.Compiled);
+
+    /// <summary>컴파일된 afterLine 정규식(없으면 null).</summary>
+    [JsonIgnore] public Regex? AfterRegex =>
+        AfterLine is null ? null : _afterRe ??= new Regex(AfterLine, RegexOptions.Compiled);
 }
 
 /// <summary>parsers.json 파일 형식.</summary>
@@ -140,6 +196,9 @@ public sealed class ParserStore
                             Separator = string.IsNullOrEmpty(m.Separator) ? "_" : m.Separator,
                             Fields = m.Fields ?? new List<FieldSpec>(),
                         };
+                        // 정규식을 지금 컴파일해 본다 — 잘못된 패턴을 수신 중에 처음 만나면
+                        // 스캔 루프가 터진다. 여기서 던지면 바깥 catch 가 파일 오류로 알린다.
+                        _ = spec.MatchRegex; _ = spec.AfterRegex;
                         if (next.ContainsKey(spec.Key))
                             order.RemoveAll(s => s.Key == spec.Key);
                         next[spec.Key] = spec;
