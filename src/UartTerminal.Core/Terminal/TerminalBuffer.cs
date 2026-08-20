@@ -1,7 +1,10 @@
 namespace UartTerminal.Core.Terminal;
 
 /// <summary>
-/// 논리 라인들의 순환 버퍼(스크롤백). 유일한 화면 상태 소스이며 <see cref="ITerminalSink"/>를 구현한다.
+/// 논리 라인들의 스크롤백. 유일한 화면 상태 소스이며 <see cref="ITerminalSink"/>를 구현한다.
+/// 자료구조는 <b>순환 버퍼가 아니라</b> 가득 차면 앞을 잘라내는 <see cref="List{T}"/> 다(<see cref="Drop"/>) —
+/// 줄마다 전체 시프트가 일어난다. 115200bps 실사용에서는 무시할 수준이지만
+/// <c>maxLines</c> 를 크게(수만 줄) 올릴 생각이면 여기부터 링 버퍼로 바꿔야 한다.
 /// 모든 접근(변경/읽기)은 <see cref="SyncRoot"/> 락 아래에서 이뤄진다.
 /// 변경 시 <see cref="Revision"/>이 증가하므로 렌더러는 이를 폴링해 다시 그릴지 판단한다(README §4.2 배칭).
 /// </summary>

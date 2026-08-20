@@ -96,8 +96,42 @@ public sealed class FontMetrics
         return null;
     }
 
+    // 조회 캐시 — 렌더는 보이는 셀마다 이 함수를 부른다(60Hz × 수천 셀). WPF 의
+    // CharacterToGlyphMap 은 인터페이스 디스패치 뒤에 폰트 cmap 조회가 있어 셀마다 두드릴 것이
+    // 아니다. ASCII 는 배열, 그 밖(한글 등)은 사전. Tf==null 이 '아직 안 풀어봄',
+    // Gi==0 이 '이 폰트들에 없음'(원래 계약 그대로 false + .notdef).
+    private readonly (GlyphTypeface? Tf, ushort Gi)[] _asciiGlyphs = new (GlyphTypeface?, ushort)[128];
+    private readonly Dictionary<int, (GlyphTypeface Tf, ushort Gi)> _glyphCache = new();
+
     /// <summary>코드포인트의 글리프 인덱스를 기본→폴백 순으로 조회. 반환 typeface 로 GlyphRun 을 구성한다.</summary>
     public bool TryGetGlyph(int codePoint, out GlyphTypeface typeface, out ushort glyphIndex)
+    {
+        if ((uint)codePoint < 128)
+        {
+            var hit = _asciiGlyphs[codePoint];
+            if (hit.Tf is not null)
+            {
+                typeface = hit.Tf;
+                glyphIndex = hit.Gi;
+                return hit.Gi != 0;
+            }
+            bool found = Resolve(codePoint, out typeface, out glyphIndex);
+            _asciiGlyphs[codePoint] = (typeface, glyphIndex);
+            return found;
+        }
+
+        if (_glyphCache.TryGetValue(codePoint, out var e))
+        {
+            typeface = e.Tf;
+            glyphIndex = e.Gi;
+            return e.Gi != 0;
+        }
+        bool ok = Resolve(codePoint, out typeface, out glyphIndex);
+        _glyphCache[codePoint] = (typeface, glyphIndex);
+        return ok;
+    }
+
+    private bool Resolve(int codePoint, out GlyphTypeface typeface, out ushort glyphIndex)
     {
         if (Primary.CharacterToGlyphMap.TryGetValue(codePoint, out glyphIndex) && glyphIndex != 0)
         {

@@ -42,11 +42,13 @@ public static class MessageParser
         string? prevLine = null)
     {
         // 블록의 등장 순서(라인 내 위치)대로 정렬해 화면과 같은 순서로 보여 준다.
-        var found = new List<(int At, string Body, MessageSpec Spec)>();
+        // 목록은 첫 매칭에서야 만든다 — 이 함수는 수신되는 <b>모든</b> 줄에 대해 불리고
+        // 그중 대부분은 매칭이 없다(빈 List 를 줄마다 버리지 않게).
+        List<(int At, string Body, MessageSpec Spec)>? found = null;
         foreach (var spec in specs.Values)
             if (FindBlock(line, prevLine, spec) is { } hit)
-                found.Add((hit.At, hit.Body, spec));
-        if (found.Count == 0) return Array.Empty<ParsedBlock>();
+                (found ??= new()).Add((hit.At, hit.Body, spec));
+        if (found is null) return Array.Empty<ParsedBlock>();
         found.Sort((a, b) => a.At.CompareTo(b.At));
 
         var blocks = new List<ParsedBlock>(found.Count);

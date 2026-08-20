@@ -779,9 +779,11 @@ public partial class UartDocumentView : UserControl
         var specs = ActiveSpecs();
         if (specs.Count == 0) return;
 
-        // 매칭 라인만 락 밖으로 복사해 파싱한다(첫 열기엔 스크롤백 전체가 대상일 수 있다).
-        // 직전 줄도 함께 든다 — afterLine 정의(헤더 다음 줄에 값)가 줄 경계를 본다.
-        var matched = new List<(string? Prev, string Text)>();
+        // 락 안에서는 <b>줄 텍스트만</b> 꺼낸다. 키 매칭은 스펙 수만큼 IndexOf·정규식을 돌리는
+        // 일이라 락 안에서 하면 그동안 RX 워커가 engine.Receive 에서 같은 락을 기다린다 —
+        // 패널을 처음 열 때는 스크롤백 전체가 대상이라 그 대기가 눈에 띈다.
+        var fresh = new List<string>();
+        string? carry;
         var buffer = _engine.Buffer;
         lock (buffer.SyncRoot)
         {
@@ -790,27 +792,29 @@ public partial class UartDocumentView : UserControl
             if (_parseNextAbs < first) _parseNextAbs = first;
 
             // 직전 줄: 버퍼에 남아 있으면 거기서, 잘렸거나 스캔 경계면 지난 스캔의 마지막 줄에서.
-            string? prev = _parseNextAbs - 1 >= first && _parseNextAbs - 1 < endAbs
+            // afterLine 정의(헤더 다음 줄에 값)가 줄 경계를 보기 때문에 필요하다.
+            carry = _parseNextAbs - 1 >= first && _parseNextAbs - 1 < endAbs
                 ? buffer.GetLine((int)(_parseNextAbs - 1 - first)).Text()
                 : _parseCarryLine;
 
             for (long abs = _parseNextAbs; abs < endAbs; abs++)
-            {
-                string text = buffer.GetLine((int)(abs - first)).Text();
-                if (Core.Parsing.MessageParser.ContainsAnyKey(text, specs, prev))
-                    matched.Add((prev, text));
-                prev = text;
-            }
-            if (endAbs > _parseNextAbs) _parseCarryLine = prev;  // 다음 스캔의 첫 줄이 볼 직전 줄
+                fresh.Add(buffer.GetLine((int)(abs - first)).Text());
+
             _parseNextAbs = Math.Max(_parseNextAbs, endAbs);
         }
-        if (matched.Count == 0) return;
+        if (fresh.Count == 0) return;
+        _parseCarryLine = fresh[^1];   // 다음 스캔의 첫 줄이 볼 직전 줄
 
+        // 여기부터는 락 밖이다. ContainsAnyKey 로 한 번 거르고 ParseLine 으로 또 매칭하던 것을
+        // ParseLine 한 번으로 합쳤다 — 매칭 없는 줄엔 빈 목록이 돌아온다(매칭 비용 절반).
         var now = DateTime.Now;
-        foreach (var (prevLine, line) in matched)   // 하이라이트 소멸은 색 애니메이션이 담당 — 타이머 없음
+        string? prevLine = carry;
+        bool touched = false;
+        foreach (string line in fresh)   // 하이라이트 소멸은 색 애니메이션이 담당 — 타이머 없음
         {
             foreach (var block in Core.Parsing.MessageParser.ParseLine(line, specs, prevLine))
             {
+                touched = true;
                 // 직전 블록과 값이 달라진 필드를 표시(첫 수신은 '변화' 가 아니다 — 켜자마자
                 // 스크롤백을 흡수할 때 전체가 파랗게 물드는 것을 막는다).
                 if (_parseBlocks.TryGetValue(block.Key, out var prev))
@@ -834,8 +838,40 @@ public partial class UartDocumentView : UserControl
                 _parseCounts[block.Key] = _parseCounts.GetValueOrDefault(block.Key) + 1;
                 _parseCountAt[block.Key] = now;   // 수신 자체가 변화 — [n] 이 깜빡인다
             }
+            prevLine = line;
         }
-        RenderParsePanel();
+        if (touched) RequestParseRender();
+    }
+
+    // 수신 경로 렌더 스로틀 — 스캔은 수신마다 하되 '그리기' 는 최소 간격으로 묶는다.
+    // 카드 전량 재생성(수백 UI 요소)이라 매칭 라인이 연속으로 흐르면 UI 스레드를 통째로 먹는다.
+    // 사용자 조작(토글·파일 교체·지우기·폭 변경)은 스로틀을 거치지 않고 즉시 그린다.
+    private const int ParseRenderMinMs = 200;
+    private DispatcherTimer? _parseRenderTimer;
+    private long _parseLastRenderTick;      // Environment.TickCount64 — 단조 증가(시계 변경에 안전)
+    private bool _parseRenderPending;
+
+    private void RequestParseRender()
+    {
+        long since = Environment.TickCount64 - _parseLastRenderTick;
+        if (since >= ParseRenderMinMs) { RenderParsePanel(); return; }
+
+        _parseRenderPending = true;
+        if (_parseRenderTimer is null)
+        {
+            _parseRenderTimer = new DispatcherTimer(DispatcherPriority.Background);
+            _parseRenderTimer.Tick += (_, _) =>
+            {
+                _parseRenderTimer!.Stop();
+                // 대기 중 패널을 닫았으면 버린다(다시 열 때 스캔이 따라잡는다).
+                if (_parseRenderPending && ParsePanelVisible) RenderParsePanel();
+            };
+        }
+        if (!_parseRenderTimer.IsEnabled)
+        {
+            _parseRenderTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, ParseRenderMinMs - since));
+            _parseRenderTimer.Start();
+        }
     }
 
     /// <summary>
@@ -912,6 +948,9 @@ public partial class UartDocumentView : UserControl
     /// </summary>
     private void RenderParsePanel()
     {
+        _parseLastRenderTick = Environment.TickCount64;
+        _parseRenderPending = false;
+
         var specs = ActiveSpecs();
         var visible = _parsers.Items.Where(s => specs.ContainsKey(s.Key) && _parseBlocks.ContainsKey(s.Key)).ToList();
         if (visible.Count == 0) { ShowParsePlaceholder(); return; }
@@ -1811,6 +1850,7 @@ public partial class UartDocumentView : UserControl
         _reconnectTimer?.Stop();
         _watchdogTimer?.Stop();
         _zoomTimer?.Stop();
+        _parseRenderTimer?.Stop();
         // 렌더 타이머(60Hz)를 끊는다. 이게 없으면 Dispatcher 가 타이머를 통해
         // 이 뷰 → 문서 → 엔진/브리지/세션 그래프 전체를 영구히 붙잡는다(탭을 닫아도).
         _view?.Shutdown();

@@ -67,6 +67,12 @@ public sealed class TerminalView : FrameworkElement
     private readonly Dictionary<uint, SolidColorBrush> _brushes = new();
     private readonly DispatcherTimer _timer;
 
+    // GlyphRun 빌더 — 행마다 새로 만들면 60Hz × 보이는 행 수만큼 List 가 버려진다. 뷰가 하나를
+    // 돌려 쓰고, GlyphRun 에 넘길 때만 ToArray 한다(WPF 는 retained 모드라 OnRender 가 끝난 뒤에
+    // 실제로 그린다 — 넘긴 배열을 나중에 건드리면 이미 기록된 run 이 깨진다).
+    private readonly List<ushort> _glyphBuf = new(256);
+    private readonly List<double> _advanceBuf = new(256);
+
     private FontMetrics? _metrics;
     private double _fontSize = 14.0;
     private double _metricsBuiltDpi = -1;
@@ -391,8 +397,10 @@ public sealed class TerminalView : FrameworkElement
 
         // 2) 글리프 패스: 같은 전경색(typeface 포함)의 연속 셀을 하나의 GlyphRun 으로
         x = 0;
-        var glyphs = new List<ushort>();
-        var advances = new List<double>();
+        var glyphs = _glyphBuf;
+        var advances = _advanceBuf;
+        glyphs.Clear();
+        advances.Clear();
         GlyphTypeface? runTypeface = null;
         Color runColor = default;
         double runX = 0;
@@ -436,10 +444,12 @@ public sealed class TerminalView : FrameworkElement
                 glyphs.Add(gi);
                 advances.Add(cellPx);
             }
-            else
+            else if (glyphs.Count > 0)
             {
-                // 공백/미지원: run 을 끊고 자리만 건너뜀
-                Flush();
+                // 공백/미지원: run 을 끊지 않고 직전 글리프의 advance 에 폭을 얹어 자리만 건너뛴다.
+                // 끊으면 run 수가 '색 구간 수' 가 아니라 '단어 수' 에 비례해 폭증한다 —
+                // 로그 한 줄(단어 20개)이 색 하나여도 GlyphRun 20개가 됐다.
+                advances[^1] += cellPx;
             }
             x += cellPx;
         }
