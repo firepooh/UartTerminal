@@ -141,6 +141,7 @@ public partial class CommandEditDialog : Window
     {
         _current = GroupList.SelectedItem as GroupRow;
         CmdList.ItemsSource = _current?.Rows;
+        CmdListEmpty.Visibility = (_current?.Rows.Count ?? 0) == 0 ? Visibility.Visible : Visibility.Collapsed;
         CmdHeader.Text = _current is null ? Loc.S("Cmd.Header") : Loc.F("Cmd.HeaderOf", _current.Name);
         if (_current is { Rows.Count: > 0 }) CmdList.SelectedIndex = 0;
         UpdateButtons();

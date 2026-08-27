@@ -144,6 +144,7 @@ public partial class SessionManagerDialog : Window
             });
 
         SessionList.ItemsSource = _rows;
+        SessionListEmpty.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         BaudBox.ItemsSource = BaudPresets;
         RxBox.ItemsSource = RxItems.Select(i => i.Text).ToList();

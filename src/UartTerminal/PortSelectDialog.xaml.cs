@@ -197,6 +197,8 @@ public partial class PortSelectDialog : Window
     {
         var ports = PortEnumerator.Enumerate();
         PortList.ItemsSource = ports;
+        // 목록이 비면 안내를 겹쳐 보인다(검은 상자만 남지 않게)
+        PortListEmpty.Visibility = ports.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (ports.Count == 0)
             return;

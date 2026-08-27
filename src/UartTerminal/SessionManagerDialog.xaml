@@ -7,7 +7,7 @@
         Width="880" Height="580" MinWidth="720" MinHeight="460"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{DynamicResource Bg}"
+        Background="{DynamicResource BgPanel}"
         Foreground="{DynamicResource Text}"
         FontFamily="{StaticResource UiFont}">
     <Window.Resources>
@@ -81,8 +81,7 @@
                    Text="{loc:Str Sess.Intro}"/>
 
         <!-- 표 머리글 -->
-        <Border Grid.Row="1" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
-                BorderThickness="1" CornerRadius="6,6,0,0" Padding="10,6">
+        <Border Grid.Row="1" Background="Transparent" Padding="12,0,12,4">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -102,7 +101,10 @@
         </Border>
 
         <!-- 세션 목록 -->
-        <ListBox x:Name="SessionList" Grid.Row="2" SelectionChanged="SessionList_SelectionChanged"
+        <Border Grid.Row="2" Style="{StaticResource InsetPanel}">
+        <Grid>
+        <ListBox x:Name="SessionList" SelectionChanged="SessionList_SelectionChanged"
+                 Background="Transparent" BorderThickness="0" Padding="4"
                  HorizontalContentAlignment="Stretch">
             <ListBox.ItemTemplate>
                 <DataTemplate>
@@ -126,10 +128,14 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
+        <TextBlock x:Name="SessionListEmpty" Style="{StaticResource EmptyStateText}"
+                   Text="{loc:Str Sess.EmptyList}"/>
+        </Grid>
+        </Border>
 
         <!-- 선택 항목 편집 -->
         <Border Grid.Row="3" x:Name="EditPane" Margin="0,12,0,0" IsEnabled="False"
-                Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
+                Background="{DynamicResource Bg}" BorderBrush="{DynamicResource BorderBrush2}"
                 BorderThickness="1" CornerRadius="8" Padding="12,10">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -218,9 +224,9 @@
                         Padding="10,0" Margin="10,0,0,0" Click="OpenFolder_Click"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource GhostButton}" MinHeight="30" IsCancel="True"/>
                 <Button x:Name="OkButton" Content="{loc:Str Common.Save}" Style="{StaticResource SendButton}"
-                        MinWidth="86" MinHeight="30" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
-                <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource DialogButton}" MinHeight="30" IsCancel="True"/>
+                        MinWidth="86" MinHeight="30" Margin="8,0,0,0" IsDefault="True" Click="Ok_Click"/>
             </StackPanel>
         </Grid>
     </Grid>

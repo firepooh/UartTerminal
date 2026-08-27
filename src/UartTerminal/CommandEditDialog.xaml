@@ -7,7 +7,7 @@
         Width="900" Height="560" MinWidth="760" MinHeight="440"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{DynamicResource Bg}"
+        Background="{DynamicResource BgPanel}"
         Foreground="{DynamicResource Text}"
         FontFamily="{StaticResource UiFont}">
     <Grid Margin="14">
@@ -73,6 +73,7 @@
                 </StackPanel>
 
                 <!-- 폴더/하위를 한 목록에 들여쓰기로 표현(트리 컨트롤 없이 드래그 정렬이 쉬움) -->
+                <Grid>
                 <ListBox x:Name="CmdList" SelectionChanged="CmdList_SelectionChanged"
                          AllowDrop="True"
                          PreviewMouseLeftButtonDown="Drag_Down"
@@ -98,6 +99,9 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+                <TextBlock x:Name="CmdListEmpty" Style="{StaticResource EmptyStateText}"
+                           Text="{loc:Str Cmd.EmptyList}"/>
+                </Grid>
             </DockPanel>
 
             <!-- ③ 상세(선택 항목 편집) -->
@@ -138,9 +142,9 @@
         </StackPanel>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource GhostButton}" IsCancel="True"/>
             <Button x:Name="OkButton" Content="{loc:Str Common.Save}" Style="{StaticResource SendButton}"
-                    MinWidth="86" MinHeight="30" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
-            <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource DialogButton}" IsCancel="True"/>
+                    MinWidth="86" MinHeight="30" Margin="8,0,0,0" IsDefault="True" Click="Ok_Click"/>
         </StackPanel>
     </Grid>
 </Window>

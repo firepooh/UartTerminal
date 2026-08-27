@@ -8,7 +8,7 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{DynamicResource Bg}"
+        Background="{DynamicResource BgPanel}"
         Foreground="{DynamicResource Text}"
         FontFamily="{StaticResource UiFont}">
     <StackPanel Margin="16">
@@ -53,9 +53,9 @@
                   Style="{StaticResource AppCheckBox}" Margin="2,10,0,0"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource GhostButton}" IsCancel="True"/>
             <Button Content="{loc:Str Common.Ok}" Style="{StaticResource SendButton}"
-                    MinWidth="86" MinHeight="30" Margin="0,0,8,0" IsDefault="True" Click="Ok_Click"/>
-            <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource DialogButton}" IsCancel="True"/>
+                    MinWidth="86" MinHeight="30" Margin="8,0,0,0" IsDefault="True" Click="Ok_Click"/>
         </StackPanel>
     </StackPanel>
 </Window>
