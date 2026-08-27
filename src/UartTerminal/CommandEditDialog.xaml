@@ -4,77 +4,120 @@
         xmlns:loc="clr-namespace:UartTerminal"
         Title="{loc:Str Cmd.Title}"
         Icon="/UartTerminal.ico"
-        Width="960" Height="580" MinWidth="780" MinHeight="440"
+        Width="980" Height="620" MinWidth="860" MinHeight="480"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource BgPanel}"
         Foreground="{DynamicResource Text}"
         FontFamily="{StaticResource UiFont}">
-    <Grid Margin="14">
+    <Window.Resources>
+        <!--
+          목록 항목: 고르면 그 자리에서 펼쳐져 편집기가 된다(별도 상세 칸 없음).
+          선택 표시를 통짜 파란 배경으로 두면 안에 든 입력칸이 묻히므로,
+          면(Surface) + 강조 테두리로 바꾼다.
+        -->
+        <Style x:Key="CmdItem" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Foreground" Value="{DynamicResource Text}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="7"
+                                BorderBrush="Transparent" BorderThickness="1"
+                                Padding="{TemplateBinding Padding}" Margin="0,1">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 인라인 편집칸: 줄 안에 들어가므로 본문보다 한 단계 작고 낮다 -->
+        <Style x:Key="InlineInput" TargetType="TextBox" BasedOn="{StaticResource CommandInput}">
+            <Setter Property="FontSize" Value="{StaticResource Font.Caption}"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Margin="2,0,0,10" Style="{StaticResource HintText}"
+        <TextBlock Grid.Row="0" Margin="0,0,0,12" Style="{StaticResource HintText}"
                    Text="{loc:Str Cmd.Intro}"/>
 
-        <Grid Grid.Row="1">
+        <!-- 도구 줄: 왼쪽은 그룹, 오른쪽은 목록 조작. 그룹은 서너 개뿐이라 목록 대신 콤보로 두고
+             비운 자리를 명령 목록에 준다 — 여기가 가장 많이 만지는 곳이다. -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="190" MinWidth="150"/>
-                <ColumnDefinition Width="260" MinWidth="200"/>
-                <ColumnDefinition Width="*" MinWidth="220"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- ① 그룹(프로젝트) -->
-            <DockPanel Grid.Column="0">
-                <TextBlock DockPanel.Dock="Top" Text="{loc:Str Cmd.Groups}" Margin="2,0,0,6"
-                           Style="{StaticResource FieldLabel}"/>
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
-                    <Button x:Name="AddGroupButton" Content="{loc:Str Common.Add}" Style="{StaticResource DialogButton}"
-                            MinWidth="0" Padding="10,0" Click="AddGroup_Click"/>
-                    <Button x:Name="RenameGroupButton" Content="{loc:Str Common.Rename}" Style="{StaticResource DialogButton}"
-                            MinWidth="0" Padding="10,0" Margin="5,0,0,0" Click="RenameGroup_Click"/>
-                    <Button x:Name="DeleteGroupButton" Content="{loc:Str Common.Delete}" Style="{StaticResource DialogButton}"
-                            MinWidth="0" Padding="10,0" Margin="5,0,0,0" Click="DeleteGroup_Click"/>
-                </StackPanel>
-                <ListBox x:Name="GroupList" SelectionChanged="GroupList_SelectionChanged"
-                         DisplayMemberPath="Name"
-                         AllowDrop="True"
-                         PreviewMouseLeftButtonDown="Drag_Down"
-                         PreviewMouseMove="Drag_Move"
-                         Drop="GroupList_Drop"
-                         DragOver="List_DragOver"/>
-            </DockPanel>
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="{loc:Str Cmd.Groups}" Style="{StaticResource FieldLabel}"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox x:Name="GroupCombo" Width="180" Height="30" DisplayMemberPath="Name"
+                          VerticalContentAlignment="Center" SelectionChanged="GroupList_SelectionChanged"/>
+                <Button x:Name="AddGroupButton" Content="{loc:Str Common.Add}" Style="{StaticResource DialogButton}"
+                        MinWidth="0" Height="30" Padding="10,0" Margin="8,0,0,0" Click="AddGroup_Click"/>
+                <Button x:Name="RenameGroupButton" Content="{loc:Str Common.Rename}" Style="{StaticResource DialogButton}"
+                        MinWidth="0" Height="30" Padding="10,0" Margin="5,0,0,0" Click="RenameGroup_Click"/>
+                <Button x:Name="GroupUpButton" Content="↑" Style="{StaticResource DialogButton}"
+                        MinWidth="30" Width="30" Height="30" Padding="0" Margin="5,0,0,0"
+                        ToolTip="{loc:Str Common.Up}" Click="GroupUp_Click"/>
+                <Button x:Name="GroupDownButton" Content="↓" Style="{StaticResource DialogButton}"
+                        MinWidth="30" Width="30" Height="30" Padding="0" Margin="5,0,0,0"
+                        ToolTip="{loc:Str Common.Down}" Click="GroupDown_Click"/>
+                <Button x:Name="DeleteGroupButton" Content="{loc:Str Common.Delete}" Style="{StaticResource GhostButton}"
+                        MinWidth="0" Height="30" Padding="10,0" Margin="5,0,0,0" Click="DeleteGroup_Click"/>
+            </StackPanel>
 
-            <!-- ② 명령 / 폴더 -->
-            <DockPanel Grid.Column="1" Margin="12,0,0,0">
-                <TextBlock DockPanel.Dock="Top" x:Name="CmdHeader" Text="{loc:Str Cmd.Commands}" Margin="2,0,0,6"
-                           Style="{StaticResource FieldLabel}"/>
-                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-                    <StackPanel Orientation="Horizontal">
-                        <Button x:Name="AddButton" Content="{loc:Str Cmd.AddCommand}" Style="{StaticResource DialogButton}"
-                                MinWidth="0" Padding="10,0" Click="Add_Click"/>
-                        <Button x:Name="AddFolderButton" Content="{loc:Str Cmd.AddFolder}" Style="{StaticResource DialogButton}"
-                                MinWidth="0" Padding="10,0" Margin="5,0,0,0" Click="AddFolder_Click"/>
-                        <Button x:Name="DeleteButton" Content="{loc:Str Common.Delete}" Style="{StaticResource DialogButton}"
-                                MinWidth="0" Padding="10,0" Margin="5,0,0,0" Click="Delete_Click"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
-                        <Button x:Name="AddSubButton" Content="{loc:Str Cmd.AddChild}" Style="{StaticResource DialogButton}"
-                                MinWidth="0" Padding="10,0" ToolTip="{loc:Str Cmd.AddChildTip}" Click="AddSub_Click"/>
-                        <Button x:Name="UpButton" Content="↑" Style="{StaticResource DialogButton}"
-                                MinWidth="32" Padding="0" Margin="5,0,0,0" ToolTip="{loc:Str Common.Up}" Click="Up_Click"/>
-                        <Button x:Name="DownButton" Content="↓" Style="{StaticResource DialogButton}"
-                                MinWidth="32" Padding="0" Margin="5,0,0,0" ToolTip="{loc:Str Common.Down}" Click="Down_Click"/>
-                    </StackPanel>
-                </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="AddButton" Content="{loc:Str Cmd.AddCommand}" Style="{StaticResource DialogButton}"
+                        MinWidth="0" Height="30" Padding="10,0" Click="Add_Click"/>
+                <Button x:Name="AddFolderButton" Content="{loc:Str Cmd.AddFolder}" Style="{StaticResource DialogButton}"
+                        MinWidth="0" Height="30" Padding="10,0" Margin="5,0,0,0" Click="AddFolder_Click"/>
+                <Button x:Name="AddSubButton" Content="{loc:Str Cmd.AddChild}" Style="{StaticResource DialogButton}"
+                        MinWidth="0" Height="30" Padding="10,0" Margin="5,0,0,0"
+                        ToolTip="{loc:Str Cmd.AddChildTip}" Click="AddSub_Click"/>
+                <Button x:Name="UpButton" Content="↑" Style="{StaticResource DialogButton}"
+                        MinWidth="30" Width="30" Height="30" Padding="0" Margin="5,0,0,0"
+                        ToolTip="{loc:Str Common.Up}" Click="Up_Click"/>
+                <Button x:Name="DownButton" Content="↓" Style="{StaticResource DialogButton}"
+                        MinWidth="30" Width="30" Height="30" Padding="0" Margin="5,0,0,0"
+                        ToolTip="{loc:Str Common.Down}" Click="Down_Click"/>
+                <Button x:Name="DeleteButton" Content="{loc:Str Common.Delete}" Style="{StaticResource GhostButton}"
+                        MinWidth="0" Height="30" Padding="10,0" Margin="5,0,0,0" Click="Delete_Click"/>
+            </StackPanel>
+        </Grid>
 
-                <!-- 폴더/하위를 한 목록에 들여쓰기로 표현(트리 컨트롤 없이 드래그 정렬이 쉬움) -->
-                <Grid>
+        <!-- 명령 목록 = 편집기. 폴더/하위는 한 목록에 들여쓰기로 표현한다
+             (트리 컨트롤 없이 드래그 정렬이 쉽다). -->
+        <Border Grid.Row="2" Style="{StaticResource InsetPanel}">
+            <Grid>
                 <ListBox x:Name="CmdList" SelectionChanged="CmdList_SelectionChanged"
+                         Background="Transparent" BorderThickness="0" Padding="6"
+                         HorizontalContentAlignment="Stretch"
+                         ItemContainerStyle="{StaticResource CmdItem}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          AllowDrop="True"
                          PreviewMouseLeftButtonDown="Drag_Down"
                          PreviewMouseMove="Drag_Move"
@@ -82,66 +125,104 @@
                          DragOver="List_DragOver">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="{Binding Indent}">
+                            <!--
+                              한 줄에서 끝낸다: 고르면 그 자리(이름·전송 문자열 위치)가 입력칸으로 바뀐다.
+                              접힌 상태와 펼친 상태가 <b>같은 열</b>을 쓰므로 글자가 좌우로 튀지 않고,
+                              줄 높이도 그대로다(MinHeight=28).
+                            -->
+                            <Grid Margin="{Binding Indent}" MinHeight="28">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="230"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Glyph}" Margin="0,0,5,0"
+
+                                <TextBlock Grid.Column="0" Text="{Binding Glyph}" Margin="0,0,7,0"
+                                           VerticalAlignment="Center"
                                            Foreground="{DynamicResource TextMuted}"/>
-                                <TextBlock Grid.Column="1" Text="⚠" Margin="0,0,5,0"
+                                <TextBlock x:Name="Warn" Grid.Column="1" Text="⚠" Margin="0,0,6,0"
+                                           VerticalAlignment="Center"
                                            Foreground="{DynamicResource Amber}"
                                            Visibility="{Binding ConfirmMark}"/>
-                                <TextBlock Grid.Column="2" Text="{Binding Display}"
+
+                                <!-- 접힌 표시 -->
+                                <TextBlock x:Name="NameText" Grid.Column="2" Text="{Binding Display}"
+                                           VerticalAlignment="Center" FontWeight="SemiBold"
+                                           Margin="0,0,10,0" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="SentText" Grid.Column="3" Text="{Binding Text}"
+                                           VerticalAlignment="Center"
+                                           FontFamily="{StaticResource MonoFont}"
+                                           FontSize="{StaticResource Font.Caption}"
+                                           Foreground="{DynamicResource TextFaint}"
                                            TextTrimming="CharacterEllipsis"/>
+
+                                <!-- 펼친 편집(같은 자리) -->
+                                <TextBox x:Name="NameBox" Grid.Column="2" Visibility="Collapsed"
+                                         Style="{StaticResource InlineInput}" MaxLength="40" Margin="0,0,10,0"
+                                         ToolTip="{loc:Str Cmd.NameLabel}"
+                                         Text="{Binding Name, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
+                                <TextBox x:Name="SendBox" Grid.Column="3" Visibility="Collapsed"
+                                         Style="{StaticResource InlineInput}" MaxLength="2000"
+                                         ToolTip="{loc:Str Cmd.TextLabel}"
+                                         Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
+                                <CheckBox x:Name="ConfirmBox" Grid.Column="4" Visibility="Collapsed"
+                                          Style="{StaticResource AppCheckBox}" Margin="12,0,2,0"
+                                          VerticalAlignment="Center"
+                                          ToolTip="{loc:Str Cmd.Confirm}"
+                                          Content="{loc:Str Cmd.ConfirmShort}"
+                                          IsChecked="{Binding Confirm, Mode=TwoWay}"/>
+
+                                <!-- 폴더는 전송 문자열이 없다 — 그 자리에 이유를 적는다 -->
+                                <TextBlock x:Name="FolderHint" Grid.Column="3" Grid.ColumnSpan="2"
+                                           Visibility="Collapsed" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Blue}"
+                                           FontSize="{StaticResource Font.Caption}"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{loc:Str Cmd.FolderHint}"/>
                             </Grid>
+
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                    <Setter TargetName="NameText" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="SentText" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="Warn" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="NameBox" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="SendBox" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="ConfirmBox" Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <!-- 폴더를 고른 경우: 전송 칸·확인 대신 안내 -->
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
+                                        <Condition Binding="{Binding IsFolder}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter TargetName="SendBox" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="ConfirmBox" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="FolderHint" Property="Visibility" Value="Visible"/>
+                                </MultiDataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
                 <TextBlock x:Name="CmdListEmpty" Style="{StaticResource EmptyStateText}"
                            Text="{loc:Str Cmd.EmptyList}"/>
-                </Grid>
-            </DockPanel>
-
-            <!-- ③ 상세(선택 항목 편집) -->
-            <Border Grid.Column="2" x:Name="DetailPane" Margin="14,0,0,0" IsEnabled="False">
-                <StackPanel>
-                    <TextBlock Text="{loc:Str Cmd.NameLabel}" Style="{StaticResource FieldLabel}" Margin="2,0,0,6"/>
-                    <TextBox x:Name="NameBox" Style="{StaticResource CommandInput}"
-                             MaxLength="40"
-                             Text="{Binding Name, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
-
-                    <TextBlock x:Name="TextLabel" Text="{loc:Str Cmd.TextLabel}"
-                               Style="{StaticResource FieldLabel}" Margin="2,14,0,6"/>
-                    <TextBox x:Name="TextBoxCmd" Style="{StaticResource CommandInput}"
-                             MaxLength="2000"
-                             Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
-
-                    <CheckBox x:Name="ConfirmBox" Style="{StaticResource AppCheckBox}" Margin="2,16,0,0"
-                              Content="{loc:Str Cmd.Confirm}"
-                              IsChecked="{Binding Confirm, Mode=TwoWay}"/>
-
-                    <TextBlock x:Name="FolderHint" Visibility="Collapsed" Margin="2,16,0,0"
-                               Foreground="{DynamicResource Blue}" FontSize="{StaticResource Font.Caption}" TextWrapping="Wrap"
-                               Text="{loc:Str Cmd.FolderHint}"/>
-
-                    <TextBlock Text="{loc:Str Cmd.SecretWarn}"
-                               Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}" TextWrapping="Wrap"
-                               Margin="2,18,0,0"/>
-                </StackPanel>
-            </Border>
-        </Grid>
+            </Grid>
+        </Border>
 
         <!-- 파일 위치(팀 공유 = 이 파일 복사) -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="2,12,0,0">
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,12,0,0">
             <TextBlock x:Name="PathText" Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}"
-                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="620"/>
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520"/>
             <Button x:Name="OpenFolderButton" Content="{loc:Str Common.OpenFolder}" Style="{StaticResource DialogButton}"
                     MinWidth="0" MinHeight="24" Padding="10,0" Margin="10,0,0,0" Click="OpenFolder_Click"/>
+            <TextBlock Text="{loc:Str Cmd.SecretWarn}" Margin="14,0,0,0" VerticalAlignment="Center"
+                       Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}"
+                       TextTrimming="CharacterEllipsis"/>
         </StackPanel>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource GhostButton}" IsCancel="True"/>
             <Button x:Name="OkButton" Content="{loc:Str Common.Save}" Style="{StaticResource SendButton}"
                     MinWidth="86" MinHeight="30" Margin="8,0,0,0" IsDefault="True" Click="Ok_Click"/>

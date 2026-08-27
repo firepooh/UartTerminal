@@ -301,7 +301,6 @@ public sealed class Loc : INotifyPropertyChanged
         ["Cmd.Title"] = ("저장 명령 편집 — UartTerminal", "Edit Saved Commands — UartTerminal"),
         ["Cmd.Intro"] = ("그룹(프로젝트)별로 명령을 나눠 저장하고, 세션에 그룹을 연결하면 접속 시 자동 선택됩니다.\n폴더를 만들어 하위 명령(예: reset → sw/hw/wdt)을 고르게 할 수 있고, 목록은 드래그로 순서를 바꿉니다.", "Store commands per group (project); link a group to a session and it is selected automatically on connect.\nCreate a folder to choose among sub-commands (e.g.\nreset → sw/hw/wdt), and drag items to reorder."),
         ["Cmd.Groups"] = ("그룹 (프로젝트)", "Groups (projects)"),
-        ["Cmd.Commands"] = ("명령", "Commands"),
         ["Cmd.AddCommand"] = ("명령 추가", "Add command"),
         ["Cmd.AddFolder"] = ("폴더 추가", "Add folder"),
         ["Cmd.AddChild"] = ("하위 명령 추가", "Add sub-command"),
@@ -309,6 +308,7 @@ public sealed class Loc : INotifyPropertyChanged
         ["Cmd.NameLabel"] = ("이름 (칩/메뉴에 표시)", "Name (shown on chip/menu)"),
         ["Cmd.TextLabel"] = ("전송할 문자열 (한 줄, 전송 시 CR 이 붙습니다)", "Text to send (single line; a CR is appended)"),
         ["Cmd.Confirm"] = ("전송 전 확인 (restart · erase 처럼 위험한 명령)", "Confirm before sending (for risky commands like restart / erase)"),
+        ["Cmd.ConfirmShort"] = ("전송 전 확인", "Confirm first"),
         ["Cmd.FolderHint"] = ("폴더입니다 — 전송 문자열이 없고, 클릭하면 하위 명령을 고르는 메뉴가 열립니다.\n[하위 명령 추가]로 항목을 넣으세요.", "This is a folder — it has no text to send; clicking it opens a menu of sub-commands.\nUse [Add sub-command] to add entries."),
         ["Cmd.SecretWarn"] = ("비밀번호 같은 민감정보는 저장하지 마세요 (commands.json 은 평문입니다).", "Do not store secrets such as passwords (commands.json is plain text)."),
 
@@ -565,8 +565,6 @@ public sealed class Loc : INotifyPropertyChanged
         ["App.CrashBody"] = ("예기치 못한 오류가 발생했지만 계속 실행합니다.\n\n{0}: {1}\n\n자세한 내용: {2}", "An unexpected error occurred, but the app will keep running.\n\n{0}: {1}\n\nDetails: {2}"),
         ["Cmd.NewFolder"] = ("(새 폴더)", "(new folder)"),
         ["Cmd.NewCommand"] = ("(새 명령)", "(new command)"),
-        ["Cmd.Header"] = ("명령", "Commands"),
-        ["Cmd.HeaderOf"] = ("명령 — {0}", "Commands — {0}"),
         ["Cmd.ConfirmDropEmpty"] = ("전송 문자열이 비어 있는 명령 또는 하위가 없는 폴더 {0}개는 저장되지 않습니다.\n계속할까요?", "{0} item(s) with an empty command text or an empty folder will not be saved.\nContinue?"),
     };
 }

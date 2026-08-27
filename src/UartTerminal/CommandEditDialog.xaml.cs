@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using UartTerminal.Core.Config;
@@ -104,8 +105,8 @@ public partial class CommandEditDialog : Window
         if (_groups.Count == 0)
             _groups.Add(new GroupRow { Name = CommandStore.DefaultGroupName });
 
-        GroupList.ItemsSource = _groups;
-        GroupList.SelectedIndex = 0;
+        GroupCombo.ItemsSource = _groups;
+        GroupCombo.SelectedIndex = 0;
         UpdateButtons();
     }
 
@@ -139,10 +140,9 @@ public partial class CommandEditDialog : Window
 
     private void GroupList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        _current = GroupList.SelectedItem as GroupRow;
+        _current = GroupCombo.SelectedItem as GroupRow;
         CmdList.ItemsSource = _current?.Rows;
         CmdListEmpty.Visibility = (_current?.Rows.Count ?? 0) == 0 ? Visibility.Visible : Visibility.Collapsed;
-        CmdHeader.Text = _current is null ? Loc.S("Cmd.Header") : Loc.F("Cmd.HeaderOf", _current.Name);
         if (_current is { Rows.Count: > 0 }) CmdList.SelectedIndex = 0;
         UpdateButtons();
     }
@@ -159,8 +159,7 @@ public partial class CommandEditDialog : Window
         if (string.IsNullOrWhiteSpace(name)) return;
         var gr = new GroupRow { Name = name.Trim() };
         _groups.Add(gr);
-        GroupList.SelectedItem = gr;
-        GroupList.ScrollIntoView(gr);
+        GroupCombo.SelectedItem = gr;
         UpdateButtons();
     }
 
@@ -171,11 +170,10 @@ public partial class CommandEditDialog : Window
         if (string.IsNullOrWhiteSpace(name)) return;
         _current.Name = name.Trim();
         // ObservableCollection 은 항목 '내부' 변경을 모른다 → 표시 갱신을 위해 다시 바인딩
-        int i = GroupList.SelectedIndex;
-        GroupList.ItemsSource = null;
-        GroupList.ItemsSource = _groups;
-        GroupList.SelectedIndex = i;
-        CmdHeader.Text = Loc.F("Cmd.HeaderOf", _current.Name);
+        int i = GroupCombo.SelectedIndex;
+        GroupCombo.ItemsSource = null;
+        GroupCombo.ItemsSource = _groups;
+        GroupCombo.SelectedIndex = i;
     }
 
     private void DeleteGroup_Click(object sender, RoutedEventArgs e)
@@ -193,7 +191,7 @@ public partial class CommandEditDialog : Window
 
         int i = _groups.IndexOf(_current);
         _groups.Remove(_current);
-        GroupList.SelectedIndex = Math.Min(i, _groups.Count - 1);
+        GroupCombo.SelectedIndex = Math.Min(i, _groups.Count - 1);
         UpdateButtons();
     }
 
@@ -201,14 +199,8 @@ public partial class CommandEditDialog : Window
 
     private void CmdList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var row = CmdList.SelectedItem as Row;
-        DetailPane.DataContext = row;
-        DetailPane.IsEnabled = row is not null;
-        // 폴더는 전송 문자열이 없다 — 입력을 감추는 대신 비활성화해 이유를 안내한다.
-        bool folder = row?.IsFolder == true;
-        TextBoxCmd.IsEnabled = !folder;
-        TextLabel.Opacity = folder ? 0.45 : 1.0;
-        FolderHint.Visibility = folder ? Visibility.Visible : Visibility.Collapsed;
+        // 편집은 고른 줄이 그 자리에서 펼쳐져 처리한다(DataTemplate + 양방향 바인딩) —
+        // 따로 채워 넣을 상세 칸이 없다. 여기서는 버튼 상태만 맞춘다.
         UpdateButtons();
     }
 
@@ -226,6 +218,9 @@ public partial class CommandEditDialog : Window
         // 하위 추가는 폴더 또는 그 하위가 선택돼 있을 때(해당 폴더에 붙인다)
         AddSubButton.IsEnabled = sel is not null && (sel.IsFolder || sel.IsChild);
         DeleteGroupButton.IsEnabled = _groups.Count > 1;
+        int gi = GroupCombo.SelectedIndex;
+        GroupUpButton.IsEnabled = gi > 0;
+        GroupDownButton.IsEnabled = gi >= 0 && gi < _groups.Count - 1;
         RenameGroupButton.IsEnabled = _current is not null;
         AddGroupButton.IsEnabled = _groups.Count < CommandStore.MaxGroups;
     }
@@ -238,7 +233,7 @@ public partial class CommandEditDialog : Window
         var row = new Row();
         _current.Rows.Add(row); // 최상위로 끝에 추가
         SelectRow(row);
-        NameBox.Focus();
+        FocusSelectedName();
     }
 
     private void AddFolder_Click(object sender, RoutedEventArgs e)
@@ -247,7 +242,7 @@ public partial class CommandEditDialog : Window
         var row = new Row { IsFolder = true, Name = "" };
         _current.Rows.Add(row);
         SelectRow(row);
-        NameBox.Focus();
+        FocusSelectedName();
     }
 
     private void AddSub_Click(object sender, RoutedEventArgs e)
@@ -271,7 +266,7 @@ public partial class CommandEditDialog : Window
         var row = new Row { IsChild = true };
         _current.Rows.Insert(insert, row);
         SelectRow(row);
-        NameBox.Focus();
+        FocusSelectedName();
     }
 
     /// <summary>주어진 인덱스가 속한 폴더의 인덱스(자신이 폴더면 자신). 폴더에 속하지 않으면 -1.</summary>
@@ -385,6 +380,32 @@ public partial class CommandEditDialog : Window
         for (int k = 0; k < len; k++) rows.Insert(at + k, block[k]);
     }
 
+    /// <summary>
+    /// 새로 만든 항목의 이름 칸에 포커스를 준다. 편집칸이 목록 안(DataTemplate)에 있어
+    /// 컨테이너가 만들어진 뒤에야 찾을 수 있으므로 레이아웃 뒤로 미룬다.
+    /// </summary>
+    private void FocusSelectedName()
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (CmdList.ItemContainerGenerator.ContainerFromItem(CmdList.SelectedItem) is not ListBoxItem li) return;
+            li.ApplyTemplate();
+            if (FindFirst<TextBox>(li) is { } tb) { tb.Focus(); tb.SelectAll(); }
+        }), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private static T? FindFirst<T>(DependencyObject root) where T : DependencyObject
+    {
+        int n = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < n; i++)
+        {
+            var c = VisualTreeHelper.GetChild(root, i);
+            if (c is T hit) return hit;
+            if (FindFirst<T>(c) is { } deep) return deep;
+        }
+        return null;
+    }
+
     private void SelectRow(Row row)
     {
         CmdList.SelectedItem = row;
@@ -400,12 +421,28 @@ public partial class CommandEditDialog : Window
 
     private void Drag_Down(object sender, MouseButtonEventArgs e)
     {
+        // 줄 안에 입력칸이 생겼다(인라인 편집). PreviewMouseLeftButtonDown 이라 여기서 잡으면
+        // 캐럿을 놓으려는 클릭이 드래그로 먹힌다 — 입력 컨트롤 위에서 시작한 클릭은 흘려보낸다.
+        if (IsInsideInput(e.OriginalSource as DependencyObject)) { _dragItem = null; return; }
+
         var list = (ListBox)sender;
         var item = ItemUnderMouse(list, e.OriginalSource as DependencyObject);
         if (item is null) return;
         _dragStart = e.GetPosition(list);
         _dragItem = item;
         _dragSource = list;
+    }
+
+    private static bool IsInsideInput(DependencyObject? d)
+    {
+        while (d is not null)
+        {
+            if (d is TextBoxBase || d is CheckBox || d is ButtonBase || d is ComboBox) return true;
+            d = d is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(d)
+                : LogicalTreeHelper.GetParent(d);
+        }
+        return false;
     }
 
     private void Drag_Move(object sender, MouseEventArgs e)
@@ -428,15 +465,19 @@ public partial class CommandEditDialog : Window
         e.Handled = true;
     }
 
-    private void GroupList_Drop(object sender, DragEventArgs e)
+    // 그룹은 콤보라 드래그로 순서를 바꿀 수 없다 — 대신 위/아래 버튼을 준다.
+    // 순서는 의미가 있다: 세션이 그룹을 지정하지 않으면 첫 그룹이 쓰인다.
+    private void GroupUp_Click(object sender, RoutedEventArgs e) => MoveGroup(-1);
+    private void GroupDown_Click(object sender, RoutedEventArgs e) => MoveGroup(+1);
+
+    private void MoveGroup(int delta)
     {
-        if (_dragItem is not GroupRow src) return;
-        var target = ItemUnderMouse(GroupList, e.OriginalSource as DependencyObject) as GroupRow;
-        int from = _groups.IndexOf(src);
-        int to = target is null ? _groups.Count - 1 : _groups.IndexOf(target);
-        if (from < 0 || to < 0 || from == to) return;
+        if (GroupCombo.SelectedItem is not GroupRow g) return;
+        int from = _groups.IndexOf(g), to = from + delta;
+        if (from < 0 || to < 0 || to >= _groups.Count) return;
         _groups.Move(from, to);
-        GroupList.SelectedItem = src;
+        GroupCombo.SelectedItem = g;
+        UpdateButtons();
     }
 
     private void CmdList_Drop(object sender, DragEventArgs e)
