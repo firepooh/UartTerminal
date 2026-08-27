@@ -99,7 +99,10 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}">
-                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                        <!-- Padding 을 여기서 다시 걸지 않는다 — TextBox 가 내부적으로 이미 적용해
+                             두 번 먹었다(여백 = 4 + 2xPadding). 입력칸 글자만 콤보보다 훨씬 안쪽에서
+                             시작하던 원인이다. -->
+                        <ScrollViewer x:Name="PART_ContentHost"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">

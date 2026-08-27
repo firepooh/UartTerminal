@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:UartTerminal"
         Title="{loc:Str Sess.Title}"
         Icon="/UartTerminal.ico"
-        Width="880" Height="580" MinWidth="720" MinHeight="460"
+        Width="900" Height="600" MinWidth="740" MinHeight="460"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource BgPanel}"
@@ -136,8 +136,14 @@
         <!-- 선택 항목 편집 -->
         <Border Grid.Row="3" x:Name="EditPane" Margin="0,12,0,0" IsEnabled="False"
                 Background="{DynamicResource Bg}" BorderBrush="{DynamicResource BorderBrush2}"
-                BorderThickness="1" CornerRadius="8" Padding="12,10">
+                BorderThickness="1" CornerRadius="8" Padding="16,12">
             <Grid>
+                <!--
+                  폼 규칙: 한 줄에 놓이는 컨트롤은 <b>높이가 같아야 한다</b>(32).
+                  전에는 TextBox 가 Padding 때문에 40 가까이 되고 콤보는 30 이라 줄마다 높이가
+                  달랐고, 버튼은 VerticalAlignment 기본값(Stretch)이라 행 높이만큼 세로로 늘어났다.
+                  그래서 "비율이 엉망" 으로 보였다. 라벨도 입력과 왼쪽을 맞춘다(2px 밀면 어긋나 보인다).
+                -->
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
@@ -151,26 +157,27 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Name}" Style="{StaticResource FieldLabel}" Margin="2,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Baud}" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.CommandGroup}" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Style="{StaticResource FieldLabel}" Margin="10,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Name}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Baud}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.CommandGroup}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
 
                 <!-- MinWidth=0: 기본 스타일의 최소폭 때문에 * 열이 줄지 못해 오른쪽 [삭제] 가 잘리는 것을 막는다 -->
                 <TextBox x:Name="NameBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
-                         MaxLength="40" MinHeight="30" MinWidth="0" TextChanged="NameBox_TextChanged"/>
-                <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="1" Width="104" Height="30" Margin="10,0,0,0"
-                          VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
-                <ComboBox x:Name="GroupBox" Grid.Row="1" Grid.Column="2" Width="136" Height="30" Margin="10,0,0,0"
-                          VerticalContentAlignment="Center" SelectionChanged="GroupBox_SelectionChanged"/>
+                         MaxLength="40" Height="32" MinWidth="0" Padding="9,0" VerticalContentAlignment="Center"
+                         TextChanged="NameBox_TextChanged"/>
+                <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="1" Width="104" Height="32" Margin="12,0,0,0"
+                          VerticalAlignment="Center" VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
+                <ComboBox x:Name="GroupBox" Grid.Row="1" Grid.Column="2" Width="140" Height="32" Margin="12,0,0,0"
+                          VerticalAlignment="Center" VerticalContentAlignment="Center" SelectionChanged="GroupBox_SelectionChanged"/>
                 <!-- 접속 속성이라 여기서 편집 가능(포트와 달리 세션이 진실의 출처).
                      MCP 는 '탭마다 다른 파이프' 라 전역 설정이 될 수 없어 여기(세션)에 함께 둔다. -->
-                <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"
+                            Margin="12,0,0,0">
                     <CheckBox x:Name="ResetCheck" Style="{StaticResource AppCheckBox}"
-                              Content="{loc:Str Sess.Reset}" VerticalAlignment="Center" Margin="12,0,0,0"
+                              Content="{loc:Str Sess.Reset}" VerticalAlignment="Center"
                               ToolTip="{loc:Str Sess.ResetTip}"
                               Click="ResetCheck_Click"/>
                     <CheckBox x:Name="McpCheck" Style="{StaticResource AppCheckBox}"
@@ -179,35 +186,49 @@
                               Click="McpCheck_Click"/>
                 </StackPanel>
                 <Button x:Name="DeleteButton" Grid.Row="1" Grid.Column="4" Content="{loc:Str Common.Delete}"
-                        Style="{StaticResource DialogButton}" MinWidth="64" MinHeight="30" Padding="0"
-                        Margin="10,0,0,0" Click="Delete_Click"/>
+                        Style="{StaticResource GhostButton}" MinWidth="64" Height="32" Padding="0"
+                        VerticalAlignment="Center" Margin="12,0,0,0" Click="Delete_Click"/>
 
-                <!-- 개행은 값이 길어 둘째 줄에 둔다. "(기본)"=지정 없음 → 접속 시 현재 값을 그대로 쓴다 -->
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Str Sess.NewlineRx}" Foreground="{DynamicResource TextDim}"
-                           FontSize="{StaticResource Font.Caption}" Margin="2,12,0,4"/>
-                <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{loc:Str Sess.NewlineTx}"
-                           Style="{StaticResource FieldLabel}" Margin="10,12,0,4"/>
-                <ComboBox x:Name="RxBox" Grid.Row="3" Grid.Column="0" Height="30" HorizontalAlignment="Left"
-                          Width="210" VerticalContentAlignment="Center" Margin="2,0,0,0"
-                          ToolTip="{loc:Str Sess.RxTip}"
-                          SelectionChanged="RxBox_SelectionChanged"/>
-                <ComboBox x:Name="TxBox" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Height="30"
-                          HorizontalAlignment="Left" Width="136" VerticalContentAlignment="Center" Margin="10,0,0,0"
-                          ToolTip="{loc:Str Sess.TxTip}"
-                          SelectionChanged="TxBox_SelectionChanged"/>
+                <!-- 개행: 수신·송신은 대등한 한 쌍이라 나란히 둔다.
+                     전에는 송신이 '속도' 열에 붙어 수신과 멀찍이 떨어졌고 폭이 좁아 글자가 잘렸다. -->
+                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,14,0,0">
+                    <TextBlock Text="{loc:Str Sess.NewlineGroup}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str Sess.NewlineRx}" Style="{StaticResource CaptionText}" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="RxBox" Width="210" Height="32" VerticalContentAlignment="Center"
+                                  ToolTip="{loc:Str Sess.RxTip}" SelectionChanged="RxBox_SelectionChanged"/>
+                    </StackPanel>
+                    <StackPanel Margin="12,0,0,0">
+                        <TextBlock Text="{loc:Str Sess.NewlineTx}" Style="{StaticResource CaptionText}" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="TxBox" Width="210" Height="32" VerticalContentAlignment="Center"
+                                  ToolTip="{loc:Str Sess.TxTip}" SelectionChanged="TxBox_SelectionChanged"/>
+                    </StackPanel>
+                    </StackPanel>
+                </StackPanel>
 
                 <!-- 로그 폴더: 파일명이 아니라 '폴더' 다 — 이름은 열 때마다 규칙으로 새로 만든다 -->
-                <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="5" Text="{loc:Str Sess.LogFolder}"
-                           Style="{StaticResource FieldLabel}" Margin="2,12,0,4"/>
-                <TextBox x:Name="LogFolderBox" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
-                         Style="{StaticResource CommandInput}" MinHeight="30" MinWidth="0"
-                         ToolTip="{loc:Str Sess.LogFolderTip}" TextChanged="LogFolderBox_TextChanged"/>
-                <Button x:Name="LogFolderBrowse" Grid.Row="5" Grid.Column="3" Content="…"
-                        Style="{StaticResource DialogButton}" MinWidth="40" MinHeight="30" Padding="0"
-                        Margin="10,0,0,0" Click="LogFolderBrowse_Click"/>
-                <Button x:Name="LogFolderClear" Grid.Row="5" Grid.Column="4" Content="{loc:Str Common.Clear}"
-                        Style="{StaticResource DialogButton}" MinWidth="64" MinHeight="30" Padding="0"
-                        Margin="10,0,0,0" Click="LogFolderClear_Click"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="5" Text="{loc:Str Sess.LogFolder}"
+                           Style="{StaticResource FieldLabel}" Margin="0,14,0,4"/>
+                <!-- 이 줄은 위쪽 열 폭에 끌려가면 안 된다 — [찾기] 버튼이 '열 때' 열만큼
+                     넓어져 버렸다. 자체 3열로 독립시킨다. -->
+                <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="LogFolderBox" Grid.Column="0"
+                             Style="{StaticResource CommandInput}" Height="32" MinWidth="0"
+                             Padding="9,0" VerticalContentAlignment="Center"
+                             ToolTip="{loc:Str Sess.LogFolderTip}" TextChanged="LogFolderBox_TextChanged"/>
+                    <Button x:Name="LogFolderBrowse" Grid.Column="1" Content="…"
+                            Style="{StaticResource DialogButton}" MinWidth="44" Width="44" Height="32" Padding="0"
+                            VerticalAlignment="Center" Margin="12,0,0,0" Click="LogFolderBrowse_Click"/>
+                    <Button x:Name="LogFolderClear" Grid.Column="2" Content="{loc:Str Common.Clear}"
+                            Style="{StaticResource GhostButton}" MinWidth="64" Height="32" Padding="0"
+                            VerticalAlignment="Center" Margin="12,0,0,0" Click="LogFolderClear_Click"/>
+                </Grid>
             </Grid>
         </Border>
 

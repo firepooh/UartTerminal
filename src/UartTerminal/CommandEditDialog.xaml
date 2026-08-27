@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:UartTerminal"
         Title="{loc:Str Cmd.Title}"
         Icon="/UartTerminal.ico"
-        Width="900" Height="560" MinWidth="760" MinHeight="440"
+        Width="960" Height="580" MinWidth="780" MinHeight="440"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource BgPanel}"
