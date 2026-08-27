@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:UartTerminal"
         Title="{loc:Str Flash.Title}"
         Icon="/UartTerminal.ico"
-        Width="900" Height="860" MinWidth="760" MinHeight="680"
+        Width="880" MinWidth="760" MinHeight="420" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{DynamicResource Bg}"
@@ -64,15 +64,16 @@
         </Style>
     </Window.Resources>
 
-    <Grid Margin="14">
+    <Grid Margin="16">
         <Grid.RowDefinitions>
-            <!-- 탭(패키지 표 포함)에 2.2, 로그에 1 — 진입 시 바이너리 목록이 잘리지 않는 것이
-                 빈 로그 칸보다 우선이다(로그는 실행하면 채워지고, 필요하면 창을 늘린다). -->
-            <RowDefinition Height="2.2*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
+            <!-- 남는 세로는 탭(파일 목록)이 갖는다. 로그 행은 접혀 있을 땐 Auto 라 제 높이(한 줄)만
+                 쓰고, 펼치면 코드에서 * 로 바꿔 남은 공간을 나눠 갖는다 — 접힌 로그가 빈 공간을
+                 붙들고 있어서 목록이 눌리던 것을 막는다. -->
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -80,11 +81,11 @@
              MinHeight = 영역 탭 콘텐츠가 다 보이는 높이 — 경고 패널이 떠서 공간을 뺏어도
              탭 내용(구울 BIN 행까지)이 잘리지 않는다. 부족분은 로그(*)가 줄어드는 걸로 흡수. -->
         <TabControl x:Name="ModeTabs" Grid.Row="0" Style="{StaticResource DialogTabControl}"
-                    MinHeight="350"
+                    MinHeight="270"
                     SelectionChanged="ModeTabs_SelectionChanged">
             <TabItem x:Name="PackageTab" Header="{loc:Str Flash.Tab.Package}" Style="{StaticResource DialogTabItem}">
-                <Border Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
-                        BorderThickness="1" CornerRadius="0,8,8,8" Padding="12">
+                <Border Background="{DynamicResource BgPanel}" BorderThickness="0"
+                        CornerRadius="0,10,10,10" Padding="18">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -134,8 +135,7 @@
                         </Grid>
 
                         <!-- 목록 머리글 -->
-                        <Border Grid.Row="3" Margin="0,12,0,0" Background="{DynamicResource Bg}"
-                                BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" CornerRadius="6,6,0,0" Padding="10,6">
+                        <Border Grid.Row="3" Margin="0,16,0,4" Background="Transparent" Padding="12,0">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="30"/>
@@ -153,8 +153,11 @@
                             </Grid>
                         </Border>
 
-                        <!-- 목록 -->
-                        <ListBox x:Name="ItemList" Grid.Row="4" HorizontalContentAlignment="Stretch">
+                        <!-- 목록 — 파인 면 위에. 비어 있으면 안내를 겹쳐 둔다(검은 구멍만 남지 않게) -->
+                        <Border Grid.Row="4" Style="{StaticResource InsetPanel}" MinHeight="150">
+                        <Grid>
+                        <ListBox x:Name="ItemList" HorizontalContentAlignment="Stretch"
+                                 Background="Transparent" BorderThickness="0" Padding="4">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,3">
@@ -187,13 +190,17 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+                        <TextBlock x:Name="ItemListEmpty" Style="{StaticResource EmptyStateText}"
+                                   Text="{loc:Str Flash.EmptyList}"/>
+                        </Grid>
+                        </Border>
                     </Grid>
                 </Border>
             </TabItem>
 
             <TabItem x:Name="RegionTab" Header="{loc:Str Flash.Tab.Region}" Style="{StaticResource DialogTabItem}">
-                <Border Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderBrush2}"
-                        BorderThickness="1" CornerRadius="0,8,8,8" Padding="12">
+                <Border Background="{DynamicResource BgPanel}" BorderThickness="0"
+                        CornerRadius="0,10,10,10" Padding="18">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -270,30 +277,23 @@
             </TabItem>
         </TabControl>
 
-        <!-- 1) 공용: 포트 / 속도 / 옵션 (두 탭 모두에 적용) -->
-        <Grid Grid.Row="1" Margin="2,12,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Port}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4"/>
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.BaudBps}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
-            <TextBlock x:Name="PortText" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"
-                       FontFamily="{StaticResource MonoFont}" Foreground="{DynamicResource Blue}" Text="—"/>
-            <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="1" Width="110" Height="30" Margin="12,0,0,0"
-                      VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
-            <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+        <!-- 1) 공용: 속도 / 옵션 (두 탭 모두에 적용). 포트는 제목줄에 있다 —
+             창을 연 순간 이미 정해진 값이라 입력 영역에서 자리를 차지할 이유가 없다. -->
+        <Border Grid.Row="1" Margin="0,12,0,0" Background="{DynamicResource BgPanel}"
+                CornerRadius="10" Padding="16,10">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="{loc:Str Common.BaudBps}" Style="{StaticResource FieldLabel}"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox x:Name="BaudBox" Width="110" Height="30"
+                          VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
+                <Rectangle Width="1" Height="16" Margin="16,0" Fill="{DynamicResource BorderBrush2}"
+                           VerticalAlignment="Center"/>
                 <CheckBox x:Name="KeepBox" Style="{StaticResource AppCheckBox}" IsChecked="True" Content="{loc:Str Flash.Keep}"
-                          ToolTip="{loc:Str Flash.KeepTip}"/>
+                          VerticalAlignment="Center" ToolTip="{loc:Str Flash.KeepTip}"/>
                 <CheckBox x:Name="ReconnectBox" Style="{StaticResource AppCheckBox}" IsChecked="True"
-                          Content="{loc:Str Flash.Reconnect}" Margin="14,0,0,0"/>
+                          VerticalAlignment="Center" Content="{loc:Str Flash.Reconnect}" Margin="16,0,0,0"/>
             </StackPanel>
-        </Grid>
+        </Border>
 
         <!-- 2) 경고/오류 -->
         <Border x:Name="NoticePane" Grid.Row="2" Margin="0,10,0,0" Visibility="Collapsed"
@@ -305,8 +305,9 @@
             </ScrollViewer>
         </Border>
 
-        <!-- 3) 진행률 -->
-        <Grid Grid.Row="3" Margin="0,12,0,0">
+        <!-- 3) 진행률 — 실행 중에만. 대기 상태에서 배경과 구분 안 되는 검은 막대가
+             한 줄을 차지할 이유가 없다. -->
+        <Grid x:Name="ProgressRow" Grid.Row="3" Margin="0,12,0,0" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -317,13 +318,25 @@
                        Foreground="{DynamicResource TextDim}" Text="{loc:Str Flash.Idle}"/>
         </Grid>
 
-        <!-- 4) 로그 -->
-        <TextBox x:Name="LogBox" Grid.Row="4" Margin="0,10,0,0" IsReadOnly="True"
-                 Style="{StaticResource CommandInput}" MinWidth="0"
-                 FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource Font.Caption}"
-                 TextWrapping="NoWrap" AcceptsReturn="True"
-                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                 VerticalContentAlignment="Top"/>
+        <!-- 4) 로그 — 처음부터 고정 높이로 자리를 잡고, 넘치면 스크롤한다.
+             접었다 폈다 하면 창이 커졌다 작아졌다 해서 실사용에서 거슬린다(그렇게 만들었다가 되돌림). -->
+        <Border Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource InsetPanel}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Style="{StaticResource CaptionText}" Margin="12,9,12,4"
+                           Text="{loc:Str Flash.LogTitle}"/>
+                <TextBox x:Name="LogBox" Grid.Row="1" IsReadOnly="True" Height="240"
+                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Text}"
+                         Padding="12,0,12,10" MinWidth="0"
+                         FontFamily="{StaticResource MonoFont}" FontSize="{StaticResource Font.Caption}"
+                         TextWrapping="NoWrap" AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         VerticalContentAlignment="Top"/>
+            </Grid>
+        </Border>
 
         <!-- 5) 버튼 -->
         <Grid Grid.Row="5" Margin="0,12,0,0">
@@ -335,12 +348,12 @@
                        Foreground="{DynamicResource TextFaint}" TextTrimming="CharacterEllipsis"
                        Text="{loc:Str Flash.CheckingTool}"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button x:Name="StartButton" Content="{loc:Str Flash.Start}" Style="{StaticResource SendButton}"
-                        MinWidth="110" MinHeight="32" Margin="0,0,8,0" IsEnabled="False" Click="Start_Click"/>
                 <Button x:Name="StopButton" Content="{loc:Str Flash.Stop}" Style="{StaticResource DialogButton}"
-                        MinWidth="72" MinHeight="32" Margin="0,0,8,0" IsEnabled="False" Click="Stop_Click"/>
-                <Button x:Name="CloseButton" Content="{loc:Str Common.Close}" Style="{StaticResource DialogButton}"
+                        MinWidth="72" MinHeight="32" Margin="0,0,8,0" Visibility="Collapsed" Click="Stop_Click"/>
+                <Button x:Name="CloseButton" Content="{loc:Str Common.Close}" Style="{StaticResource GhostButton}"
                         MinWidth="72" MinHeight="32" Click="Close_Click"/>
+                <Button x:Name="StartButton" Content="{loc:Str Flash.Start}" Style="{StaticResource SendButton}"
+                        MinWidth="110" MinHeight="32" Margin="8,0,0,0" IsEnabled="False" Click="Start_Click"/>
             </StackPanel>
         </Grid>
     </Grid>

@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
 using UartTerminal.Core;
@@ -131,7 +132,9 @@ public partial class FlashDialog : Window
         _releasePort = releasePort;
         _reopenPort = reopenPort;
 
-        PortText.Text = string.IsNullOrEmpty(portName) ? Loc.S("Flash.NoConnection") : portName;
+        // 포트는 제목줄이 말한다 — 창을 연 순간 정해진 값이라 입력 영역에서 한 칸을 쓸 이유가 없다.
+        Title = Loc.F("Flash.TitleWithPort",
+                      string.IsNullOrEmpty(portName) ? Loc.S("Flash.NoConnection") : portName);
         ItemList.ItemsSource = _rows;
 
         _syncing = true;
@@ -140,6 +143,9 @@ public partial class FlashDialog : Window
         BaudBox.ItemsSource = BaudPresets;
         BaudBox.SelectedItem = BaudPresets.Contains(state.FlashBaud) ? state.FlashBaud : 576000;
         _syncing = false;
+
+        // SizeToContent 로 커지되 화면 밖으로 나가지 않게 상한을 건다 — 넘치면 목록이 스크롤된다.
+        MaxHeight = SystemParameters.WorkArea.Height - 60;
 
         Closing += OnClosing;
         Loaded += OnLoaded;
@@ -459,8 +465,14 @@ public partial class FlashDialog : Window
                                 && _tool is not null
                                 && !string.IsNullOrEmpty(_portName)
                                 && (onRegionTab ? regionReady : packageReady);
+        // 중지는 실행 중에만 나타난다 — 대기 상태에서 비활성 버튼이 자리를 지킬 이유가 없다.
+        StopButton.Visibility = _running ? Visibility.Visible : Visibility.Collapsed;
         StopButton.IsEnabled = _running;
         CloseButton.IsEnabled = !_running;
+        // 진행바도 실행 중에만(대기 중엔 배경과 구분 안 되는 검은 막대일 뿐이다).
+        ProgressRow.Visibility = _running ? Visibility.Visible : Visibility.Collapsed;
+        // 목록이 비면 안내를 겹쳐 보인다.
+        ItemListEmpty.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         BrowseButton.IsEnabled = !_running;
         ChipBox.IsEnabled = !_running;
         BaudBox.IsEnabled = !_running;
