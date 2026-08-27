@@ -256,7 +256,7 @@ public partial class ShellWindow : Window
 
     private static void UpdateHeaderText(TextBlock text, Ellipse dot, UartDocumentView doc)
     {
-        text.Text = doc.Title;
+        text.Text = doc.TabLabel;
         text.Foreground = doc.IsConnected ? ConnectedFg : DisconnectedFg;
         dot.Fill = DotFor(doc);
     }
@@ -385,7 +385,7 @@ public partial class ShellWindow : Window
 
         var title = new TextBlock
         {
-            Text = doc.Title,
+            Text = doc.TabLabel,
             FontFamily = mono,
             FontSize = (double)FindResource("Font.Caption"),
             FontWeight = active ? FontWeights.Bold : FontWeights.Normal,
@@ -490,7 +490,7 @@ public partial class ShellWindow : Window
 
     private void UpdatePanelTitle(UartDocumentView doc)
     {
-        if (_panelTitleTexts.TryGetValue(doc, out var tx)) tx.Text = doc.Title;
+        if (_panelTitleTexts.TryGetValue(doc, out var tx)) tx.Text = doc.TabLabel;
         if (_panelDots.TryGetValue(doc, out var dot)) dot.Fill = DotFor(doc);
     }
 

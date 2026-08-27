@@ -9,9 +9,9 @@
     <!-- ===== Color palette ===== -->
     <Color x:Key="C.Bg">#FF0D1117</Color>
     <Color x:Key="C.BgDeep">#FF0A0D12</Color>
-    <Color x:Key="C.BgPanel">#FF0B0F16</Color>
-    <Color x:Key="C.Surface">#FF11161F</Color>
-    <Color x:Key="C.SurfaceHover">#FF1A2130</Color>
+    <Color x:Key="C.BgPanel">#FF161B22</Color>
+    <Color x:Key="C.Surface">#FF21262D</Color>
+    <Color x:Key="C.SurfaceHover">#FF2D333B</Color>
     <!-- 경계선 3종. WCAG 는 'UI 컴포넌트 경계' 에 3:1 을 요구한다 —
          원래 값(Border #1C2433 = 1.22:1, BorderStrong #263141 = 1.44:1)은 사실상 보이지 않아
          빈 체크박스·콤보 테두리가 배경에 묻었다. 용도를 나눠 각각 목표를 다르게 잡는다:
@@ -21,7 +21,7 @@
     <Color x:Key="C.Border">#FF262D38</Color>
     <Color x:Key="C.BorderStrong">#FF333B47</Color>
     <Color x:Key="C.BorderFocus">#FF8B97A8</Color>
-    <Color x:Key="C.TabIdle">#FF0F141D</Color>
+    <Color x:Key="C.TabIdle">#FF12171F</Color>
     <Color x:Key="C.Text">#FFE6EDF5</Color>
     <Color x:Key="C.TextDim">#FFA9B4C4</Color>
     <Color x:Key="C.TextMuted">#FF8B97A8</Color>

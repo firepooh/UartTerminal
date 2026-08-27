@@ -335,7 +335,7 @@
          STATUS BAR
          ============================================================ -->
     <Style x:Key="StatusBarPanel" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+        <Setter Property="Background" Value="{DynamicResource BgPanel}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush2}"/>
         <Setter Property="BorderThickness" Value="0,1,0,0"/>
         <Setter Property="Height" Value="30"/>

@@ -7,7 +7,7 @@
         Background="{DynamicResource Bg}"
         FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True"
-        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType">
     <Window.Resources>
         <!-- 탭 닫기(×) 버튼 -->
@@ -85,7 +85,7 @@
     </Window.Resources>
 
     <DockPanel>
-        <Menu DockPanel.Dock="Top"
+        <Menu DockPanel.Dock="Top" Background="{DynamicResource BgPanel}"
               Padding="6,2" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderBrush2}">
             <!--
               메뉴 구성 원칙

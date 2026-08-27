@@ -85,6 +85,13 @@ public partial class UartDocumentView : UserControl
         }
     }
 
+    /// <summary>
+    /// 탭·분할 패널에 쓰는 짧은 이름(포트만). 연결 상태는 옆의 점(●)이 이미 말하고 있어
+    /// "[끊김]" 까지 붙이면 같은 말을 두 번 하면서 탭 폭만 들쭉날쭉해진다.
+    /// 창 제목(<see cref="Title"/>)에는 상태를 남긴다 — 작업 표시줄에는 점이 없다.
+    /// </summary>
+    public string TabLabel => string.IsNullOrEmpty(_portName) ? Loc.S("Doc.TitleNew") : _portName;
+
     public UartDocumentView(AppState state, CommandStore commands, SessionStore sessions,
                             Core.Parsing.ParserStore parsers)
     {
@@ -1852,6 +1859,7 @@ public partial class UartDocumentView : UserControl
         _watchdogTimer?.Stop();
         _zoomTimer?.Stop();
         _parseRenderTimer?.Stop();
+        _toastTimer?.Stop();
         // 렌더 타이머(60Hz)를 끊는다. 이게 없으면 Dispatcher 가 타이머를 통해
         // 이 뷰 → 문서 → 엔진/브리지/세션 그래프 전체를 영구히 붙잡는다(탭을 닫아도).
         _view?.Shutdown();
@@ -1910,9 +1918,36 @@ public partial class UartDocumentView : UserControl
     /// </summary>
     private void SetStatus(string text, string? linkPath)
     {
-        StatusMessage = text;
         StatusLinkPath = linkPath;
-        StatusChanged?.Invoke(text);
+        if (linkPath is not null)
+        {
+            // 클릭할 것이 있는 메시지(로그 경로 등)는 '지속 상태' 다 — 상태바에 남겨야 누를 수 있다.
+            StatusMessage = text;
+            StatusChanged?.Invoke(text);
+            return;
+        }
+        // 나머지는 지나가는 알림이다. 토스트로 띄우고 상태바는 비운다.
+        ShowToast(text);
+        StatusMessage = "";
+        StatusChanged?.Invoke("");
+    }
+
+    // 토스트: 잠깐 떴다 사라지는 알림. 타이머 하나를 돌려 쓰고, 새 메시지가 오면 수명이 갱신된다.
+    private DispatcherTimer? _toastTimer;
+    private static readonly TimeSpan ToastLife = TimeSpan.FromSeconds(4);
+
+    private void ShowToast(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        ToastText.Text = text;
+        Toast.Visibility = Visibility.Visible;
+        if (_toastTimer is null)
+        {
+            _toastTimer = new DispatcherTimer { Interval = ToastLife };
+            _toastTimer.Tick += (_, _) => { _toastTimer!.Stop(); Toast.Visibility = Visibility.Collapsed; };
+        }
+        _toastTimer.Stop();
+        _toastTimer.Start();
     }
 
     private void RaiseTitle() => TitleChanged?.Invoke();

@@ -92,7 +92,10 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Border x:Name="ViewHost" Grid.Column="0" Background="{DynamicResource Bg}"/>
+                <!-- 좌우 여백: 글자가 창 가장자리에 닿으면 답답하고 오른쪽은 스크롤바에 붙는다.
+                     TerminalView 는 제 폭에서 열 수를 계산하므로 여백을 줘도 정렬은 그대로다. -->
+                <Border x:Name="ViewHost" Grid.Column="0" Background="{DynamicResource Bg}"
+                        Padding="12,0,6,0"/>
                 <ScrollBar x:Name="VScroll" Grid.Column="1" Orientation="Vertical"
                            Minimum="0" Maximum="0" SmallChange="1" Scroll="VScroll_Scroll"/>
             </Grid>
@@ -186,6 +189,18 @@
                     <Button Content="✕" Style="{StaticResource DialogButton}" MinWidth="0" MinHeight="26"
                             Padding="9,0" Margin="5,0,0,0" Focusable="False" Click="FindClose_Click" ToolTip="{loc:Str Doc.FindCloseTip}"/>
                 </StackPanel>
+            </Border>
+
+            <!-- 상태 알림. 예전에는 이런 문장이 상태바에 눌러앉아 있었다 — 상태바는 훑는 곳이라
+                 읽어야 하는 문장이 있으면 지저분해진다. 잠깐 떴다 사라지고, 마우스 입력은 통과. -->
+            <Border x:Name="Toast" Grid.Column="0" Visibility="Collapsed"
+                    IsHitTestVisible="False"
+                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    Margin="12,0,12,12" Padding="12,8" MaxWidth="620"
+                    Background="{DynamicResource OverlayBg}" BorderBrush="{DynamicResource BorderStrong}"
+                    BorderThickness="1" CornerRadius="8">
+                <TextBlock x:Name="ToastText" Foreground="{DynamicResource Text}"
+                           FontSize="{StaticResource Font.Body}" TextWrapping="Wrap"/>
             </Border>
 
             <!-- 폰트 크기 실시간 표시(Ctrl+휠/Ctrl+±). 잠깐 떴다 사라짐. 마우스 입력 통과. -->
