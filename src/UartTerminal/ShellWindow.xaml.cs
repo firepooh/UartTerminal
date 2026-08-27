@@ -801,7 +801,7 @@ public partial class ShellWindow : Window
     private void SaveSession_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentAsSession();
 
     private void ManageSessions_Click(object sender, RoutedEventArgs e)
-        => SessionManagerDialog.ShowManager(_sessions, _commands, this);
+        => SessionManagerDialog.ShowManager(_sessions, _commands, this, ActiveDoc?.SessionName);
     private void Detach_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) DetachTab(ti); }
     private void Merge_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) MergeTab(ti); }
     private void CloseTab_Click(object sender, RoutedEventArgs e) => CloseActiveTab();
@@ -931,7 +931,7 @@ public partial class ShellWindow : Window
     private void SaveCommand_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentInputAsCommand();
 
     private void EditCommands_Click(object sender, RoutedEventArgs e)
-        => CommandEditDialog.ShowEditor(_commands, this, _sessions);
+        => CommandEditDialog.ShowEditor(_commands, this, _sessions, ActiveDoc?.CurrentCommandGroup);
 
     private void McpEnabled_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetEnabled(MenuMcpEnabled.IsChecked); RefreshMcpChrome(); }

@@ -1345,7 +1345,7 @@ public partial class UartDocumentView : UserControl
     }
 
     private void EditCommands_Click(object sender, RoutedEventArgs e)
-        => CommandEditDialog.ShowEditor(_commands, OwnerWindow, _sessions);
+        => CommandEditDialog.ShowEditor(_commands, OwnerWindow, _sessions, CurrentCommandGroup);
 
     // ── 명령(셸 메뉴에서 호출) ──────────────────────────────────────────────────
 

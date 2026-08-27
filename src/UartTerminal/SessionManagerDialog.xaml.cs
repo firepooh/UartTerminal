@@ -129,7 +129,7 @@ public partial class SessionManagerDialog : Window
     private readonly ObservableCollection<Row> _rows = new();
     private bool _syncing; // 편집 컨트롤 → 모델 역방향 갱신 재진입 방지
 
-    private SessionManagerDialog(SessionStore sessions, CommandStore commands)
+    private SessionManagerDialog(SessionStore sessions, CommandStore commands, string? initialSession)
     {
         InitializeComponent();
         _sessions = sessions;
@@ -156,12 +156,20 @@ public partial class SessionManagerDialog : Window
             if (!string.IsNullOrEmpty(r.Group) && !groups.Contains(r.Group!)) groups.Add(r.Group!);
         GroupBox.ItemsSource = groups;
 
-        if (_rows.Count > 0) SessionList.SelectedIndex = 0;
+        // 열자마자 현재 탭이 쓰는 세션을 고른다 — 세션으로 연 탭에서 관리자를 열었는데
+        // 첫 줄이 잡혀 있으면, 목록이 길 때 내 세션을 다시 찾아 골라야 한다.
+        var start = _rows.FirstOrDefault(
+            r => string.Equals(r.Name, initialSession, StringComparison.OrdinalIgnoreCase)) ?? _rows.FirstOrDefault();
+        SessionList.SelectedItem = start;
+        // 목록이 길면 고른 줄이 화면 밖에 있을 수 있다 — 레이아웃이 끝난 뒤에 보이는 곳으로 끌어온다.
+        if (start is not null)
+            Loaded += (_, _) => { SessionList.ScrollIntoView(start); SessionList.Focus(); };
         UpdateEditPane();
     }
 
-    /// <summary>세션 관리자를 모달로 띄운다. 열기 전에 파일을 다시 읽어 외부 변경을 반영.</summary>
-    public static void ShowManager(SessionStore sessions, CommandStore commands, Window? owner)
+    /// <summary>세션 관리자를 모달로 띄운다. 열기 전에 파일을 다시 읽어 외부 변경을 반영.
+    /// <paramref name="initialSession"/> 을 주면 그 세션을 골라둔다(없거나 못 찾으면 첫 세션).</summary>
+    public static void ShowManager(SessionStore sessions, CommandStore commands, Window? owner, string? initialSession = null)
     {
         if (_open) return;
 
@@ -172,7 +180,7 @@ public partial class SessionManagerDialog : Window
         _open = true;
         try
         {
-            var dlg = new SessionManagerDialog(sessions, commands);
+            var dlg = new SessionManagerDialog(sessions, commands, initialSession);
             if (owner is not null) dlg.Owner = owner;
             else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             dlg.ShowDialog();

@@ -78,7 +78,7 @@ public partial class CommandEditDialog : Window
     private readonly ObservableCollection<GroupRow> _groups = new();
     private GroupRow? _current;
 
-    private CommandEditDialog(CommandStore store)
+    private CommandEditDialog(CommandStore store, string? initialGroup)
     {
         InitializeComponent();
         _store = store;
@@ -106,15 +106,19 @@ public partial class CommandEditDialog : Window
             _groups.Add(new GroupRow { Name = CommandStore.DefaultGroupName });
 
         GroupCombo.ItemsSource = _groups;
-        GroupCombo.SelectedIndex = 0;
+        // 부른 쪽이 쓰던 그룹으로 연다 — CMD 바에서 고른 그룹과 편집기가 어긋나면
+        // 열 때마다 다시 골라야 하고, 모르고 남의 그룹을 고치기 쉽다.
+        GroupCombo.SelectedItem = _groups.FirstOrDefault(
+            g => string.Equals(g.Name, initialGroup, StringComparison.OrdinalIgnoreCase)) ?? _groups[0];
         UpdateButtons();
     }
 
     /// <summary>
     /// 편집기를 모달로 띄운다(앱 전역 1개). 열기 전에 파일을 다시 읽어 외부 변경을 반영.
     /// <paramref name="sessions"/> 를 주면 그룹 이름 변경 시 세션의 그룹 참조를 따라 갱신한다.
+    /// <paramref name="initialGroup"/> 은 열자마자 고를 그룹(없거나 못 찾으면 첫 그룹).
     /// </summary>
-    public static void ShowEditor(CommandStore store, Window? owner, SessionStore? sessions = null)
+    public static void ShowEditor(CommandStore store, Window? owner, SessionStore? sessions = null, string? initialGroup = null)
     {
         if (_open) return;
 
@@ -125,7 +129,7 @@ public partial class CommandEditDialog : Window
         _open = true;
         try
         {
-            var dlg = new CommandEditDialog(store) { _sessions = sessions };
+            var dlg = new CommandEditDialog(store, initialGroup) { _sessions = sessions };
             if (owner is not null) dlg.Owner = owner;
             else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             dlg.ShowDialog();
