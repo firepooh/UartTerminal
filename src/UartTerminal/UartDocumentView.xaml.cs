@@ -481,8 +481,12 @@ public partial class UartDocumentView : UserControl
     private void OnCommandsChanged() { SyncGroupSelector(); RebuildCommandChips(); }
 
     /// <summary>칩 바 표시/숨김(전역 설정, Alt+B). 숨기면 세로 픽셀을 전혀 쓰지 않는다.</summary>
+    /// <summary>사용자가 명령 바를 켜 두었는가(Alt+B). 명령이 없어 '감춘' 것과 구분한다.</summary>
+    private bool _commandBarEnabled = true;
+
     public void SetCommandBarVisible(bool show)
     {
+        _commandBarEnabled = show;
         CommandBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (show) { SyncGroupSelector(); RebuildCommandChips(); }
     }
@@ -1166,21 +1170,18 @@ public partial class UartDocumentView : UserControl
 
     private void RebuildCommandChips()
     {
-        if (CommandBar.Visibility != Visibility.Visible) return;
+        if (!_commandBarEnabled) return;   // 사용자가 Alt+B 로 끈 상태(비어서 감춘 것과 구분한다)
         ChipHost.Children.Clear();
 
         var items = _commands.CommandsOf(_commandGroup);
+        // 저장된 명령이 없으면 바를 통째로 감춘다 — 안내 문구 한 줄이 화면 높이를 계속 먹느니
+        // 없는 편이 낫다. 들어가는 길은 [명령] 메뉴의 '명령 편집' 으로 남아 있다.
         if (items.Count == 0)
         {
-            ChipHost.Children.Add(new TextBlock
-            {
-                Text = Loc.S("Doc.NoCommands"),
-                Foreground = (Brush)FindResource("TextFaint"),
-                FontSize = 11.5,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
+            CommandBar.Visibility = Visibility.Collapsed;
             return;
         }
+        CommandBar.Visibility = Visibility.Visible;
 
         var style = (Style)FindResource("ChipButton");
         foreach (var cmd in items)

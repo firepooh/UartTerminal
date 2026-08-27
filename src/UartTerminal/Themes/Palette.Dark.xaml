@@ -18,8 +18,8 @@
            Border        = 장식용 구분선(패널 경계) — 구조가 읽히는 정도
            BorderStrong  = 상호작용 컨트롤 윤곽    — 3:1 이상(필수)
            BorderFocus   = 포커스/호버 강조 -->
-    <Color x:Key="C.Border">#FF41506A</Color>
-    <Color x:Key="C.BorderStrong">#FF6E7A8C</Color>
+    <Color x:Key="C.Border">#FF262D38</Color>
+    <Color x:Key="C.BorderStrong">#FF333B47</Color>
     <Color x:Key="C.BorderFocus">#FF8B97A8</Color>
     <Color x:Key="C.TabIdle">#FF0F141D</Color>
     <Color x:Key="C.Text">#FFE6EDF5</Color>

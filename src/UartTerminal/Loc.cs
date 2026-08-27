@@ -544,7 +544,6 @@ public sealed class Loc : INotifyPropertyChanged
         ["Doc.TitleDisconnected"] = ("{0} [끊김]", "{0} [disconnected]"),
         ["Doc.TitleReleased"] = ("{0} [AI 양보]", "{0} [yielded to AI]"),
         ["Doc.TitleReconnecting"] = ("{0} [재연결 중…]", "{0} [reconnecting…]"),
-        ["Doc.NoCommands"] = ("저장된 명령이 없습니다 — 입력창에 명령을 쓰고 [+ 저장]", "No saved commands — type one below and press [+ Save]"),
         ["Doc.FolderTip"] = ("{0} — 하위 명령 {1}개 (클릭해서 선택)", "{0} — {1} sub-command(s) (click to pick)"),
         ["Doc.ChipTipConfirm"] = ("{0}\n(전송 전 확인 · Ctrl+클릭: 입력창에 채우기)",
                                   "{0}\n(confirms before sending · Ctrl+click: fill the input box)"),
