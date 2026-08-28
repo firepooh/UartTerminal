@@ -56,12 +56,6 @@ jobs:
           --self-contained false -p:PublishSingleFile=true
           -p:Version=${{ steps.ver.outputs.version }}
           -o fdd/app
-      - name: Publish relay (framework-dependent)
-        run: >
-          dotnet publish src/UartTerminal.McpRelay/UartTerminal.McpRelay.csproj -c Release -r win-x64
-          --self-contained false -p:PublishSingleFile=true
-          -p:Version=${{ steps.ver.outputs.version }}
-          -o fdd/relay
 
       # ── self-contained(큼, .NET 런타임 포함 — 런타임 없이 실행) ──
       - name: Publish app (self-contained)
@@ -71,34 +65,26 @@ jobs:
           -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -p:Version=${{ steps.ver.outputs.version }}
           -o sc/app
-      - name: Publish relay (self-contained)
-        run: >
-          dotnet publish src/UartTerminal.McpRelay/UartTerminal.McpRelay.csproj -c Release -r win-x64
-          --self-contained true -p:PublishSingleFile=true
-          -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:Version=${{ steps.ver.outputs.version }}
-          -o sc/relay
 
-      # 앱 + MCP 릴레이 + esptool 을 한 zip 으로 묶는다.
-      #  - 릴레이는 MCP 사용 시 앱 옆에 있어야 한다.
+      # 앱 + esptool 을 한 zip 으로 묶는다.
+      #  - MCP 는 앱이 직접 HTTP 엔드포인트를 열므로 곁딸린 실행 파일이 없다.
       #  - esptool 은 tools\esptool\ 구조를 유지해야 앱이 찾는다 → 파일 나열이 아니라 스테이징 폴더를 압축한다.
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory dist | Out-Null
 
-          function New-Stage([string]$name, [string]$appDir, [string]$relayDir) {
+          function New-Stage([string]$name, [string]$appDir) {
             $stage = "stage/$name"
             New-Item -ItemType Directory "$stage/tools/esptool" -Force | Out-Null
             Copy-Item "$appDir/UartTerminal.exe" $stage
-            Copy-Item "$relayDir/UartTerminal.McpRelay.exe" $stage
             Copy-Item 'tools/esptool/esptool.exe' "$stage/tools/esptool/"
             Copy-Item 'THIRD-PARTY-NOTICES.md' $stage
             Compress-Archive -Path "$stage/*" -DestinationPath "dist/$name.zip"
           }
 
-          New-Stage 'UartTerminal-win-x64' 'fdd/app' 'fdd/relay'
-          New-Stage 'UartTerminal-win-x64-standalone' 'sc/app' 'sc/relay'
+          New-Stage 'UartTerminal-win-x64' 'fdd/app'
+          New-Stage 'UartTerminal-win-x64-standalone' 'sc/app'
 
           Write-Host '--- 배포 zip ---'
           Get-ChildItem dist | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}

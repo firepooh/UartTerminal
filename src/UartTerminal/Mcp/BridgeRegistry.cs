@@ -19,9 +19,8 @@ public enum BridgeResolution
 }
 
 /// <summary>
-/// 툴 호출의 <c>port</c> 인자를 브리지로 바꾼다. 구현이 둘인 이유는 전송 방식이 둘이기 때문이다 —
-/// Named Pipe 는 파이프 하나가 포트 하나에 묶여 있어 고를 것이 없고(<see cref="SingleBridgeResolver"/>),
-/// HTTP 는 엔드포인트 하나가 열린 포트 전부를 본다(<see cref="BridgeRegistry"/>).
+/// 툴 호출의 <c>port</c> 인자를 브리지로 바꾼다. 엔드포인트가 앱당 하나라서
+/// 어느 포트로 갈지 고르는 단계가 필요하다 — 그 판단이 <see cref="BridgeRegistry"/> 에 있다.
 /// </summary>
 public interface IBridgeResolver
 {
@@ -32,48 +31,13 @@ public interface IBridgeResolver
 }
 
 /// <summary>
-/// 포트 하나에 고정된 해석기 — Named Pipe 경로(<see cref="McpPipeServer"/>)용.
-/// 파이프 이름이 이미 포트를 지정하고 있으므로 <c>port</c> 를 생략하면 그 포트다.
-/// 다른 포트를 명시하면 <see cref="BridgeResolution.NotFound"/> — 파이프 하나로 남의 포트를 만질 수는 없다.
-/// </summary>
-public sealed class SingleBridgeResolver : IBridgeResolver
-{
-    private readonly UartBridge _bridge;
-    private readonly string _port;
-
-    public SingleBridgeResolver(UartBridge bridge, string port)
-    {
-        _bridge = bridge;
-        _port = port.Trim();
-    }
-
-    public IReadOnlyList<string> ExposedPorts => new[] { _port };
-
-    public bool TryResolve(string? port, out UartBridge? bridge, out BridgeResolution reason)
-    {
-        if (string.IsNullOrWhiteSpace(port) ||
-            string.Equals(port.Trim(), _port, StringComparison.OrdinalIgnoreCase))
-        {
-            bridge = _bridge;
-            reason = BridgeResolution.Ok;
-            return true;
-        }
-
-        bridge = null;
-        reason = BridgeResolution.NotFound;
-        return false;
-    }
-}
-
-/// <summary>
 /// 앱 전역의 <c>포트명 → UartBridge</c> 표. HTTP 엔드포인트가 앱당 하나뿐이라
 /// (docs/mcp-http-transport.md §3.1) 어느 포트인지 고를 수단이 필요해 생겼다.
 ///
 /// <para><b>등록 = 노출</b>이다. 탭이 MCP 를 켤 때 넣고 끌 때/닫을 때 뺀다.
 /// 읽기 계열 툴(uart_read·uart_status·uart_screen·uart_expect)에는 브리지 안에 활성 검사가 없어서
-/// (쓰기 계열만 <c>_enabled</c> 를 본다) 여기 남아 있는 것만으로 읽히기 때문이다 —
-/// 파이프 시절에는 서버를 안 띄우면 접근 자체가 불가능해 문제가 없었지만,
-/// 엔드포인트를 공유하는 지금은 <b>표에서 빼는 것이 곧 차단</b>이다.</para>
+/// (쓰기 계열만 <c>_enabled</c> 를 본다) 여기 남아 있는 것만으로 읽힌다 —
+/// 엔드포인트를 공유하므로 <b>표에서 빼는 것이 곧 차단</b>이다.</para>
 ///
 /// <para>툴은 스레드풀(MTA)에서 불리고 등록/해제는 UI 스레드에서 일어난다 — 그래서 전부 잠근다.</para>
 /// </summary>

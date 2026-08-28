@@ -10,10 +10,9 @@ namespace UartTerminal.Mcp;
 /// 실제 동작은 스레드 안전 <see cref="UartBridge"/>에 위임한다. 각 툴 메서드는 MCP 서버 스레드에서 호출된다.
 /// 반환 객체는 JSON(snake_case)으로 직렬화되어 AI 에게 전달된다.
 ///
-/// <para>어느 브리지로 갈지는 <see cref="IBridgeResolver"/> 가 정한다. Named Pipe 는 파이프가 이미
-/// 포트 하나에 묶여 있어 고를 것이 없고, HTTP 는 엔드포인트 하나가 열린 포트 전부를 보므로
-/// 마지막 선택 인자 <c>port</c> 로 지정한다(docs/mcp-http-transport.md §3.2).
-/// 기본값이 <c>null</c> 이라 포트를 하나만 연 흔한 경우에는 기존 프롬프트가 그대로 동작한다.</para>
+/// <para>엔드포인트가 앱당 하나라 어느 포트로 갈지는 마지막 선택 인자 <c>port</c> 로 지정한다
+/// (docs/mcp-http-transport.md §3.2). 기본값이 <c>null</c> 이라 포트를 하나만 연 흔한 경우에는
+/// 기존 프롬프트가 그대로 동작한다.</para>
 /// </summary>
 [McpServerToolType]
 public sealed class UartMcpTools
@@ -21,10 +20,6 @@ public sealed class UartMcpTools
     private readonly IBridgeResolver _resolver;
 
     public UartMcpTools(IBridgeResolver resolver) => _resolver = resolver;
-
-    /// <summary>단일 브리지용 편의 생성자(Named Pipe 경로).</summary>
-    public UartMcpTools(UartBridge bridge, string portName)
-        : this(new SingleBridgeResolver(bridge, portName)) { }
 
     /// <summary>
     /// <c>port</c> 인자를 브리지로 바꾼다. 못 고르면 <b>아무 데도 보내지 않고</b> 예외를 던진다 —
@@ -52,10 +47,7 @@ public sealed class UartMcpTools
         };
     }
 
-    /// <summary>
-    /// HTTP 엔드포인트용 서버 안내문. 파이프판(<see cref="McpPipeServer"/>)과 갈리는 곳은 하나 —
-    /// <b>엔드포인트가 앱당 하나라 포트를 지정해야 한다</b>는 점이다.
-    /// </summary>
+    /// <summary>서버 안내문. AI 에게 가는 문서이지 UI 문자열이 아니다.</summary>
     public static string HttpInstructions =>
         "이 서버는 사용자가 UartTerminal 에서 열어 둔 UART 포트를 사용자와 공유한다. " +
         "엔드포인트는 앱당 하나이고 포트가 여러 개 열려 있을 수 있으므로, 모든 툴의 마지막 인자 port 로 대상을 지정한다. " +

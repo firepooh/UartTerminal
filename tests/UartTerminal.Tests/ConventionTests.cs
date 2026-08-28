@@ -410,14 +410,7 @@ public sealed class ConventionTests
     {
         "Loc.cs",           // 번역 표 자체
         "UartMcpTools.cs",  // MCP 툴 설명 — AI 에게 가는 문서이지 UI 문자열이 아니다
-        "McpPipeServer.cs", // 같음(서버 instructions)
     };
-
-    /// <summary>
-    /// 한국어 리터럴이 허용되는 프로젝트. <c>McpRelay</c> 는 Loc 을 참조하지 않는 별도 콘솔 exe 이고
-    /// 출력은 개발자용 stderr 다.
-    /// </summary>
-    private const string KoreanAllowedProject = "UartTerminal.McpRelay";
 
     /// <summary>
     /// 사용자에게 보이는 한국어가 코드에 하드코딩되면 영어 모드에서 그대로 남는다.
@@ -439,7 +432,6 @@ public sealed class ConventionTests
         foreach (string file in SourceFiles(".cs"))
         {
             if (KoreanAllowedFiles.Contains(Path.GetFileName(file), StringComparer.Ordinal)) continue;
-            if (Rel(file).Contains(KoreanAllowedProject, StringComparison.Ordinal)) continue;
 
             string[] lines = File.ReadAllLines(file);
             for (int i = 0; i < lines.Length; i++)

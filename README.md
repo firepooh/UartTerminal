@@ -412,8 +412,9 @@ CR 덮어쓰기가 모두 반영된 뒤라 파일이 화면과 일치한다. 대
 ### Phase B — MCP 서버 (기능 3)
 
 - **SDK**: 공식 C# SDK — NuGet [`ModelContextProtocol`](https://www.nuget.org/packages/ModelContextProtocol)
-- **전송(권장, §6 Q4)**: 인스턴스별 Named Pipe(`\\.\pipe\uartterm-mcp-COM4`) + `StreamServerTransport` + 초소형 stdio 릴레이 exe.
-  `.mcp.json`에 `claude mcp add uart-com4 -- UartTermMcp.exe COM4`로 정적 등록. 동적 포트/토큰/방화벽/Kestrel 문제가 모두 사라짐. 파이프 ACL은 현재 사용자 전용. GUI에 "등록 명령 복사" 버튼.
+- **전송(§6 Q4)**: 앱당 하나인 HTTP(Streamable) 엔드포인트 — `127.0.0.1:5300/mcp` 고정 바인딩.
+  `claude mcp add --transport http uart http://127.0.0.1:5300/mcp` 로 등록하며 **경로도 COM 번호도 들어가지 않아** `.mcp.json` 에 커밋할 수 있다.
+  대상 포트는 도구의 마지막 선택 인자 `port` 로 고르고, 애매하면(2개 이상 + 생략) 거절한다. GUI에 "등록 명령 복사" 버튼.
 - **도구(9종)**: `uart_status`, `uart_send`(원자적 전송), `uart_read`(단조 증가 커서, 유실 시 `dropped_bytes` 명시, `strip_ansi` 기본 true), `uart_expect`(regex+timeout — polling 왕복 최소화), `uart_screen`, `uart_set_dtr_rts`, `uart_reset`(리셋/부트로더 진입 시퀀스 — §2.2), `uart_close`/`uart_open`(포트 양보/재점유 — esptool 등 외부 플래싱 도구용)
 - **AI TX 화면 표시**: 수신 스트림에 섞지 않고 버퍼의 **메타 라인 타입**으로 삽입 (예: 회색 배경 `[AI→] ...`)
 - **접근 제어**: MCP 활성/비활성 토글 + AI 읽기 전용(TX·제어·포트 열기/닫기 차단) 모드 + 상태바 인디케이터
@@ -455,10 +456,10 @@ CR 덮어쓰기가 모두 반영된 뒤라 파일이 화면과 일치한다. 대
 - 세션은 '폼을 채우는 바로가기'이고 확정 값은 항상 폼에서 읽는다(진실의 출처 하나). 세션의 포트가 지금 없으면
   그 포트명으로 열기를 시도해 기존 자동 재연결 대기로 이어진다
 - 저장은 [터미널 > 현재 연결을 세션으로 저장…] — 현재 탭의 포트·속도를 이름과 함께 기록(같은 이름이면 갱신)
-- `mcpOnOpen` = **열 때 MCP 서버 켜기**. MCP 파이프는 포트마다 다르므로(§5) 켜는 단위가 탭이고,
+- `mcpOnOpen` = **열 때 이 포트를 AI(MCP)에 노출**. 노출은 포트 단위이므로(§5) 켜는 단위가 탭이고,
   "이 보드로 접속하면 늘 AI 를 붙인다" 를 표현할 자리가 세션밖에 없다 — 전역 설정으로는 표현이 안 된다.
   세션 관리 화면의 `열 때` 열(리셋과 한 칸에 모음)에서 켜고, **세션으로 접속했을 때만** 적용된다
-  (포트만 골라 열면 적용 안 함 — 파이프가 모르는 사이에 열리지 않게). 적용 방향은 **켜기 뿐**이다:
+  (포트만 골라 열면 적용 안 함 — 모르는 사이에 포트가 AI 에 열리지 않게). 적용 방향은 **켜기 뿐**이다:
   이미 켜 둔 서버를 세션 값 때문에 끄면 붙어 있던 AI 도구가 조용히 떨어진다. 켠 사실은 상태바로 알린다
 - `logFolder` = **로그 저장 폴더**(§2.6). 세션 이름은 로그 파일 이름의 첫 칸으로도 쓰이므로,
   이 탭이 '어느 세션으로 열렸는지' 자체를 문서가 기억한다(접속 값과 별개). 없는 폴더도 지우지 않는다 —
@@ -529,7 +530,7 @@ AI 전송 ┘
 | Q1 | 입력 방식 | **즉시 전송(type-through)** — 키를 누르는 즉시 해당 바이트 송신 |
 | Q2 | esp_console REPL 지원 | **지원** — ESC[K(줄 지우기) / CR / 커서 위치 질의응답(ESC[6n→ESC[row;colR) 3개를 예외적으로 처리해 linenoise 라인 편집·명령 히스토리(↑↓) 동작 |
 | Q3 | 마지막 포트/창 크기 기억 | **둔다** — `%APPDATA%\UartTerminal\state.json` (설정 다이얼로그와는 별개의 최소 상태 파일) |
-| Q4 | MCP 전송 방식 | **Named Pipe + stdio 릴레이 exe** (정적 등록, 무토큰, Kestrel 불필요) |
+| Q4 | MCP 전송 방식 | **HTTP(Streamable) 엔드포인트 앱당 하나** — `127.0.0.1:5300/mcp`. 등록 URL 이 PC 와 무관해 `.mcp.json` 에 커밋 가능. 처음에는 Named Pipe + stdio 릴레이 exe 였다([mcp-http-transport.md](docs/mcp-http-transport.md)) |
 | Q5 | 런타임 | **.NET 10 LTS**, self-contained single-file(win-x64) 배포 |
 
 ## 7. 주요 리스크
@@ -541,7 +542,7 @@ AI 전송 ┘
 | R3 | 그리드 버퍼로 시작하면 reflow 후장착 불가(전면 재작성) | §4.1 논리 라인 모델을 처음부터 채택 |
 | R4 | 고속 수신(921600bps~) 시 UI 스레드 포화 | §4.2 배칭 파이프라인, 문자 단위 갱신 금지 |
 | R5 | Phase A에 tee/단일 TX 큐/메타 라인 타입이 없으면 Phase B(MCP)에서 파이프라인 재작성 | §4.2 구조를 Phase A에 선반영 |
-| R6 | MCP 동적 포트 HTTP ↔ `.mcp.json` 정적 등록 불일치 | Named Pipe + 릴레이 exe로 원천 회피 |
+| R6 | MCP 동적 포트 HTTP ↔ `.mcp.json` 정적 등록 불일치 | **고정 포트**(기본 5300, `state.json` 으로 변경)로 회피. 처음에는 Named Pipe + 릴레이 exe 로 피했다 |
 
 ## 8. 비목표 (Non-goals)
 
@@ -570,7 +571,7 @@ SecureCRT 식 세션/커맨드 관리 기능의 도입 범위 검토(무엇을 �
 | 런타임 | .NET 10 LTS (§6 Q5) |
 | UI | WPF + 커스텀 GlyphRun 렌더러 (확정) |
 | 시리얼 | System.IO.Ports (NuGet) + BaseStream 루프. 문제 시 RJCP.SerialPortStream로 교체 가능하게 `ISerialSession` 격리 |
-| MCP | ModelContextProtocol (공식 C# SDK) + Named Pipe |
+| MCP | ModelContextProtocol (공식 C# SDK) + ModelContextProtocol.AspNetCore (HTTP, 루프백 Kestrel) |
 | 테스트 | xUnit — ANSI 파서/논리 라인 버퍼/전각 폭 단위 테스트, esp_idf_monitor 실출력 골든 파일, 실기 체크리스트(케이블 뽑기, 921600bps) |
 
 ## 10. 폴더 구조 (예정)
@@ -584,7 +585,6 @@ UartTerminal/
 │  │  ├─ Terminal/              # 증분 디코더, ANSI 파서, 논리 라인 버퍼
 │  │  ├─ Rendering/             # 커스텀 렌더러 (GlyphRun, 가상화)
 │  │  └─ Mcp/                   # MCP 서버 (Phase B)
-│  └─ UartTerminal.McpRelay/    # stdio↔Named Pipe 릴레이 exe (Phase B)
 └─ tests/
    └─ UartTerminal.Tests/
 ```

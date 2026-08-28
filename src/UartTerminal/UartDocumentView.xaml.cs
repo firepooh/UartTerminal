@@ -42,8 +42,6 @@ public partial class UartDocumentView : UserControl
     private TerminalView? _view;
     private ConnectionController? _conn; // 연결 수명주기 상태머신(UI 비의존) — 세션/재연결/양보 관리
     private UartBridge? _bridge;
-    private McpPipeServer? _mcpServer;
-
     /// <summary>
     /// HTTP 레지스트리에 지금 등록돼 있는 포트명(없으면 null). <see cref="_portName"/> 을 그대로 쓰지 않는 이유는
     /// 포트가 바뀔 때 <see cref="_portName"/> 이 <b>먼저</b> 갱신되기 때문이다 — 그러면 예전 이름을 못 지운다.
@@ -191,7 +189,7 @@ public partial class UartDocumentView : UserControl
         if (!string.Equals(port.PortName, _portName, StringComparison.OrdinalIgnoreCase))
         {
             _portName = port.PortName;
-            RebuildMcpForPort();
+            RepointMcpExposure();
             RaiseTitle();
         }
         // 속도/리셋 변경은 세션을 새로 여는 것으로 반영된다(위에서 기존 세션을 닫았고 아래에서 재오픈).
@@ -283,7 +281,6 @@ public partial class UartDocumentView : UserControl
         _bridge.SetPortController(
             () => Dispatcher.InvokeAsync(_conn.McpRelease).Task,
             () => Dispatcher.InvokeAsync(_conn.McpReopen).Task);
-        _mcpServer = new McpPipeServer(_bridge, _portName);
         RaiseMcpState();
 
         // 옛 state.json(값 없음 → 0 아님, 기본 1.0)과 손으로 고친 이상값을 한 번에 흡수한다.
@@ -370,21 +367,16 @@ public partial class UartDocumentView : UserControl
 
     private void CloseCurrentSession() => _conn?.CloseCurrentSession();
 
-    private void RebuildMcpForPort()
+    /// <summary>
+    /// 포트가 바뀌면 노출을 새 이름으로 옮긴다. <b>사용자가 할 일은 없다</b> —
+    /// 등록 URL 에 포트명이 없어서 재등록이 필요 없다(파이프 시절에는 파이프 이름이 바뀌어
+    /// 상태 표시줄로 재등록을 안내해야 했다). 툴 호출의 port 인자만 새 이름을 쓰면 된다.
+    /// </summary>
+    private void RepointMcpExposure()
     {
         if (_bridge is null) return;
-        bool wasEnabled = _bridge.Enabled;
-        try { _mcpServer?.Stop(); } catch { }
-        HideFromHttp();   // 옛 포트명으로 남은 등록을 먼저 거둔다
-        _mcpServer = new McpPipeServer(_bridge, _portName);
-        if (wasEnabled)
-        {
-            _mcpServer.Start();
-            // HTTP 쪽은 재등록이 필요 없다 — URL 이 포트명을 담지 않기 때문이다(이 전환의 목적).
-            ExposeToHttp();
-            DiagLog.Info($"MCP 파이프 변경: {McpPipeServer.PipeNameFor(_portName)} — 릴레이 재등록 필요");
-            SetStatus(Loc.F("Conn.PortChangedMcp", _portName));
-        }
+        HideFromHttp();                       // 옛 포트명으로 남은 등록을 먼저 거둔다
+        if (_bridge.Enabled) ExposeToHttp();
         RaiseMcpState();
     }
 
@@ -1823,14 +1815,12 @@ public partial class UartDocumentView : UserControl
 
     public void McpSetEnabled(bool on)
     {
-        if (_bridge is null || _mcpServer is null) return;
+        if (_bridge is null) return;
         _bridge.Enabled = on;
-        if (on) _mcpServer.Start(); else _mcpServer.Stop();
-        // 1단계는 병행이다 — 같은 브리지를 파이프와 HTTP 가 함께 본다.
         if (on) ExposeToHttp(); else HideFromHttp();
         if (on && Mcp.McpHost.Server is { State: Mcp.McpHttpState.PortInUse } http)
             SetStatus(Loc.F("Doc.McpHttpPortInUse", http.Port));
-        DiagLog.Info($"MCP {(on ? "활성화" : "비활성화")}: {McpPipeServer.PipeNameFor(_portName)}");
+        DiagLog.Info($"MCP {(on ? "활성화" : "비활성화")}: {_portName}");
         RaiseMcpState();
     }
 
@@ -1859,13 +1849,13 @@ public partial class UartDocumentView : UserControl
     /// <summary>
     /// 세션의 '열 때 MCP 켜기' 적용. <b>켜는 방향만</b> 반영한다 — 세션에 값이 없다고 해서
     /// 이미 켜 둔 서버를 끄면 재연결 한 번에 붙어 있던 AI 도구가 조용히 떨어진다.
-    /// 켠 사실은 상태바로 알린다(자동으로 파이프가 열린 것을 모르고 지나가지 않게).
+    /// 켠 사실은 상태바로 알린다(자동으로 포트가 노출된 것을 모르고 지나가지 않게).
     /// </summary>
     public void McpEnableFromSession()
     {
         if (McpEnabled) return;
         McpSetEnabled(true);
-        if (McpEnabled) SetStatus(Loc.F("Doc.McpOnBySession", McpPipeServer.PipeNameFor(_portName)));
+        if (McpEnabled) SetStatus(Loc.F("Doc.McpOnBySession", _portName));
     }
 
     public void McpSetReadOnly(bool ro)
@@ -1875,19 +1865,10 @@ public partial class UartDocumentView : UserControl
         RaiseMcpState();
     }
 
-    public void McpCopyCommand()
-    {
-        string exe = Path.Combine(AppContext.BaseDirectory, "UartTerminal.McpRelay.exe");
-        string name = $"uart-{_portName.ToLowerInvariant()}";
-        string cmd = $"claude mcp add {name} -- \"{exe}\" {_portName}";
-        TrySetClipboard(cmd);
-        SetStatus(Loc.S("Doc.McpCopied"));
-    }
-
     /// <summary>
-    /// HTTP 등록 명령을 복사한다. 파이프판(<see cref="McpCopyCommand"/>)과 갈리는 곳은
-    /// <b>PC 마다 달라지는 값이 없다</b>는 점이다 — 체크아웃 경로도 COM 번호도 들어가지 않아
-    /// 저장소의 .mcp.json 에 넣어도 되고, 포트를 몇 개 열든 등록은 이 하나면 된다.
+    /// 등록 명령을 복사한다. <b>PC 마다 달라지는 값이 하나도 없다</b> —
+    /// 체크아웃 경로도 COM 번호도 들어가지 않아 저장소의 .mcp.json 에 넣어도 되고,
+    /// 포트를 몇 개 열든 등록은 이 하나면 된다.
     /// </summary>
     public void McpCopyHttpCommand()
     {
@@ -1918,7 +1899,6 @@ public partial class UartDocumentView : UserControl
         _logger?.Dispose();
         _logger = null;
         _conn?.CloseDocument();
-        try { _mcpServer?.Stop(); } catch { }
         try { HideFromHttp(); } catch { }
     }
 

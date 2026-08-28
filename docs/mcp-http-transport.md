@@ -1,10 +1,11 @@
 # MCP 트랜스포트를 HTTP로 전환 — 설계 메모
 
-> 현재의 **stdio + 릴레이 + Named Pipe** 구조를 **HTTP 엔드포인트 하나**로 바꾸는 검토안.
-> 구현 전 결정 사항을 정리한 메모다. 아직 착수하지 않았다.
+> **완료(2026-08-28).** 옛 **stdio + 릴레이 + Named Pipe** 구조를 **HTTP 엔드포인트 하나**로 바꿨다.
+> 아래 §1~§3 은 착수 전에 쓴 검토안을 그대로 둔다 — 왜 이렇게 정했는지가 남아야 한다.
+> 실제로 들어간 것과 실측치는 §4 부터, 결정 사항은 §5 에 있다.
 
-- 대조 기준: `src/UartTerminal/Mcp/` (`McpPipeServer.cs` 196줄, `UartMcpTools.cs` 112줄, `UartBridge.cs` 543줄), `src/UartTerminal.McpRelay/Program.cs` 86줄
-- 현재 SDK: `ModelContextProtocol.Core` 1.4.1
+- 착수 시점 규모: `McpPipeServer.cs` 196줄, `UartMcpTools.cs` 112줄, `UartBridge.cs` 543줄, `McpRelay/Program.cs` 86줄
+- SDK: `ModelContextProtocol.Core` 1.4.1 + `ModelContextProtocol.AspNetCore` 1.4.1
 - 관련 문서: [MCP.md](MCP.md)
 
 ---
@@ -197,8 +198,8 @@ framework-dependent 쪽은 크기는 그대로지만 **ASP.NET Core 런타임을
 | `Mcp/UartMcpTools.cs` | 9종에 `port` 파라미터 추가, `Resolve()` 도입 |
 | `UartDocumentView.xaml.cs:280,372` | `McpPipeServer` 생성 → **레지스트리 등록/해제**로 교체 |
 | `App.xaml.cs` (또는 메인 윈도우) | 호스트 기동/종료 |
-| `Mcp/McpPipeServer.cs` | 3단계에서 삭제 |
-| `src/UartTerminal.McpRelay/` | 3단계에서 프로젝트째 삭제 |
+| `Mcp/McpPipeServer.cs` | 삭제됨(3단계) |
+| `src/UartTerminal.McpRelay/` | 프로젝트째 삭제됨(3단계). CI 의 publish 2건과 배포 zip 동봉도 함께 제거 |
 
 `UartBridge.cs`(543줄)는 **손대지 않는다.** 이미 스레드 안전하고 트랜스포트와 무관하다.
 
@@ -206,22 +207,25 @@ framework-dependent 쪽은 크기는 그대로지만 **ASP.NET Core 런타임을
 
 ```
 1단계  HTTP 서버를 추가하되 Named Pipe 도 그대로 둔다 (병행)   ← 완료 (2026-08-28)
-       → 두 경로가 같은 브리지를 본다. 기존 등록이 안 깨진다.
-2단계  Claude 등록을 HTTP 로 갈아탄다. 실사용으로 검증.
-3단계  McpPipeServer + McpRelay 프로젝트 삭제. README/MCP.md 갱신.
+2단계  Claude 등록을 HTTP 로 갈아탄다. 실사용으로 검증.        ← 완료 (2026-08-28)
+3단계  McpPipeServer + McpRelay 프로젝트 삭제. README/MCP.md 갱신.  ← 완료 (2026-08-28)
 ```
 
-1단계에서 멈춰도 손해가 없다. 되돌리기 쉽다 — 단 §4.1.1 의 배포 크기는 이미 든다.
+세 단계를 하루에 다 밟았다. 2단계 검증은 실제 보드로 했다 —
+`--scope user` 로 등록한 뒤, 이미 떠 있던 Claude 세션에서 `uart_send "ver"` → `uart_expect` 왕복이
+335 bytes 유실 0 으로 돌아왔다. 파이프 등록(`uart-com4`, 절대경로 + COM 번호)은 그때 지웠다.
+
+3단계는 **독립 커밋**으로 올렸다 — HTTP 에 문제가 생기면 `git revert` 한 번으로 파이프가 돌아온다.
 
 ### 4.4 1단계에서 실제로 들어간 것
 
 | 파일 | 한 일 |
 |---|---|
-| `Mcp/BridgeRegistry.cs` | **신규** — `포트명 → UartBridge` + §3.3 해석 규칙. 파이프용 `SingleBridgeResolver` 도 여기 |
+| `Mcp/BridgeRegistry.cs` | **신규** — `포트명 → UartBridge` + §3.3 해석 규칙 |
 | `Mcp/McpHttpServer.cs` | **신규** — Kestrel 호스트(127.0.0.1 고정), Origin 검사, 포트 충돌 처리 |
 | `Mcp/McpHost.cs` | **신규** — 앱 수준 배선. 노출 수가 0↔1 을 넘을 때만 소켓을 열고 닫는다 |
 | `Mcp/UartMcpTools.cs` | 9종 전부에 마지막 선택 인자 `port` 추가, `Resolve()` 도입, HTTP용 안내문 |
-| `Mcp/McpPipeServer.cs` | 툴을 `SingleBridgeResolver` 로 생성(한 줄). **그 밖에는 손대지 않음** |
+| `Mcp/McpPipeServer.cs` | 1단계에서는 한 줄만 고쳤고, 3단계에서 삭제 |
 | `UartDocumentView.xaml.cs` | MCP 를 켜고/끄고/포트가 바뀌고/탭이 닫힐 때 레지스트리 등록·해제 |
 | `App.xaml.cs` | `McpHost.Init` / `OnExit` 에서 `Shutdown` |
 | `AppState.cs` | `McpHttpPort` (기본 5300) |
@@ -354,7 +358,10 @@ HTTP 가 실제로 지불하는 비용은 처리량이 아니라 **배포 +26 MB
       생략 시 두 포트명과 함께 거절, 포트를 지정하면 각각 자기 보드로(수신 670B vs 0B 로 구분), 외부 Origin 403.
       켜기 전에는 소켓이 열리지 않는 것도 확인 (2026-08-28)
 - [ ] 마지막 포트의 MCP 를 끄면 5300 이 닫히는지
-- [ ] `UartTerminal.exe` 종료 후 도구 호출 — 접속 실패가 **명확한 메시지**로
+- [x] **실사용 왕복** — `--scope user` 등록 후, 이미 떠 있던 Claude 세션에서 `uart_send "ver"` →
+      `uart_expect` 로 응답 확인(335 bytes, `dropped_bytes` 0). 세션을 다시 띄울 필요가 없었다
+- [x] `UartTerminal.exe` 종료 후 — `claude mcp list` 가 `ConnectionRefused` 로 명확히 보고
+      (단, **등록 직후 첫 조회는 값이 안 맞을 수 있다** — 한 번 더 돌려 볼 것)
 - [ ] COM 번호를 바꿔 꽂기 — 등록은 그대로, 앱에서 다시 열기만 하면 동작
 - [ ] 다른 PC에서 같은 `.mcp.json` 으로 동작
 

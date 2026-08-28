@@ -162,31 +162,6 @@ public class BridgeRegistryTests
 
         Assert.Equal(new[] { 1, 2, 1, 0 }, seen);
     }
-
-    // ── 파이프 경로(단일 포트)는 그대로여야 한다 ──────────────────────────────────
-
-    [Fact]
-    public void SingleResolver_IgnoresOmittedPort()
-    {
-        var bridge = NewBridge();
-        var one = new SingleBridgeResolver(bridge, "COM4");
-
-        Assert.True(one.TryResolve(null, out var hit, out _));
-        Assert.Same(bridge, hit);
-        Assert.True(one.TryResolve("com4", out hit, out _));
-        Assert.Same(bridge, hit);
-    }
-
-    /// <summary>파이프 하나로 남의 포트를 만질 수는 없다 — 파이프 이름이 이미 포트를 지정한다.</summary>
-    [Fact]
-    public void SingleResolver_RejectsOtherPort()
-    {
-        var one = new SingleBridgeResolver(NewBridge(), "COM4");
-
-        Assert.False(one.TryResolve("COM7", out var hit, out var why));
-        Assert.Null(hit);
-        Assert.Equal(BridgeResolution.NotFound, why);
-    }
 }
 
 /// <summary>

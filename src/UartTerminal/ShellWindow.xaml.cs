@@ -666,8 +666,7 @@ public partial class ShellWindow : Window
         }
         else
         {
-            string pipe = McpPipeServer.PipeNameFor(doc.PortName);
-            McpStatusText.Text = Loc.F(doc.McpReadOnly ? "Status.McpOnReadOnly" : "Status.McpOn", pipe)
+            McpStatusText.Text = Loc.F(doc.McpReadOnly ? "Status.McpOnReadOnly" : "Status.McpOn", doc.PortName)
                                  + HttpSuffix();
             McpStatusText.Foreground = Theme.Brush(doc.McpReadOnly ? "Amber" : "Green");
         }
@@ -951,7 +950,6 @@ public partial class ShellWindow : Window
     { ActiveDoc?.McpSetEnabled(MenuMcpEnabled.IsChecked); RefreshMcpChrome(); }
     private void McpReadOnly_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetReadOnly(MenuMcpReadOnly.IsChecked); RefreshMcpChrome(); }
-    private void McpCopyCmd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.McpCopyCommand();
     private void McpCopyHttpCmd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.McpCopyHttpCommand();
 
     private void ParsePanel_Click(object sender, RoutedEventArgs e)
