@@ -189,6 +189,7 @@
                           Click="McpReadOnly_Click"/>
                 <Separator/>
                 <MenuItem Header="{loc:Str Menu.McpCopyCmd}" Click="McpCopyCmd_Click"/>
+                <MenuItem Header="{loc:Str Menu.McpCopyHttpCmd}" Click="McpCopyHttpCmd_Click"/>
             </MenuItem>
             <MenuItem Header="{loc:Str Menu.Help}">
                 <MenuItem x:Name="MenuDiagCapture" Header="{loc:Str Menu.DiagCapture}"

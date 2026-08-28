@@ -181,7 +181,8 @@ public sealed class Loc : INotifyPropertyChanged
         ["Menu.Mcp"] = ("MCP(_M)", "_MCP"),
         ["Menu.McpEnabled"] = ("MCP 서버 활성화(_E)", "_Enable MCP Server"),
         ["Menu.McpReadOnly"] = ("AI 읽기 전용 (TX·제어선 차단)(_R)", "AI _Read-only (block TX & control lines)"),
-        ["Menu.McpCopyCmd"] = ("등록 명령 복사 (claude mcp add)(_C)", "_Copy Registration Command (claude mcp add)"),
+        ["Menu.McpCopyCmd"] = ("파이프 등록 명령 복사 (이 포트만)(_C)", "_Copy Pipe Registration Command (this port only)"),
+        ["Menu.McpCopyHttpCmd"] = ("HTTP 등록 명령 복사 (모든 포트)(_H)", "Copy _HTTP Registration Command (all ports)"),
 
         // ── 메뉴: 도움말 ──
         ["Menu.Help"] = ("도움말(_H)", "_Help"),
@@ -193,6 +194,10 @@ public sealed class Loc : INotifyPropertyChanged
         ["Status.McpOff"] = ("MCP: 꺼짐", "MCP: off"),
         ["Status.McpOn"] = ("MCP: 켜짐 ({0})", "MCP: on ({0})"),
         ["Status.McpOnReadOnly"] = ("MCP: 켜짐 (읽기 전용, {0})", "MCP: on (read-only, {0})"),
+        // HTTP 는 앱당 하나라 파이프 상태 뒤에 덧붙인다. {0} = TCP 포트 번호.
+        ["Status.McpHttpOn"] = (" · HTTP {0}", " · HTTP {0}"),
+        ["Status.McpHttpInUse"] = (" · HTTP {0} 사용 중", " · HTTP {0} in use"),
+        ["Status.McpHttpFailed"] = (" · HTTP 실패", " · HTTP failed"),
         ["Tip.CloseTab"] = ("탭 닫기", "Close tab"),
         // 탭 우클릭 메뉴. 메뉴바와 같은 동작이라 접근키(_) 없는 짧은 문구를 따로 둔다.
         ["Ctx.Detach"] = ("새 창으로 분리", "Detach to New Window"),
@@ -447,6 +452,10 @@ public sealed class Loc : INotifyPropertyChanged
         ["Doc.LogSaveTitle"] = ("로그 저장", "Save Log"),
         ["Doc.LogFilter"] = ("텍스트 파일 (*.txt)|*.txt|모든 파일 (*.*)|*.*", "Text file (*.txt)|*.txt|All files (*.*)|*.*"),
         ["Doc.McpCopied"] = ("MCP 등록 명령을 클립보드에 복사했습니다", "MCP registration command copied to the clipboard"),
+        ["Doc.McpHttpCopied"] = ("MCP HTTP 등록 명령을 클립보드에 복사했습니다.\n포트를 몇 개 열든 등록은 이 하나입니다.",
+                                 "Copied the MCP HTTP registration command.\nOne registration covers every port you open."),
+        ["Doc.McpHttpPortInUse"] = ("HTTP 포트 {0} 을(를) 다른 프로그램이 쓰고 있습니다.\nUartTerminal 이 이미 떠 있으면 그쪽이 엔드포인트를 쥡니다 — 이 창은 파이프로 동작합니다.",
+                                    "Another program is using HTTP port {0}.\nIf UartTerminal is already running, that instance holds the endpoint — this window uses the pipe."),
         ["Doc.FlashRelease"] = ("플래시를 위해 포트 양보 — {0}", "Released the port for flashing — {0}"),
         ["Doc.FlashReopenWait"] = ("재연결 대기 — {0} 아직 사용 중", "Waiting to reconnect — {0} is still in use"),
         ["Doc.PasteConfirm"] = ("여러 줄을 붙여넣습니다. 전송할까요?", "This will paste multiple lines. Send them?"),

@@ -43,6 +43,12 @@ public partial class UartDocumentView : UserControl
     private ConnectionController? _conn; // 연결 수명주기 상태머신(UI 비의존) — 세션/재연결/양보 관리
     private UartBridge? _bridge;
     private McpPipeServer? _mcpServer;
+
+    /// <summary>
+    /// HTTP 레지스트리에 지금 등록돼 있는 포트명(없으면 null). <see cref="_portName"/> 을 그대로 쓰지 않는 이유는
+    /// 포트가 바뀔 때 <see cref="_portName"/> 이 <b>먼저</b> 갱신되기 때문이다 — 그러면 예전 이름을 못 지운다.
+    /// </summary>
+    private string? _exposedPort;
     private string _portName = "";
 
     // 자동 재연결 폴링 타이머: 대기 '상태'는 컨트롤러가 소유하고, 실제 DispatcherTimer 는 호스트가 돌린다.
@@ -369,10 +375,13 @@ public partial class UartDocumentView : UserControl
         if (_bridge is null) return;
         bool wasEnabled = _bridge.Enabled;
         try { _mcpServer?.Stop(); } catch { }
+        HideFromHttp();   // 옛 포트명으로 남은 등록을 먼저 거둔다
         _mcpServer = new McpPipeServer(_bridge, _portName);
         if (wasEnabled)
         {
             _mcpServer.Start();
+            // HTTP 쪽은 재등록이 필요 없다 — URL 이 포트명을 담지 않기 때문이다(이 전환의 목적).
+            ExposeToHttp();
             DiagLog.Info($"MCP 파이프 변경: {McpPipeServer.PipeNameFor(_portName)} — 릴레이 재등록 필요");
             SetStatus(Loc.F("Conn.PortChangedMcp", _portName));
         }
@@ -1817,8 +1826,34 @@ public partial class UartDocumentView : UserControl
         if (_bridge is null || _mcpServer is null) return;
         _bridge.Enabled = on;
         if (on) _mcpServer.Start(); else _mcpServer.Stop();
+        // 1단계는 병행이다 — 같은 브리지를 파이프와 HTTP 가 함께 본다.
+        if (on) ExposeToHttp(); else HideFromHttp();
+        if (on && Mcp.McpHost.Server is { State: Mcp.McpHttpState.PortInUse } http)
+            SetStatus(Loc.F("Doc.McpHttpPortInUse", http.Port));
         DiagLog.Info($"MCP {(on ? "활성화" : "비활성화")}: {McpPipeServer.PipeNameFor(_portName)}");
         RaiseMcpState();
+    }
+
+    /// <summary>
+    /// 이 탭의 포트를 앱 공용 HTTP 엔드포인트에 노출한다. 등록이 곧 노출이다 —
+    /// 읽기 계열 툴에는 브리지 안에 활성 검사가 없어서, 표에 남아 있으면 읽힌다(Mcp/BridgeRegistry.cs).
+    /// 노출이 0→1 이 되면 <see cref="Mcp.McpHost"/> 가 소켓을 연다.
+    /// </summary>
+    private void ExposeToHttp()
+    {
+        if (_bridge is null || _portName.Length == 0) return;
+        if (string.Equals(_exposedPort, _portName, StringComparison.OrdinalIgnoreCase)) return;
+        HideFromHttp();
+        Mcp.McpHost.Registry.Register(_portName, _bridge);
+        _exposedPort = _portName;
+    }
+
+    /// <summary>노출을 거둔다. 등록해 둔 이름으로 지운다 — 포트가 바뀐 뒤에도 옛 등록이 남지 않게.</summary>
+    private void HideFromHttp()
+    {
+        if (_exposedPort is null || _bridge is null) return;
+        Mcp.McpHost.Registry.Unregister(_exposedPort, _bridge);
+        _exposedPort = null;
     }
 
     /// <summary>
@@ -1849,6 +1884,20 @@ public partial class UartDocumentView : UserControl
         SetStatus(Loc.S("Doc.McpCopied"));
     }
 
+    /// <summary>
+    /// HTTP 등록 명령을 복사한다. 파이프판(<see cref="McpCopyCommand"/>)과 갈리는 곳은
+    /// <b>PC 마다 달라지는 값이 없다</b>는 점이다 — 체크아웃 경로도 COM 번호도 들어가지 않아
+    /// 저장소의 .mcp.json 에 넣어도 되고, 포트를 몇 개 열든 등록은 이 하나면 된다.
+    /// </summary>
+    public void McpCopyHttpCommand()
+    {
+        if (Mcp.McpHost.Server is not { } http) return;
+        TrySetClipboard(http.RegistrationCommand);
+        SetStatus(http.State == Mcp.McpHttpState.PortInUse
+            ? Loc.F("Doc.McpHttpPortInUse", http.Port)
+            : Loc.S("Doc.McpHttpCopied"));
+    }
+
     // ── 정리 ─────────────────────────────────────────────────────────────────────
 
     /// <summary>탭/창이 닫힐 때 세션·MCP 정리. 세션 폐기·지연콜백 차단은 컨트롤러가 담당.</summary>
@@ -1870,6 +1919,7 @@ public partial class UartDocumentView : UserControl
         _logger = null;
         _conn?.CloseDocument();
         try { _mcpServer?.Stop(); } catch { }
+        try { HideFromHttp(); } catch { }
     }
 
     // ── 스크롤바/상태/이벤트 ─────────────────────────────────────────────────────

@@ -27,6 +27,10 @@ public partial class App : Application
         var state = AppState.Load();
         DiagLog.Capture = state.DiagCapture; // 진단 캡처 설정 복원
 
+        // MCP HTTP 엔드포인트는 앱당 하나다(파이프는 탭마다 하나). 여기서는 배선만 하고
+        // 소켓은 아직 열지 않는다 — 포트를 MCP 에 노출해야 열린다(Mcp/McpHost.cs).
+        Mcp.McpHost.Init(state.McpHttpPort);
+
         // 팔레트는 App.xaml 이 병합한 다크 하나뿐이다(테마 전환 없음) — 복원할 것이 없다.
         Loc.SetLanguage(state.Language); // 표시 언어 복원(기본 한국어)
 
@@ -60,6 +64,16 @@ public partial class App : Application
         var shell = new ShellWindow(state, commands, sessions, parsers, isPrimary: true);
         MainWindow = shell;
         shell.Show();
+    }
+
+    /// <summary>
+    /// 앱이 내려갈 때 MCP HTTP 호스트를 명시적으로 정지한다. 안 하면 살아 있는 SSE 연결이
+    /// 프로세스 종료를 붙잡을 수 있다(파이프는 창이 닫힐 때 탭마다 정리된다).
+    /// </summary>
+    protected override void OnExit(ExitEventArgs e)
+    {
+        try { Mcp.McpHost.Shutdown(); } catch (Exception ex) { DiagLog.Exception("McpHost.Shutdown", ex); }
+        base.OnExit(e);
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

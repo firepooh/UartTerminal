@@ -27,6 +27,21 @@ Windows에서 **COM 포트는 한 프로세스만 열 수 있다**. 따라서 �
 
 > 포트별로 파이프가 분리되므로, 여러 탭(여러 COM 포트)을 열면 각 포트마다 독립된 MCP 서버가 뜬다. AI 등록도 포트별로 한다.
 
+### 1.1 HTTP 엔드포인트 (병행)
+
+위 구조에서 **"서버는 앱 안에"** 는 지금도 유효하다 — COM 포트를 한 프로세스만 열 수 있다는 사실은 전송 방식과 무관하다.
+바뀔 수 있는 것은 **바깥으로 나가는 통로**뿐이고, Claude Code 가 HTTP 트랜스포트를 받으면서 릴레이가 필요 없어졌다.
+
+```
+┌────────────┐   HTTP    ┌──────────────────────────────────┐
+│ Claude Code │─────────▶│ UartTerminal.exe (127.0.0.1:5300) │──▶ COM4 / COM9 / …
+└────────────┘           │  └ McpHttpServer → BridgeRegistry │
+                          └──────────────────────────────────┘
+```
+
+엔드포인트가 **앱당 하나**라 등록도 하나다. 어느 포트로 갈지는 도구의 `port` 인자가 정한다(§2.4).
+설계 배경과 남은 단계는 [mcp-http-transport.md](mcp-http-transport.md) 에 있다.
+
 ---
 
 ## 2. 등록 및 활성화
@@ -34,30 +49,63 @@ Windows에서 **COM 포트는 한 프로세스만 열 수 있다**. 따라서 �
 ### 2.1 MCP 서버 켜기 (GUI)
 
 1. UartTerminal에서 대상 포트로 연결한다.
-2. 메뉴 **[MCP] → "MCP 서버 활성화"** 체크. (상태바에 `MCP: 켜짐 (uartterm-mcp-COM4)` 표시)
+2. 메뉴 **[MCP] → "MCP 서버 활성화"** 체크.
+   상태바에 `MCP: 켜짐 (uartterm-mcp-COM4) · HTTP 5300` 이 뜬다 — 앞쪽이 이 탭의 파이프, 뒤쪽이 앱 공용 HTTP 엔드포인트다.
 3. 필요 시 **[MCP] → "AI 읽기 전용"** 으로 쓰기·제어를 차단할 수 있다(아래 §3).
 
-### 2.2 Claude Code에 등록
+### 2.2 Claude Code에 등록 — 두 가지 길
 
-메뉴 **[MCP] → "등록 명령 복사 (claude mcp add)"** 를 누르면 클립보드에 아래 형태의 명령이 복사된다:
+현재 **두 전송 방식이 나란히 돌아간다**(전환 1단계). 같은 브리지를 보므로 어느 쪽으로 붙어도 동작은 같다.
+
+#### (가) HTTP — 권장
+
+메뉴 **[MCP] → "HTTP 등록 명령 복사 (모든 포트)"**:
+
+```bash
+claude mcp add --transport http uart http://127.0.0.1:5300/mcp
+```
+
+- **PC 가 바뀌어도 같은 명령이다** — 체크아웃 경로도 COM 번호도 들어가지 않아 저장소의 `.mcp.json` 에 넣어도 된다.
+- **포트를 몇 개 열든 등록은 하나.** 대신 도구를 부를 때 `port` 로 대상을 고른다(§2.4).
+- 소켓은 `127.0.0.1` 에만 열리고, **MCP 를 켠 포트가 하나라도 있을 때만** 열린다.
+- 포트 번호는 `%APPDATA%\UartTerminal\state.json` 의 `mcpHttpPort` 로 바꿀 수 있다(기본 5300).
+
+#### (나) Named Pipe — 기존 방식
+
+메뉴 **[MCP] → "파이프 등록 명령 복사 (이 포트만)"**:
 
 ```bash
 claude mcp add uart-com4 -- "C:\path\to\UartTerminal.McpRelay.exe" COM4
 ```
 
-터미널에 붙여넣어 실행하면 등록된다. 등록 후 Claude Code에서 `uart_*` 도구를 쓸 수 있다.
-
 > **포트가 바뀌면 재등록 필요**: 재연결 시 다른 COM 번호가 잡히면 파이프 이름도 바뀐다. 이때 상태바가 "MCP 재등록 필요"를 안내하며, 다시 "등록 명령 복사"로 새 명령을 받아 등록한다.
+> HTTP 쪽은 URL 에 포트명이 없어 이 재등록이 필요 없다.
 
 ### 2.3 연결 조건
 
-릴레이가 파이프에 붙으려면(최대 10초 대기) **다음이 모두 참**이어야 한다:
+**파이프**: 릴레이가 붙으려면(최대 10초 대기) 다음이 모두 참이어야 한다 — UartTerminal 실행 중 · 해당 포트 탭 존재 · 그 탭에서 **MCP 서버 활성화**가 켜짐. 하나라도 아니면 릴레이는 "연결하지 못했습니다" 오류를 내고 종료한다.
 
-- UartTerminal이 실행 중
-- 해당 포트 탭이 존재
-- 해당 탭에서 **MCP 서버 활성화**가 켜짐
+**HTTP**: 조건은 하나다 — **MCP 를 켠 포트가 하나 이상**. 그때 소켓이 열리고, 마지막 하나를 끄면 닫힌다. 어느 탭인지는 상관없다.
 
-하나라도 아니면 릴레이는 "연결하지 못했습니다" 오류를 내고 종료한다.
+> `UartTerminal.exe` 가 이미 떠 있는데 또 띄우면, 두 번째는 포트가 잡혀 있어 HTTP 를 포기하고 상태 표시줄에
+> `HTTP 5300 사용 중` 을 띄운다. 앱은 정상 동작하며 그 창의 포트는 파이프로 쓸 수 있다.
+> 먼저 뜬 인스턴스가 엔드포인트를 계속 쥔다.
+
+### 2.4 여러 포트를 동시에 — `port` 인자
+
+도구 9종 모두 **마지막 선택 인자 `port`** 를 받는다. 규칙은 이렇다:
+
+| 상황 | 동작 |
+|---|---|
+| `port` 를 명시 | 그 포트. 노출돼 있지 않으면 오류 + 노출 목록 |
+| 생략 + 노출된 포트 **1개** | 그 포트 (기존 프롬프트가 그대로 동작) |
+| 생략 + 노출된 포트 **2개 이상** | **거절.** 목록을 돌려주고 지정하라고 요구 — 아무 데도 전송하지 않는다 |
+
+마지막 줄이 중요하다. 마스터·슬레이브를 동시에 물린 상태에서 추측으로 하나를 고르면
+엉뚱한 보드에 `uart_send "dfu erase"` 가 나갈 수 있다. 애매하면 거절하는 쪽이 맞다.
+
+먼저 `uart_status` 를 `port` 없이 불러 무엇이 열려 있는지 보고, 이후 호출에 `port` 를 실어 보내면 된다.
+(파이프로 붙은 경우에는 파이프 이름이 이미 포트를 지정하므로 `port` 를 생략해도 된다.)
 
 ---
 
@@ -65,7 +113,7 @@ claude mcp add uart-com4 -- "C:\path\to\UartTerminal.McpRelay.exe" COM4
 
 | 상태 | 읽기 계열<br>(`uart_status`/`uart_read`/`uart_expect`/`uart_screen`) | 쓰기·제어 계열<br>(`uart_send`/`uart_set_dtr_rts`/`uart_reset`/`uart_close`/`uart_open`) |
 |---|---|---|
-| **비활성** (MCP 꺼짐) | 파이프 자체가 닫혀 호출 불가 | 불가 |
+| **비활성** (MCP 꺼짐) | 호출 불가 — 파이프는 닫혀 있고, HTTP 는 그 포트가 노출 표에서 빠진다 | 불가 |
 | **활성 + 읽기 전용** | 허용 | 차단 → `error: "read_only"` |
 | **활성 + 일반** | 허용 | 허용 |
 
@@ -77,6 +125,9 @@ claude mcp add uart-com4 -- "C:\path\to\UartTerminal.McpRelay.exe" COM4
 ## 4. 도구 레퍼런스 (9종)
 
 모든 반환값은 snake_case JSON이다. 시간이 걸리는 값은 `error` 필드로 사유를 명시한다.
+
+> 아래 표에는 적지 않았지만 **9종 모두 마지막에 선택 인자 `port`** 를 받는다(§2.4).
+> 생략 규칙 때문에 포트를 하나만 열었을 때는 지금까지 쓰던 호출이 그대로 동작한다.
 
 ### 4.1 `uart_status` (읽기)
 현재 연결 상태와 수신 버퍼 커서 정보를 반환한다.
@@ -258,7 +309,9 @@ ESP32 devkit 의 자동 프로그램 회로(DTR→IO0 / RTS→EN)로 보드를 �
 - **도구가 `read_only` 반환**: `[MCP] → AI 읽기 전용` 해제.
 - **포트 변경 후 도구 미동작**: 파이프 이름이 바뀌었다 → "등록 명령 복사"로 재등록.
 - **`uart_open`이 계속 `in_use`**: 외부 도구(esptool 등)가 아직 포트를 잡고 있음 → 프로세스 종료 확인 후 재시도.
-- **여러 창/탭**: 포트별로 파이프·MCP 서버가 독립. AI 등록도 포트별로.
+- **여러 창/탭**: 파이프는 포트별로 독립이라 등록도 포트별이다. HTTP 는 등록 하나로 전부 보고 `port` 로 고른다.
+- **HTTP 로 부르는데 "열린 포트가 여러 개입니다" 오류**: 의도된 거절이다 → `port` 를 지정하거나 `uart_status` 로 목록을 먼저 본다.
+- **HTTP 가 안 붙음**: 상태 표시줄의 `HTTP …` 표시를 본다 — 아무 표시도 없으면 MCP 를 켠 포트가 없는 것이고, `HTTP 5300 사용 중` 이면 다른 인스턴스가 쥐고 있는 것이다.
 
 ---
 
@@ -269,5 +322,8 @@ ESP32 devkit 의 자동 프로그램 회로(DTR→IO0 / RTS→EN)로 보드를 �
 | `src/UartTerminal/Mcp/UartMcpTools.cs` | 9개 MCP 도구 정의(속성/설명) |
 | `src/UartTerminal/Mcp/UartBridge.cs` | 스레드 안전 파사드(세션·링버퍼·접근제어·포트 제어 위임) |
 | `src/UartTerminal/Mcp/McpPipeServer.cs` | 포트별 Named Pipe 위의 in-process MCP 서버 |
+| `src/UartTerminal/Mcp/McpHttpServer.cs` | 앱당 하나인 HTTP(Streamable) 엔드포인트 — 127.0.0.1 고정, Origin 검사 |
+| `src/UartTerminal/Mcp/BridgeRegistry.cs` | `포트명 → UartBridge` 표와 `port` 해석 규칙(등록 = 노출) |
+| `src/UartTerminal/Mcp/McpHost.cs` | 앱 수준 배선 — 노출된 포트가 있을 때만 소켓을 연다 |
 | `src/UartTerminal.McpRelay/Program.cs` | stdio ↔ Named Pipe 릴레이 exe |
 | `src/UartTerminal/UartDocumentView.xaml.cs` | 세션 수명주기 소유(`McpReleasePort`/`McpReopenPort` 등) |

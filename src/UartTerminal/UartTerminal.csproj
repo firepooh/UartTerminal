@@ -21,6 +21,13 @@
 
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol.Core" Version="1.4.1" />
+    <!--
+      HTTP(Streamable) 트랜스포트. Core 와 버전이 1:1 로 맞춰져 나온다.
+      AddMcpServer()/WithHttpTransport()/WithTools<T>() 는 Core 가 아니라 이쪽 의존성 사슬
+      (AspNetCore → ModelContextProtocol) 에 있다. Microsoft.AspNetCore.App 프레임워크 참조는
+      이 패키지의 nuspec 이 이미 선언하므로 여기에 FrameworkReference 를 또 쓸 필요가 없다.
+    -->
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
   </ItemGroup>
 
   <ItemGroup>

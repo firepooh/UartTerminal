@@ -33,7 +33,8 @@ public sealed class McpPipeServer
     {
         _bridge = bridge;
         _portName = portName;
-        _tools = new UartMcpTools(bridge);
+        // 파이프는 이름 자체가 포트를 지정한다 — 툴의 port 인자는 생략하거나 이 포트여야 한다.
+        _tools = new UartMcpTools(bridge, portName);
         _pipeName = PipeNameFor(portName);
     }
 

@@ -81,6 +81,7 @@ public partial class ShellWindow : Window
         Closing += OnClosing;
         // 정적 이벤트 구독 — OnClosing 에서 반드시 해지한다(창이 닫혀도 살아남으면 누수).
         Loc.Changed += OnLanguageChanged;
+        Mcp.McpHost.StateChanged += RefreshMcpChrome;
 
         Tabs.PreviewMouseLeftButtonDown += Tabs_DragDown;
         Tabs.PreviewMouseMove += Tabs_DragMove;
@@ -666,10 +667,23 @@ public partial class ShellWindow : Window
         else
         {
             string pipe = McpPipeServer.PipeNameFor(doc.PortName);
-            McpStatusText.Text = Loc.F(doc.McpReadOnly ? "Status.McpOnReadOnly" : "Status.McpOn", pipe);
+            McpStatusText.Text = Loc.F(doc.McpReadOnly ? "Status.McpOnReadOnly" : "Status.McpOn", pipe)
+                                 + HttpSuffix();
             McpStatusText.Foreground = Theme.Brush(doc.McpReadOnly ? "Amber" : "Green");
         }
     }
+
+    /// <summary>
+    /// 상태 표시줄에 덧붙일 HTTP 엔드포인트 상태. 파이프 상태와 한 줄에 나란히 둔다 —
+    /// 1단계에서는 둘이 <b>병행</b>이라 어느 쪽으로 붙었는지 눈으로 구분돼야 한다.
+    /// </summary>
+    private static string HttpSuffix() => Mcp.McpHost.Server switch
+    {
+        { State: Mcp.McpHttpState.Running } h => Loc.F("Status.McpHttpOn", h.Port),
+        { State: Mcp.McpHttpState.PortInUse } h => Loc.F("Status.McpHttpInUse", h.Port),
+        { State: Mcp.McpHttpState.Failed } => Loc.S("Status.McpHttpFailed"),
+        _ => "",
+    };
 
     // ── 전역 단축키 ──────────────────────────────────────────────────────────────
 
@@ -938,6 +952,7 @@ public partial class ShellWindow : Window
     private void McpReadOnly_Click(object sender, RoutedEventArgs e)
     { ActiveDoc?.McpSetReadOnly(MenuMcpReadOnly.IsChecked); RefreshMcpChrome(); }
     private void McpCopyCmd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.McpCopyCommand();
+    private void McpCopyHttpCmd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.McpCopyHttpCommand();
 
     private void ParsePanel_Click(object sender, RoutedEventArgs e)
     {
@@ -1024,6 +1039,7 @@ public partial class ShellWindow : Window
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         Loc.Changed -= OnLanguageChanged;   // 생성자의 += 와 짝(정적 이벤트 → 창을 붙잡는다)
+        Mcp.McpHost.StateChanged -= RefreshMcpChrome;   // 같은 이유(정적 이벤트)
 
         foreach (var ti in Tabs.Items.OfType<TabItem>().ToList())
         {

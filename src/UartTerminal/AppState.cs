@@ -27,6 +27,13 @@ public sealed class AppState
     /// <summary>진단 캡처(RX/TX 덤프 → diag.log). 문제 추적용, 기본 꺼짐.</summary>
     public bool DiagCapture { get; set; }
 
+    /// <summary>
+    /// MCP HTTP 엔드포인트가 쓸 TCP 포트(127.0.0.1 전용). COM 번호와 달리 <b>우리가 정하는 값</b>이라
+    /// PC 가 바뀌어도 같게 둘 수 있고, 그래서 등록 명령이 고정된다(docs/mcp-http-transport.md §5).
+    /// 다른 프로그램과 겹칠 때만 손대면 된다 — 겹치면 상태 표시줄이 알린다.
+    /// </summary>
+    public int McpHttpPort { get; set; } = 5300;
+
     /// <summary>라인별 수신 타임스탬프 표시. 모든 창/탭 공통 전역 설정, 기본 꺼짐.</summary>
     public bool ShowTimestamps { get; set; }
 
