@@ -32,6 +32,9 @@ public partial class McpGuideDialog : Window
         MaxHeight = SystemParameters.WorkArea.Height - 80;
     }
 
+    // 안내를 닫지 않고 띄운다 — 목록을 보고 다시 안내로 돌아오는 흐름이 자연스럽다.
+    private void Api_Click(object sender, RoutedEventArgs e) => new McpApiDialog(this).ShowDialog();
+
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
         try { Clipboard.SetText(_command); }

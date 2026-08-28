@@ -22,6 +22,8 @@
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="{loc:Str Common.Close}" Style="{StaticResource GhostButton}" IsCancel="True"/>
+            <Button Content="{loc:Str McpGuide.Api}" Style="{StaticResource DialogButton}"
+                    MinWidth="86" MinHeight="30" Margin="8,0,0,0" Click="Api_Click"/>
             <Button Content="{loc:Str McpGuide.Copy}" x:Name="CopyButton"
                     Style="{StaticResource SendButton}"
                     MinWidth="86" MinHeight="30" Margin="8,0,0,0" IsDefault="True" Click="Copy_Click"/>

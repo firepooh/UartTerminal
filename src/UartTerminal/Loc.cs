@@ -460,6 +460,22 @@ public sealed class Loc : INotifyPropertyChanged
         ["McpGuide.Title"] = ("MCP 사용 안내", "Using MCP"),
         // 메뉴 라벨을 재사용하면 접근키 표기(_C)가 버튼에 그대로 보인다 — 짧은 라벨을 따로 둔다.
         ["McpGuide.Copy"] = ("등록 명령 복사", "Copy Registration Command"),
+        ["McpGuide.Api"] = ("지원 API", "Supported API"),
+
+        // ── MCP 도구 목록 ──
+        // 본문(도구·인자 설명)은 번역하지 않는다 — AI 에게 나가는 원문을 그대로 보여주는 것이 목적이다.
+        // 여기 있는 것은 우리가 붙인 라벨뿐이다.
+        ["McpApi.Title"] = ("MCP 도구", "MCP Tools"),
+        ["McpApi.Intro"] = ("AI 가 접속할 때 받는 도구 목록 {0}종입니다.\n" +
+                            "아래 설명은 번역하지 않은 원문 — AI 에게 그대로 전달되는 내용입니다.",
+                            "The {0} tools an AI receives when it connects.\n" +
+                            "The text below is shown untranslated: it is exactly what the AI is given."),
+        ["McpApi.Read"] = ("읽기", "read"),
+        ["McpApi.Write"] = ("쓰기·제어", "write"),
+        ["McpApi.NoArgs"] = ("인자 없음", "no arguments"),
+        ["McpApi.Required"] = ("필수", "required"),
+        ["McpApi.Default"] = ("기본 {0}", "default {0}"),
+        ["McpApi.Omitted"] = ("생략", "omitted"),
 
         ["McpGuide.S1Head"] = ("UartTerminal 은 HTTP 방식 하나만 씁니다",
                                "UartTerminal speaks one transport: HTTP"),
