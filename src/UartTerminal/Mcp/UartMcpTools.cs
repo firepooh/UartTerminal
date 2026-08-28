@@ -57,6 +57,13 @@ public sealed class UartMcpTools
         "수신은 단조 증가 커서로 읽는다: uart_read/uart_expect 가 돌려준 cursor 를 다음 호출에 넘겨 이어서 읽고, " +
         "dropped_bytes 가 0 이 아니면 버퍼 용량 초과로 유실이 있었다는 뜻이다. " +
         "명령 응답을 기다릴 때는 uart_send 후 uart_expect 를 쓰면 폴링 왕복을 줄일 수 있다. " +
+        // 오류 모델은 도구 설명에 흩어져 있어 전체 그림이 안 보였다. 여기서 한 번에 준다 —
+        // 재시도로 풀리는 것과 사람이 손대야 하는 것을 구분 못 하면 AI 가 헛도거나 일찍 포기한다.
+        "실패는 error 필드로 온다. 재시도로 풀리는 것과 사용자에게 요청해야 하는 것을 구분하라: " +
+        "in_use 는 외부 도구가 포트를 쥐고 있는 것이니 수백 ms 후 재시도하고, " +
+        "disconnected 는 uart_open 을 부르거나 사용자의 재연결을 기다린다. " +
+        "read_only 와 mcp_disabled 는 사용자가 [MCP] 메뉴에서 풀어야 하므로 재시도하지 말고 요청하라. " +
+        "bad_pattern·regex_timeout 은 패턴을 고쳐 다시 부른다. " +
         "펌웨어 플래싱(esptool 등 포트를 독점하는 외부 도구)이 필요하면: uart_close 로 포트를 양보 → " +
         "셸에서 esptool 실행 → uart_open 으로 재연결한다. " +
         "uart_open 이 in_use 를 반환하면 외부 도구가 아직 포트를 쥐고 있는 것이니 잠시 후 재시도한다.";

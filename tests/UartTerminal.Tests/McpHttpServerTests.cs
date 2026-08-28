@@ -194,6 +194,26 @@ public class McpHttpServerTests : IDisposable
 
     // ── 프로토콜 왕복 ────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 서버 안내문은 <c>initialize</c> 응답에 실려 클라이언트가 모델 컨텍스트에 넣어 준다 —
+    /// AI 에게 사용법을 알려줄 수 있는 <b>유일한 서버 주도 통로</b>다.
+    /// 배선이 끊기면(예: <c>ServerInstructions</c> 설정을 빠뜨리면) 아무 오류 없이
+    /// "AI 가 규칙을 모르는" 상태가 되므로 여기서 잡는다.
+    /// </summary>
+    [Fact]
+    public async Task Initialize_CarriesServerInstructions()
+    {
+        string endpoint = StartAndGetEndpoint();
+
+        var init = await RpcAsync(endpoint,
+            """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}""");
+
+        string text = init.GetProperty("result").GetProperty("instructions").GetString()!;
+        Assert.Contains("port", text);        // 포트 지정 규칙
+        Assert.Contains("in_use", text);      // 오류 대응 — 재시도로 풀리는 것과 아닌 것
+        Assert.Contains("read_only", text);
+    }
+
     [Fact]
     public async Task ToolsList_ExposesNineToolsWithPortArgument()
     {
