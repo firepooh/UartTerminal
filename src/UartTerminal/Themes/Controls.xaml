@@ -35,6 +35,15 @@
         <Setter Property="FontSize" Value="{StaticResource Font.Caption}"/>
     </Style>
 
+    <!-- 긴 안내문을 토막 내는 절 제목. FieldLabel 은 입력칸 위 라벨이라 본문보다 약한데,
+         절 제목은 본문보다 <b>강해야</b> 눈이 걸린다 — 그래서 따로 둔다. -->
+    <Style x:Key="SectionHead" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Text}"/>
+        <Setter Property="FontSize" Value="{StaticResource Font.Emph}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
     <!-- 표 머리글: 본문보다 확실히 약하되 읽히도록 SemiBold -->
     <Style x:Key="TableHeaderText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>

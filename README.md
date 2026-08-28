@@ -411,13 +411,22 @@ CR 덮어쓰기가 모두 반영된 뒤라 파일이 화면과 일치한다. 대
 
 ### Phase B — MCP 서버 (기능 3)
 
-- **SDK**: 공식 C# SDK — NuGet [`ModelContextProtocol`](https://www.nuget.org/packages/ModelContextProtocol)
+- **SDK**: 공식 C# SDK — [`ModelContextProtocol.Core`](https://www.nuget.org/packages/ModelContextProtocol.Core) + [`ModelContextProtocol.AspNetCore`](https://www.nuget.org/packages/ModelContextProtocol.AspNetCore)(HTTP 트랜스포트, 루프백 Kestrel)
 - **전송(§6 Q4)**: 앱당 하나인 HTTP(Streamable) 엔드포인트 — `127.0.0.1:5300/mcp` 고정 바인딩.
   `claude mcp add --transport http uart http://127.0.0.1:5300/mcp` 로 등록하며 **경로도 COM 번호도 들어가지 않아** `.mcp.json` 에 커밋할 수 있다.
-  대상 포트는 도구의 마지막 선택 인자 `port` 로 고르고, 애매하면(2개 이상 + 생략) 거절한다. GUI에 "등록 명령 복사" 버튼.
+  대상 포트는 도구의 마지막 선택 인자 `port` 로 고르고, 애매하면(2개 이상 + 생략) 거절한다.
+  소켓은 **MCP 를 켠 포트가 하나 이상일 때만** 열린다 — 안 쓰는 동안에는 포트를 열지 않는다.
+- **여러 AI 가 동시에**: 엔드포인트가 하나이므로 여러 세션이 함께 붙어 같은 보드를 본다(세션마다 `Mcp-Session-Id` 가 따로 발급된다).
+  그래서 `--scope user` 로 한 번 등록해 두면 어느 폴더에서 AI 를 띄우든 그대로 쓴다.
+- **GUI 안내**: [MCP] 메뉴에 "등록 명령 복사" 와 **"MCP 사용 안내"** 다이얼로그.
+  등록 스코프(user/local/project)는 Claude Code 쪽 개념이라 앱 어디에도 힌트가 없어서, 무엇을 어디에 등록하는지 한 화면에 모아 설명한다.
+- **AI 에게 가는 안내문**: 서버가 `initialize` 응답의 `instructions` 로 사용법(포트 지정 규칙·커서 모델·플래싱 절차)을 직접 보낸다.
+  클라이언트 설정이 필요 없고, 문자열 한 곳(`UartMcpTools.HttpInstructions`)을 고치면 이후 붙는 모든 AI 에 반영된다.
 - **도구(9종)**: `uart_status`, `uart_send`(원자적 전송), `uart_read`(단조 증가 커서, 유실 시 `dropped_bytes` 명시, `strip_ansi` 기본 true), `uart_expect`(regex+timeout — polling 왕복 최소화), `uart_screen`, `uart_set_dtr_rts`, `uart_reset`(리셋/부트로더 진입 시퀀스 — §2.2), `uart_close`/`uart_open`(포트 양보/재점유 — esptool 등 외부 플래싱 도구용)
 - **AI TX 화면 표시**: 수신 스트림에 섞지 않고 버퍼의 **메타 라인 타입**으로 삽입 (예: 회색 배경 `[AI→] ...`)
-- **접근 제어**: MCP 활성/비활성 토글 + AI 읽기 전용(TX·제어·포트 열기/닫기 차단) 모드 + 상태바 인디케이터
+- **접근 제어**: MCP 활성/비활성 토글 + AI 읽기 전용(TX·제어·포트 열기/닫기 차단) 모드 + 상태바 인디케이터.
+  포트별 노출은 레지스트리 등록/해제가 곧 차단이다(읽기 계열 도구에는 브리지 안에 활성 검사가 없다).
+  엔드포인트는 `127.0.0.1` 전용 + Origin 검사(브라우저발 접근 차단) — 다만 같은 PC 안의 프로세스에는 인증이 없다.
 - **포트 양보(플래싱)**: `uart_close`로 포트를 해제 → 셸에서 `esptool` 실행 → `uart_open`으로 재연결. 양보 중에는 자동 재연결이 중지되고 탭에 `[AI 양보]`로 표시.
 - 포트 분리 상태를 에러 모델로 노출 (AI가 재시도 판단 가능하게)
 
@@ -584,7 +593,7 @@ UartTerminal/
 │  │  ├─ Serial/                # ISerialSession, TX 큐, 핫플러그 감지
 │  │  ├─ Terminal/              # 증분 디코더, ANSI 파서, 논리 라인 버퍼
 │  │  ├─ Rendering/             # 커스텀 렌더러 (GlyphRun, 가상화)
-│  │  └─ Mcp/                   # MCP 서버 (Phase B)
+│  │  └─ Mcp/                   # MCP 서버 (Phase B) — HTTP 호스트, 브리지 레지스트리, 도구 9종
 └─ tests/
    └─ UartTerminal.Tests/
 ```

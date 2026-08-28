@@ -181,6 +181,7 @@ public sealed class Loc : INotifyPropertyChanged
         ["Menu.Mcp"] = ("MCP(_M)", "_MCP"),
         ["Menu.McpEnabled"] = ("MCP 서버 활성화(_E)", "_Enable MCP Server"),
         ["Menu.McpReadOnly"] = ("AI 읽기 전용 (TX·제어선 차단)(_R)", "AI _Read-only (block TX & control lines)"),
+        ["Menu.McpGuide"] = ("MCP 사용 안내…(_G)", "MCP _Guide…"),
         ["Menu.McpCopyHttpCmd"] = ("등록 명령 복사 (claude mcp add)(_C)", "_Copy Registration Command (claude mcp add)"),
 
         // ── 메뉴: 도움말 ──
@@ -453,6 +454,72 @@ public sealed class Loc : INotifyPropertyChanged
                                  "Copied the MCP HTTP registration command.\nOne registration covers every port you open."),
         ["Doc.McpHttpPortInUse"] = ("HTTP 포트 {0} 을(를) 다른 프로그램이 쓰고 있습니다.\nUartTerminal 이 이미 떠 있으면 그쪽이 엔드포인트를 쥡니다 — 이 창의 포트는 AI 에 노출되지 않습니다.",
                                     "Another program is using HTTP port {0}.\nIf UartTerminal is already running, that instance holds the endpoint — this window's port is not exposed to AI."),
+
+        // ── MCP 사용 안내 다이얼로그 ──
+        // 등록 스코프는 Claude Code 쪽 개념이라 앱 어디에도 힌트가 없다. 그래서 여기서 한 번에 설명한다.
+        ["McpGuide.Title"] = ("MCP 사용 안내", "Using MCP"),
+        // 메뉴 라벨을 재사용하면 접근키 표기(_C)가 버튼에 그대로 보인다 — 짧은 라벨을 따로 둔다.
+        ["McpGuide.Copy"] = ("등록 명령 복사", "Copy Registration Command"),
+
+        ["McpGuide.S1Head"] = ("UartTerminal 은 HTTP 방식 하나만 씁니다",
+                               "UartTerminal speaks one transport: HTTP"),
+        ["McpGuide.S1Body"] = ("앱 안에서 MCP 서버를 열고, 밖으로는 주소 하나만 냅니다.",
+                               "The MCP server lives inside the app and exposes a single address."),
+        ["McpGuide.S1Note"] = ("이 주소에는 설치 경로도 COM 번호도 들어 있지 않습니다.\n" +
+                               "그래서 PC 를 옮겨도, USB 를 다른 자리에 꽂아 COM 번호가 바뀌어도 등록은 그대로입니다.\n" +
+                               "포트를 몇 개 열든 등록은 이 하나뿐이고, 어느 포트로 보낼지는 AI 가 port 로 고릅니다.",
+                               "The address carries no install path and no COM number.\n" +
+                               "Move to another PC, or replug the USB and get a different COM number — the registration still holds.\n" +
+                               "One registration covers every port you open; the AI picks the target with port."),
+
+        ["McpGuide.S2Head"] = ("어디에 등록할지 — 스코프 세 가지", "Where to register — three scopes"),
+        ["McpGuide.S2Body"] = ("AI 에게 이렇게 말하면 됩니다.", "Just tell the AI:"),
+        ["McpGuide.ScopeUser"] = ("\"user 스코프로 등록해줘\"", "\"register it in user scope\""),
+        ["McpGuide.ScopeUserWhat"] = ("이 PC 의 모든 폴더에서 쓰겠다", "use it from every folder on this PC"),
+        ["McpGuide.ScopeLocal"] = ("\"local 스코프로 등록해줘\"", "\"register it in local scope\""),
+        ["McpGuide.ScopeLocalWhat"] = ("이 폴더에서만, 내 PC 에만", "this folder only, on my PC only"),
+        ["McpGuide.ScopeProject"] = ("\"project 스코프로 등록해줘\"", "\"register it in project scope\""),
+        ["McpGuide.ScopeProjectWhat"] = ("이 폴더에서만, .mcp.json 을 git 으로 팀과 공유하겠다",
+                                         "this folder only, shared with the team via .mcp.json in git"),
+        ["McpGuide.Recommended"] = ("권장", "recommended"),
+        ["McpGuide.S2Cmd"] = ("직접 치실 거면:", "Or type it yourself:"),
+
+        ["McpGuide.S3Head"] = ("user 스코프를 권하는 이유", "Why user scope"),
+        ["McpGuide.S3Body"] = ("엔드포인트가 PC 하나에 하나입니다.\n" +
+                               "보드는 이 PC 에 꽂혀 있고, 어느 프로젝트에서 작업하든 같은 보드를 봅니다.\n" +
+                               "그러니 등록도 PC 단위로 두는 것이 실상에 맞습니다.",
+                               "There is one endpoint per PC.\n" +
+                               "The board is plugged into this PC, and every project looks at that same board.\n" +
+                               "So a per-PC registration matches how it is actually used."),
+        ["McpGuide.S3B1"] = ("어느 폴더에서 AI 를 띄우든 UART 도구가 그대로 있습니다.",
+                             "The UART tools are there no matter which folder you start the AI in."),
+        ["McpGuide.S3B2"] = ("여러 AI 세션이 동시에 붙어도 됩니다 — 각자 자기 세션을 갖고 같은 보드를 함께 봅니다.",
+                             "Several AI sessions can attach at once — each gets its own session and they share the board."),
+        ["McpGuide.S3B3"] = ("프로젝트를 옮길 때마다 다시 등록할 필요가 없습니다.",
+                             "No re-registering every time you switch projects."),
+
+        ["McpGuide.S4Head"] = ("쓰려면 이 세 가지만 맞으면 됩니다", "Three things have to be true"),
+        ["McpGuide.S4L1"] = ("UartTerminal 이 실행 중", "UartTerminal is running"),
+        ["McpGuide.S4L2"] = ("포트에 연결됨", "a port is connected"),
+        ["McpGuide.S4L3"] = ("이 메뉴의 'MCP 서버 활성화' 가 켜짐", "'Enable MCP Server' in this menu is checked"),
+        ["McpGuide.S4Note"] = ("3번이 켜져야 주소가 열립니다. 하나도 안 켜 두면 아무 것도 열지 않습니다.\n" +
+                               "AI 를 먼저 띄워도 됩니다 — 나중에 켜면 그 자리에서 도구가 잡힙니다.",
+                               "The address opens only once #3 is on; with none enabled, no socket is opened.\n" +
+                               "You can start the AI first — enable it later and the tools appear in that same session."),
+
+        ["McpGuide.S5Head"] = ("알아 두실 것", "Worth knowing"),
+        ["McpGuide.S5B1"] = ("MCP 활성화는 앱을 껐다 켜면 풀립니다.\n" +
+                             "매번 켜기 번거로우면 세션에 '열 때 MCP 켜기' 를 저장해 두세요.",
+                             "Enabling MCP does not survive a restart.\n" +
+                             "To avoid doing it every time, save a session with 'MCP on open'."),
+        ["McpGuide.S5B2"] = ("'AI 읽기 전용' 은 기본 꺼짐입니다.\n" +
+                             "켜 두지 않으면 AI 가 송신·리셋·포트 양보까지 할 수 있습니다.",
+                             "'AI read-only' is off by default.\n" +
+                             "Unless you turn it on, the AI can send, reset, and hand the port over."),
+        ["McpGuide.S5B3"] = ("주소가 열려 있는 동안에는 이 PC 안의 다른 프로그램도 접근할 수 있습니다.\n" +
+                             "바깥 네트워크에서는 닿지 않습니다.",
+                             "While the address is open, other programs on this PC can reach it too.\n" +
+                             "Nothing outside this machine can."),
         ["Doc.FlashRelease"] = ("플래시를 위해 포트 양보 — {0}", "Released the port for flashing — {0}"),
         ["Doc.FlashReopenWait"] = ("재연결 대기 — {0} 아직 사용 중", "Waiting to reconnect — {0} is still in use"),
         ["Doc.PasteConfirm"] = ("여러 줄을 붙여넣습니다. 전송할까요?", "This will paste multiple lines. Send them?"),

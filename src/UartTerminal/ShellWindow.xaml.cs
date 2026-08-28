@@ -952,6 +952,9 @@ public partial class ShellWindow : Window
     { ActiveDoc?.McpSetReadOnly(MenuMcpReadOnly.IsChecked); RefreshMcpChrome(); }
     private void McpCopyHttpCmd_Click(object sender, RoutedEventArgs e) => ActiveDoc?.McpCopyHttpCommand();
 
+    // 안내는 탭이 없어도(포트를 아직 안 열었어도) 볼 수 있어야 한다 — ActiveDoc 을 요구하지 않는다.
+    private void McpGuide_Click(object sender, RoutedEventArgs e) => new McpGuideDialog(this).ShowDialog();
+
     private void ParsePanel_Click(object sender, RoutedEventArgs e)
     {
         ActiveDoc?.ToggleParsePanel();

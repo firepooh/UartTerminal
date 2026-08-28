@@ -292,6 +292,80 @@ public class McpHttpServerTests : IDisposable
         return JsonDocument.Parse(json).RootElement.GetProperty("read_only").GetBoolean();
     }
 
+    /// <summary>
+    /// 여러 MCP 클라이언트가 <b>동시에</b> 같은 엔드포인트에 붙어 같은 포트를 함께 볼 수 있어야 한다.
+    /// [MCP] 메뉴의 사용 안내가 "여러 AI 세션이 동시에 붙어도 된다" 고 약속하므로 여기서 못을 박는다.
+    /// (Named Pipe 시절에는 인스턴스가 4개로 제한돼 있었다 — 그 제한이 없어졌다는 것도 겸해서 확인한다.)
+    /// </summary>
+    [Fact]
+    public async Task MultipleSessions_ShareOnePortConcurrently()
+    {
+        const int clients = 6;
+        // 읽기 전용 표식을 켜 둔다 — 여섯이 모두 이 표식을 보면 같은 브리지에 닿은 것이다
+        // (갓 만든 브리지의 기본값은 false 다).
+        _registry.Register("COM4", new UartBridge(new TerminalEngine(new UTF8Encoding(false))) { ReadOnly = true });
+        string endpoint = StartAndGetEndpoint();
+
+        // 세션을 각자 연다 — 클라이언트마다 다른 Mcp-Session-Id 를 받아야 한다.
+        var sessions = await Task.WhenAll(Enumerable.Range(0, clients)
+            .Select(i => OpenSessionAsync(endpoint, i)));
+
+        Assert.Equal(clients, sessions.Distinct(StringComparer.Ordinal).Count());
+
+        // 여섯이 한꺼번에 같은 포트를 두드린다.
+        var replies = await Task.WhenAll(sessions.Select((sid, i) => CallStatusAsync(endpoint, sid, 100 + i)));
+
+        Assert.All(replies, sawReadOnly => Assert.True(sawReadOnly, "같은 브리지에 닿지 않았다"));
+    }
+
+    /// <summary>이 테스트만 세션을 여러 개 다루므로 <see cref="RpcAsync"/> 의 공유 상태를 쓰지 않는다.</summary>
+    private async Task<string> OpenSessionAsync(string endpoint, int id)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            // 원시 문자열 보간은 닫는 중괄호가 셋이라 $$ 로는 애매해진다 — 이어 붙인다.
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                ",\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\"," +
+                "\"capabilities\":{},\"clientInfo\":{\"name\":\"c" + id + "\",\"version\":\"1\"}}}",
+                Encoding.UTF8, "application/json"),
+        };
+        req.Headers.Accept.ParseAdd("application/json");
+        req.Headers.Accept.ParseAdd("text/event-stream");
+
+        using var res = await _http.SendAsync(req);
+        res.EnsureSuccessStatusCode();
+        await res.Content.ReadAsStringAsync();
+        Assert.True(res.Headers.TryGetValues("Mcp-Session-Id", out var ids), "세션 id 가 없다");
+        return ids.First();
+    }
+
+    /// <summary>uart_status 를 부르고 응답의 read_only 를 돌려준다(어느 브리지에 닿았는지 가리는 표식).</summary>
+    private async Task<bool> CallStatusAsync(string endpoint, string sessionId, int id)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                ",\"method\":\"tools/call\",\"params\":{\"name\":\"uart_status\",\"arguments\":{}}}",
+                Encoding.UTF8, "application/json"),
+        };
+        req.Headers.Accept.ParseAdd("application/json");
+        req.Headers.Accept.ParseAdd("text/event-stream");
+        req.Headers.Add("Mcp-Session-Id", sessionId);
+
+        using var res = await _http.SendAsync(req);
+        res.EnsureSuccessStatusCode();
+        string text = await res.Content.ReadAsStringAsync();
+        string data = text.Split('\n').First(l => l.StartsWith("data:", StringComparison.Ordinal));
+
+        var result = JsonDocument.Parse(data["data:".Length..].Trim()).RootElement.GetProperty("result");
+        Assert.False(result.TryGetProperty("isError", out var err) && err.GetBoolean());
+
+        string json = result.GetProperty("content")[0].GetProperty("text").GetString()!;
+        return JsonDocument.Parse(json).RootElement.GetProperty("read_only").GetBoolean();
+    }
+
     // ── 보안 ─────────────────────────────────────────────────────────────────────
 
     /// <summary>

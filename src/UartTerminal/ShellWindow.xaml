@@ -188,6 +188,7 @@
                 <MenuItem x:Name="MenuMcpReadOnly" Header="{loc:Str Menu.McpReadOnly}" IsCheckable="True"
                           Click="McpReadOnly_Click"/>
                 <Separator/>
+                <MenuItem Header="{loc:Str Menu.McpGuide}" Click="McpGuide_Click"/>
                 <MenuItem Header="{loc:Str Menu.McpCopyHttpCmd}" Click="McpCopyHttpCmd_Click"/>
             </MenuItem>
             <MenuItem Header="{loc:Str Menu.Help}">
