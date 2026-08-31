@@ -14,7 +14,7 @@ namespace UartTerminal;
 /// <summary>
 /// 세션(접속 프로필) 관리 — 이름·포트·속도·연결된 명령 그룹을 표로 한눈에 보고 편집한다.
 /// 접속 다이얼로그(PortSelectDialog)는 '고르는' 화면이라 정보가 축약돼 있어(그룹 미표시),
-/// 설정을 확인·정리하는 전용 화면을 따로 둔다. 포트는 여기서 바꾸지 않는다(연결 시 폼에서 결정 — 진실의 출처 하나).
+/// 설정을 확인·정리하는 전용 화면을 따로 둔다. 포트는 여기서 바꾼다(세션이 진실의 출처).
 /// <b>모달</b>이며 열 때 파일을 다시 읽어 손편집/다른 인스턴스 변경을 반영한다.
 /// </summary>
 public partial class SessionManagerDialog : Window
@@ -25,6 +25,7 @@ public partial class SessionManagerDialog : Window
         private string _name = "";
         private int _baud = 115200;
         private string? _group;
+        private string _port = "";
         private bool _resetOnOpen;
         private bool _mcpOnOpen;
         private string? _logFolder;
@@ -32,7 +33,7 @@ public partial class SessionManagerDialog : Window
         private TransmitNewline? _nlTx;
 
         public string Name { get => _name; set { _name = value ?? ""; Raise(); } }
-        public string Port { get; init; } = "";
+        public string Port { get => _port; set { _port = (value ?? "").Trim(); Raise(); } }
         public int Baud { get => _baud; set { _baud = value; Raise(); } }
         public string? Group { get => _group; set { _group = value; Raise(); } }
         public bool ResetOnOpen { get => _resetOnOpen; set { _resetOnOpen = value; Raise(); } }
@@ -121,6 +122,7 @@ public partial class SessionManagerDialog : Window
         ("LF", TransmitNewline.Lf),
     };
 
+
     private static readonly int[] BaudPresets = { 74880, 115200, 230400, 460800, 921600 };
 
     private static bool _open;
@@ -205,6 +207,7 @@ public partial class SessionManagerDialog : Window
         try
         {
             NameBox.Text = row?.Name ?? "";
+            FillPorts(row?.Port);
             BaudBox.SelectedItem = row is null ? null : (object)row.Baud;
             GroupBox.SelectedItem = row is null ? null : (string.IsNullOrEmpty(row.Group) ? NoGroup : row.Group!);
             ResetCheck.IsChecked = row?.ResetOnOpen ?? false;
@@ -220,6 +223,78 @@ public partial class SessionManagerDialog : Window
     {
         if (_syncing || SessionList.SelectedItem is not Row row) return;
         row.Name = NameBox.Text;
+    }
+
+    /// <summary>
+    /// 지금 연결된 포트에 <b>이 세션에 저장된 값</b>을 얹어 목록을 만든다.
+    /// 저장된 포트가 지금 안 꽂혀 있어도 목록에서 사라지면 안 된다 — 그러면 선택이 풀려
+    /// 사용자가 건드리지도 않은 세션의 포트가 조용히 바뀐다.
+    /// </summary>
+    private void FillPorts(string? current)
+    {
+        var names = new List<string>();
+        try { names.AddRange(System.IO.Ports.SerialPort.GetPortNames()); }
+        catch (Exception ex) { DiagLog.Warn($"포트 열거 실패: {ex.Message}"); }
+
+        if (!string.IsNullOrWhiteSpace(current) &&
+            !names.Contains(current!, StringComparer.OrdinalIgnoreCase))
+            names.Add(current!);
+
+        names.Sort(PortOrder);
+        PortBox.ItemsSource = names;
+
+        // 편집 가능 ComboBox 는 ItemsSource 를 갈아끼운 직후 Text 만 넣으면 템플릿이 붙을 때 지워진다
+        // (선택이 없으면 Text 를 비우는 기본 동작). 목록에 있는 값은 SelectedItem 으로 넣어야 남는다.
+        int at = names.FindIndex(n => string.Equals(n, current, StringComparison.OrdinalIgnoreCase));
+        if (at >= 0) PortBox.SelectedIndex = at;
+        else { PortBox.SelectedIndex = -1; PortBox.Text = current ?? ""; }
+    }
+
+    /// <summary>COM2 가 COM10 뒤로 가지 않게 숫자 부분으로 비교한다.</summary>
+    private static readonly Comparison<string> PortOrder = (a, b) =>
+    {
+        int na = Num(a), nb = Num(b);
+        if (na >= 0 && nb >= 0 && na != nb) return na.CompareTo(nb);
+        return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+
+        static int Num(string s)
+        {
+            int i = 0;
+            while (i < s.Length && !char.IsDigit(s[i])) i++;
+            return i < s.Length && int.TryParse(s[i..], out int n) ? n : -1;
+        }
+    };
+
+    /// <summary>
+    /// 목록에서 고른 경우. <b>Text 가 아니라 SelectedItem 을 본다</b> —
+    /// 편집 가능 콤보는 이 시점에 Text 가 아직 옛 값일 수 있다.
+    /// </summary>
+    private void PortBox_Picked(object sender, SelectionChangedEventArgs e)
+    {
+        if (PortBox.SelectedItem is string picked) ApplyPort(picked);
+    }
+
+    /// <summary>
+    /// 직접 친 경우. 반대로 <b>SelectedItem 은 옛 선택으로 남아 있으므로 Text 를 본다.</b>
+    /// 포커스를 옮길 때 확정한다(한 글자 칠 때마다 목록이 다시 그려지지 않게).
+    /// </summary>
+    private void PortBox_Typed(object sender, RoutedEventArgs e) => ApplyPort(PortBox.Text);
+
+    /// <summary>
+    /// 빈 값은 되돌린다 — 포트 없는 세션은 접속에 쓸 수 없어 저장할 이유가 없다.
+    /// 형식은 검사하지 않는다: 막아서 얻는 것보다 못 적게 되는 쪽이 손해가 크고,
+    /// 틀린 포트는 접속할 때 바로 드러난다.
+    /// </summary>
+    private void ApplyPort(string? value)
+    {
+        if (_syncing || SessionList.SelectedItem is not Row row) return;
+
+        string text = (value ?? "").Trim().ToUpperInvariant();
+        if (text.Length == 0) { PortBox.Text = row.Port; return; }
+        if (string.Equals(text, row.Port, StringComparison.Ordinal)) return;
+
+        row.Port = text;
+        PortBox.Text = text;   // 소문자로 쳤을 때 화면도 맞춰 준다
     }
 
     private void BaudBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

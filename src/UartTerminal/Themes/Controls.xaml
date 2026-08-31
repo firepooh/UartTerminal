@@ -755,6 +755,68 @@
         </Setter>
     </Style>
 
+    <!--
+      직접 칠 수도 있는 콤보. 위 암시적 템플릿은 ToggleButton 하나로 되어 있어
+      IsEditable 을 켜도 <b>빈칸으로 보인다</b> — WPF 가 PART_EditableTextBox 를 찾지 못하기 때문이다.
+      그래서 편집 영역을 얹은 변형을 따로 둔다(암시적 스타일을 건드리면 앱의 모든 콤보가 영향을 받는다).
+
+      쓰는 곳: 세션의 COM 포트 — 목록에서 고르는 게 보통이지만, 지금 안 꽂힌 포트도 적을 수 있어야 한다.
+      TextBox 는 화살표 자리를 비워 두고 덮는다(그 자리를 눌러야 목록이 열린다).
+    -->
+    <Style x:Key="EditableCombo" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Setter Property="IsEditable" Value="True"/>
+        <Setter Property="Cursor" Value="IBeam"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="PART_Toggle" Focusable="False" ClickMode="Press"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Bd" CornerRadius="8"
+                                            Background="{DynamicResource Surface}"
+                                            BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1">
+                                        <Path Data="M0,0 L8,0 L4,5 Z" Margin="0,0,9,0"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              Fill="{DynamicResource TextMuted}"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource BorderFocus}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+
+                        <TextBox x:Name="PART_EditableTextBox" Margin="9,1,26,1" Padding="0"
+                                 VerticalContentAlignment="Center"
+                                 Background="Transparent" BorderThickness="0"
+                                 Foreground="{TemplateBinding Foreground}"
+                                 CaretBrush="{DynamicResource Text}"
+                                 SelectionBrush="{DynamicResource Accent}"
+                                 IsReadOnly="{TemplateBinding IsReadOnly}"/>
+
+                        <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               Placement="Bottom" PopupAnimation="Fade"
+                               MinWidth="{TemplateBinding ActualWidth}">
+                            <Border Background="{DynamicResource Surface}"
+                                    BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1"
+                                    CornerRadius="8" Padding="4" Margin="0,3,0,0"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                <ScrollViewer>
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============================================================
          SCROLLBAR (GitHub-dark) — 트랙/썸/화살표. 암시적 스타일로 앱 전체 통일.
          ============================================================ -->

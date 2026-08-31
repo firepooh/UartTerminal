@@ -150,6 +150,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -160,21 +161,32 @@
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str Common.Name}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Baud}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.CommandGroup}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
-                <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Str Sess.OnOpen}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{loc:Str Common.Port}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="{loc:Str Common.Baud}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="{loc:Str Common.CommandGroup}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
+                <TextBlock Grid.Row="0" Grid.Column="4" Text="{loc:Str Sess.OnOpen}" Style="{StaticResource FieldLabel}" Margin="12,0,0,4"/>
 
                 <!-- MinWidth=0: 기본 스타일의 최소폭 때문에 * 열이 줄지 못해 오른쪽 [삭제] 가 잘리는 것을 막는다 -->
                 <TextBox x:Name="NameBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
                          MaxLength="40" Height="32" MinWidth="0" Padding="9,0" VerticalContentAlignment="Center"
                          TextChanged="NameBox_TextChanged"/>
-                <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="1" Width="104" Height="32" Margin="12,0,0,0"
+                <!--
+                  IsEditable: 지금 안 꽂힌 포트도 적을 수 있어야 한다. 세션은 '다음에 어디로 붙을지' 를
+                  적어 둔 값이라, 보드를 빼 둔 상태에서 미리 고쳐 두는 것이 정상 사용이다.
+                  목록에는 지금 연결된 포트에 저장된 값을 얹어 준다(없어진 포트도 지워지지 않게).
+                -->
+                <ComboBox x:Name="PortBox" Grid.Row="1" Grid.Column="1" Width="118" Height="32" Margin="12,0,0,0"
+                          Style="{StaticResource EditableCombo}" FontFamily="{StaticResource MonoFont}"
+                          VerticalAlignment="Center" VerticalContentAlignment="Center"
+                          ToolTip="{loc:Str Sess.PortTip}"
+                          LostFocus="PortBox_Typed" SelectionChanged="PortBox_Picked"/>
+                <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="2" Width="104" Height="32" Margin="12,0,0,0"
                           VerticalAlignment="Center" VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
-                <ComboBox x:Name="GroupBox" Grid.Row="1" Grid.Column="2" Width="140" Height="32" Margin="12,0,0,0"
+                <ComboBox x:Name="GroupBox" Grid.Row="1" Grid.Column="3" Width="140" Height="32" Margin="12,0,0,0"
                           VerticalAlignment="Center" VerticalContentAlignment="Center" SelectionChanged="GroupBox_SelectionChanged"/>
-                <!-- 접속 속성이라 여기서 편집 가능(포트와 달리 세션이 진실의 출처).
-                     MCP 는 '탭마다 다른 파이프' 라 전역 설정이 될 수 없어 여기(세션)에 함께 둔다. -->
-                <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"
+                <!-- 접속 속성이라 여기서 편집 가능 — 세션이 진실의 출처다.
+                     MCP 는 포트별로 노출을 켜는 것이라 전역 설정이 될 수 없어 여기(세션)에 함께 둔다. -->
+                <StackPanel Grid.Row="1" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center"
                             Margin="12,0,0,0">
                     <CheckBox x:Name="ResetCheck" Style="{StaticResource AppCheckBox}"
                               Content="{loc:Str Sess.Reset}" VerticalAlignment="Center"
@@ -185,13 +197,13 @@
                               ToolTip="{loc:Str Sess.McpTip}"
                               Click="McpCheck_Click"/>
                 </StackPanel>
-                <Button x:Name="DeleteButton" Grid.Row="1" Grid.Column="4" Content="{loc:Str Common.Delete}"
+                <Button x:Name="DeleteButton" Grid.Row="1" Grid.Column="5" Content="{loc:Str Common.Delete}"
                         Style="{StaticResource GhostButton}" MinWidth="64" Height="32" Padding="0"
                         VerticalAlignment="Center" Margin="12,0,0,0" Click="Delete_Click"/>
 
                 <!-- 개행: 수신·송신은 대등한 한 쌍이라 나란히 둔다.
                      전에는 송신이 '속도' 열에 붙어 수신과 멀찍이 떨어졌고 폭이 좁아 글자가 잘렸다. -->
-                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,14,0,0">
+                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="6" Margin="0,14,0,0">
                     <TextBlock Text="{loc:Str Sess.NewlineGroup}" Style="{StaticResource FieldLabel}" Margin="0,0,0,4"/>
                     <StackPanel Orientation="Horizontal">
                     <StackPanel>
@@ -208,11 +220,11 @@
                 </StackPanel>
 
                 <!-- 로그 폴더: 파일명이 아니라 '폴더' 다 — 이름은 열 때마다 규칙으로 새로 만든다 -->
-                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="5" Text="{loc:Str Sess.LogFolder}"
+                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="6" Text="{loc:Str Sess.LogFolder}"
                            Style="{StaticResource FieldLabel}" Margin="0,14,0,4"/>
                 <!-- 이 줄은 위쪽 열 폭에 끌려가면 안 된다 — [찾기] 버튼이 '열 때' 열만큼
                      넓어져 버렸다. 자체 3열로 독립시킨다. -->
-                <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="5">
+                <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
