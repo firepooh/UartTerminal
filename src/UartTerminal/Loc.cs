@@ -246,6 +246,8 @@ public sealed class Loc : INotifyPropertyChanged
         ["Sess.Title"] = ("세션 관리 — UartTerminal", "Manage Sessions — UartTerminal"),
         ["Sess.Intro"] = ("저장된 접속 프로필입니다.\n이름·포트·속도·열 때 동작(리셋·MCP)과 연결된 명령 그룹을 한눈에 확인하고 편집할 수 있습니다.\n(접속은 [터미널 > 재연결] 또는 새 탭에서 세션을 더블클릭)", "Saved connection profiles.\nReview and edit name, port, speed, on-open actions (reset, MCP) and the linked command group at a glance.\n(To connect: [Terminal > Reconnect] or double-click a session in a new tab.)"),
         ["Sess.NewlineCol"] = ("개행 ↓수신 ↑송신", "New-line ↓Rx ↑Tx"),
+        ["Port.BaudTip"] = ("통신 속도(bps). 목록에 없는 값은 직접 적어도 된다",
+                            "Baud rate (bps). You can type a value that is not in the list"),
         ["Sess.PortTip"] = ("접속할 COM 포트. 지금 안 꽂혀 있어도 직접 적을 수 있다",
                             "COM port to connect to. You can type one that is not plugged in right now"),
         ["Sess.OnOpen"] = ("열 때", "On open"),

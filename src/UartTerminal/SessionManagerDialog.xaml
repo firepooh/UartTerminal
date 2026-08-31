@@ -180,8 +180,11 @@
                           VerticalAlignment="Center" VerticalContentAlignment="Center"
                           ToolTip="{loc:Str Sess.PortTip}"
                           LostFocus="PortBox_Typed" SelectionChanged="PortBox_Picked"/>
-                <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="2" Width="104" Height="32" Margin="12,0,0,0"
-                          VerticalAlignment="Center" VerticalContentAlignment="Center" SelectionChanged="BaudBox_SelectionChanged"/>
+                <ComboBox x:Name="BaudBox" Grid.Row="1" Grid.Column="2" Width="112" Height="32" Margin="12,0,0,0"
+                          Style="{StaticResource EditableCombo}"
+                          VerticalAlignment="Center" VerticalContentAlignment="Center"
+                          ToolTip="{loc:Str Port.BaudTip}"
+                          LostFocus="BaudBox_Typed" SelectionChanged="BaudBox_Picked"/>
                 <ComboBox x:Name="GroupBox" Grid.Row="1" Grid.Column="3" Width="140" Height="32" Margin="12,0,0,0"
                           VerticalAlignment="Center" VerticalContentAlignment="Center" SelectionChanged="GroupBox_SelectionChanged"/>
                 <!-- 접속 속성이라 여기서 편집 가능 — 세션이 진실의 출처다.

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using UartTerminal.Core.Config;
@@ -13,13 +14,10 @@ namespace UartTerminal;
 /// </summary>
 public partial class PortSelectDialog : Window
 {
-    /// <summary>
-    /// 선택 가능한 통신 속도(README §2). ESP-IDF 개발에서 실제로 쓰이는 값만 둔다:
-    /// 74880=ROM 부트로더 출력(부트루프 진단), 115200=기본 콘솔, 230400/460800/921600=고속 로그.
-    /// </summary>
-    public static readonly int[] BaudPresets = { 74880, 115200, 230400, 460800, 921600 };
+    /// <summary>목록은 <see cref="BaudRates.Common"/> 하나로 모았다 — 화면마다 다르면 안 된다.</summary>
+    public static int[] BaudPresets => BaudRates.Common;
 
-    public const int DefaultBaud = 115200;
+    public const int DefaultBaud = BaudRates.Default;
 
     private readonly SessionStore? _sessions;
 
@@ -159,39 +157,37 @@ public partial class PortSelectDialog : Window
         SessionList.SelectedItem = null;
     }
 
-    /// <summary>속도 세그먼트를 프리셋에서 생성(RadioButton 이라 배타 선택은 프레임워크가 처리).</summary>
     private void BuildBaudChips(int preselect)
     {
-        int selected = BaudPresets.Contains(preselect) ? preselect : DefaultBaud;
-        foreach (int baud in BaudPresets)
-        {
-            var rb = new RadioButton
-            {
-                Content = baud.ToString(),
-                Tag = baud,
-                GroupName = "Baud",
-                IsChecked = baud == selected,
-                Style = (Style)FindResource("BaudChip"),
-            };
-            BaudHost.Children.Add(rb);
-        }
-        SelectedBaud = selected;
+        BaudBox.ItemsSource = BaudRates.Common;
+        SetBaud(preselect > 0 ? preselect : DefaultBaud);
     }
 
+    /// <summary>
+    /// 목록에 있으면 골라 주고, 없으면 글자로 넣는다 — 지난번에 직접 친 속도로 다시 열었을 때
+    /// 값이 조용히 기본값으로 되돌아가면 안 된다.
+    /// </summary>
     private void SetBaud(int baud)
     {
-        foreach (var child in BaudHost.Children)
-            if (child is RadioButton rb && rb.Tag is int b)
-                rb.IsChecked = b == baud;
+        SelectedBaud = baud;
+        int at = Array.IndexOf(BaudRates.Common, baud);
+        if (at >= 0) BaudBox.SelectedIndex = at;
+        else { BaudBox.SelectedIndex = -1; BaudBox.Text = baud.ToString(CultureInfo.InvariantCulture); }
     }
 
-    private int CheckedBaud()
+    private void BaudBox_Picked(object sender, SelectionChangedEventArgs e)
     {
-        foreach (var child in BaudHost.Children)
-            if (child is RadioButton { IsChecked: true, Tag: int baud })
-                return baud;
-        return DefaultBaud;
+        if (BaudBox.SelectedItem is int b) SelectedBaud = b;
     }
+
+    /// <summary>직접 친 값. 못 읽으면 조용히 되돌린다 — 잘못 친 채로 접속하면 원인을 찾기 어렵다.</summary>
+    private void BaudBox_Typed(object sender, RoutedEventArgs e)
+    {
+        if (BaudRates.TryParse(BaudBox.Text, out int b)) SetBaud(b);
+        else BaudBox.Text = SelectedBaud.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private int CheckedBaud() => SelectedBaud;
 
     private void RefreshPorts(string? preselect)
     {

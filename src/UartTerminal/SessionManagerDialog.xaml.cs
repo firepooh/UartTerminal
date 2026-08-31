@@ -1,3 +1,5 @@
+using UartTerminal.Core.Serial;
+using System.Globalization;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -123,8 +125,6 @@ public partial class SessionManagerDialog : Window
     };
 
 
-    private static readonly int[] BaudPresets = { 74880, 115200, 230400, 460800, 921600 };
-
     private static bool _open;
 
     private readonly SessionStore _sessions;
@@ -148,7 +148,7 @@ public partial class SessionManagerDialog : Window
         SessionList.ItemsSource = _rows;
         SessionListEmpty.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        BaudBox.ItemsSource = BaudPresets;
+        BaudBox.ItemsSource = BaudRates.Common;
         RxBox.ItemsSource = RxItems.Select(i => i.Text).ToList();
         TxBox.ItemsSource = TxItems.Select(i => i.Text).ToList();
         // 그룹 목록 = commands.json 의 그룹 + "(없음)". 연결이 끊긴 그룹명(파일에서 지워진 경우)도 보존해 보여준다.
@@ -208,7 +208,7 @@ public partial class SessionManagerDialog : Window
         {
             NameBox.Text = row?.Name ?? "";
             FillPorts(row?.Port);
-            BaudBox.SelectedItem = row is null ? null : (object)row.Baud;
+            SetBaudBox(row?.Baud);
             GroupBox.SelectedItem = row is null ? null : (string.IsNullOrEmpty(row.Group) ? NoGroup : row.Group!);
             ResetCheck.IsChecked = row?.ResetOnOpen ?? false;
             McpCheck.IsChecked = row?.McpOnOpen ?? false;
@@ -297,10 +297,30 @@ public partial class SessionManagerDialog : Window
         PortBox.Text = text;   // 소문자로 쳤을 때 화면도 맞춰 준다
     }
 
-    private void BaudBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    /// <summary>
+    /// 목록에 있으면 골라 주고, 없으면 글자로 넣는다 — 손으로 적어 둔 속도(예: 1000000)가
+    /// 세션을 다시 열 때 조용히 사라지면 안 된다.
+    /// </summary>
+    private void SetBaudBox(int? baud)
+    {
+        if (baud is not int v) { BaudBox.SelectedIndex = -1; BaudBox.Text = ""; return; }
+        int at = Array.IndexOf(BaudRates.Common, v);
+        if (at >= 0) BaudBox.SelectedIndex = at;
+        else { BaudBox.SelectedIndex = -1; BaudBox.Text = v.ToString(CultureInfo.InvariantCulture); }
+    }
+
+    private void BaudBox_Picked(object sender, SelectionChangedEventArgs e)
     {
         if (_syncing || SessionList.SelectedItem is not Row row) return;
         if (BaudBox.SelectedItem is int b) row.Baud = b;
+    }
+
+    /// <summary>직접 친 값. 못 읽으면 되돌린다.</summary>
+    private void BaudBox_Typed(object sender, RoutedEventArgs e)
+    {
+        if (_syncing || SessionList.SelectedItem is not Row row) return;
+        if (BaudRates.TryParse(BaudBox.Text, out int b)) { row.Baud = b; SetBaudBox(b); }
+        else SetBaudBox(row.Baud);
     }
 
     private void GroupBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
