@@ -814,7 +814,26 @@ public partial class ShellWindow : Window
     private void SaveSession_Click(object sender, RoutedEventArgs e) => ActiveDoc?.SaveCurrentAsSession();
 
     private void ManageSessions_Click(object sender, RoutedEventArgs e)
-        => SessionManagerDialog.ShowManager(_sessions, _commands, this, ActiveDoc?.SessionName);
+    {
+        var apply = SessionManagerDialog.ShowManager(_sessions, _commands, this, ActiveDoc?.SessionName);
+        if (apply is null) return;
+
+        // 탭이 없으면 새로 만들어 적용한다 — 세션을 더블클릭했는데 아무 일도 안 나면 고장으로 보인다.
+        var doc = ActiveDoc;
+        if (doc is null)
+        {
+            doc = new UartDocumentView(_state, _commands, _sessions, _parsers);
+            var ti = new TabItem { Tag = doc };
+            AttachTab(ti, doc);
+            Tabs.Items.Add(ti);
+            Tabs.SelectedItem = ti;
+            RenderContent();
+        }
+
+        doc.ApplySessionProfile(apply);
+        RefreshChrome();   // 세션이 켠 MCP 가 메뉴 체크·상태바에 즉시 반영되게
+        doc.FocusTerminal();
+    }
     private void Detach_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) DetachTab(ti); }
     private void Merge_Click(object sender, RoutedEventArgs e) { if (Tabs.SelectedItem is TabItem ti) MergeTab(ti); }
     private void CloseTab_Click(object sender, RoutedEventArgs e) => CloseActiveTab();

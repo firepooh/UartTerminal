@@ -7,6 +7,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using UartTerminal.Core.Config;
 using UartTerminal.Core.Terminal;
@@ -16,7 +17,7 @@ namespace UartTerminal;
 /// <summary>
 /// 세션(접속 프로필) 관리 — 이름·포트·속도·연결된 명령 그룹을 표로 한눈에 보고 편집한다.
 /// 접속 다이얼로그(PortSelectDialog)는 '고르는' 화면이라 정보가 축약돼 있어(그룹 미표시),
-/// 설정을 확인·정리하는 전용 화면을 따로 둔다. 포트는 여기서 바꾼다(세션이 진실의 출처).
+/// 설정을 확인·정리하는 전용 화면을 따로 둔다. 세션을 더블클릭하면 <b>지금 탭에 적용</b>한다.
 /// <b>모달</b>이며 열 때 파일을 다시 읽어 손편집/다른 인스턴스 변경을 반영한다.
 /// </summary>
 public partial class SessionManagerDialog : Window
@@ -171,9 +172,13 @@ public partial class SessionManagerDialog : Window
 
     /// <summary>세션 관리자를 모달로 띄운다. 열기 전에 파일을 다시 읽어 외부 변경을 반영.
     /// <paramref name="initialSession"/> 을 주면 그 세션을 골라둔다(없거나 못 찾으면 첫 세션).</summary>
-    public static void ShowManager(SessionStore sessions, CommandStore commands, Window? owner, string? initialSession = null)
+    /// <summary>
+    /// 돌려주는 값 = <b>더블클릭으로 "지금 탭에 적용" 을 요청한 세션</b>(그냥 저장/취소면 null).
+    /// 적용은 호출자가 한다 — 이 창은 어떤 탭이 활성인지 모른다.
+    /// </summary>
+    public static SessionProfile? ShowManager(SessionStore sessions, CommandStore commands, Window? owner, string? initialSession = null)
     {
-        if (_open) return;
+        if (_open) return null;
 
         sessions.Load();
         if (sessions.LastError is { } err)
@@ -186,6 +191,7 @@ public partial class SessionManagerDialog : Window
             if (owner is not null) dlg.Owner = owner;
             else dlg.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             dlg.ShowDialog();
+            return dlg.Applied;
         }
         finally
         {
@@ -202,6 +208,7 @@ public partial class SessionManagerDialog : Window
         var row = SessionList.SelectedItem as Row;
         EditPane.IsEnabled = row is not null;
         DeleteButton.IsEnabled = row is not null;
+        ApplyButton.IsEnabled = row is not null;
 
         _syncing = true;
         try
@@ -408,27 +415,55 @@ public partial class SessionManagerDialog : Window
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
-        var items = _rows.Select(r => new SessionProfile
-        {
-            Name = r.Name,
-            Port = r.Port,
-            Baud = r.Baud,
-            ResetOnOpen = r.ResetOnOpen,
-            McpOnOpen = r.McpOnOpen,
-            LogFolder = r.LogFolder,
-            NewlineRx = r.NewlineRx,
-            NewlineTx = r.NewlineTx,
-            CommandGroup = r.Group,
-        });
+        if (SaveAll()) DialogResult = true;
+    }
 
-        if (!_sessions.ReplaceAll(items))
-        {
-            // 실패 시 창을 닫지 않는다(편집 내용을 잃지 않게).
-            MessageBox.Show(this, Loc.FormatOrNull(_sessions.LastError) ?? Loc.S("Sess.SaveFailed"),
-                "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
+    /// <summary>
+    /// 고른 세션을 <b>지금 탭에 적용</b>하고 닫는다. 먼저 저장한다 —
+    /// 방금 고친 값으로 접속하는 것이 기대에 맞고, 편집을 버리고 옛 값으로 붙으면 혼란스럽다.
+    /// </summary>
+    private void SessionList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        // 목록 여백을 더블클릭한 경우까지 잡지 않게 — 실제 항목 위에서만 반응한다.
+        if (ItemsControl.ContainerFromElement(SessionList, (DependencyObject)e.OriginalSource) is not ListBoxItem)
             return;
-        }
+        ApplySelected();
+    }
 
+    private void ApplyToTab_Click(object sender, RoutedEventArgs e) => ApplySelected();
+
+    private void ApplySelected()
+    {
+        if (SessionList.SelectedItem is not Row row) return;
+        if (!SaveAll()) return;
+
+        Applied = ToProfile(row);
         DialogResult = true;
+    }
+
+    /// <summary>더블클릭으로 고른 세션(없으면 null). <see cref="ShowManager"/> 가 호출자에게 넘긴다.</summary>
+    private SessionProfile? Applied { get; set; }
+
+    private static SessionProfile ToProfile(Row r) => new()
+    {
+        Name = r.Name,
+        Port = r.Port,
+        Baud = r.Baud,
+        ResetOnOpen = r.ResetOnOpen,
+        McpOnOpen = r.McpOnOpen,
+        LogFolder = r.LogFolder,
+        NewlineRx = r.NewlineRx,
+        NewlineTx = r.NewlineTx,
+        CommandGroup = r.Group,
+    };
+
+    private bool SaveAll()
+    {
+        if (_sessions.ReplaceAll(_rows.Select(ToProfile))) return true;
+
+        // 실패 시 창을 닫지 않는다(편집 내용을 잃지 않게).
+        MessageBox.Show(this, Loc.FormatOrNull(_sessions.LastError) ?? Loc.S("Sess.SaveFailed"),
+            "UartTerminal", MessageBoxButton.OK, MessageBoxImage.Error);
+        return false;
     }
 }

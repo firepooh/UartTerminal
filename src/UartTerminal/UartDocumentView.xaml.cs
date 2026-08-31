@@ -163,8 +163,10 @@ public partial class UartDocumentView : UserControl
     public void ReconnectViaDialog()
     {
         string? preselect = string.IsNullOrEmpty(_portName) ? _state.LastPort : _portName;
-        // sessions:null — 재연결은 '지금 이 탭의 포트를 다시 고르는' 흐름이라 세션 목록을 띄우지 않는다(기존 동작 유지).
-        var dlg = new PortSelectDialog(preselect, _params.BaudRate, sessions: null,
+        // 세션 목록을 함께 띄운다. 전에는 sessions:null 이라 '포트만 다시 고르는' 화면이었는데,
+        // 그러면 이미 포트를 열어 둔 탭에 저장해 둔 프로필을 적용할 방법이 앱 어디에도 없었다
+        // (새 탭은 같은 포트를 두 번 열 수 없어 막힌다).
+        var dlg = new PortSelectDialog(preselect, _params.BaudRate, sessions: _sessions,
                                        preselectResetOnOpen: _resetOnOpen) { Owner = OwnerWindow };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
         {
@@ -182,7 +184,8 @@ public partial class UartDocumentView : UserControl
         {
             ConnectTo(port, dlg.SelectedBaud, dlg.SelectedResetOnOpen,
                       dlg.SelectedNewlineRx, dlg.SelectedNewlineTx);
-            SetCommandGroup(dlg.SelectedCommandGroup);
+            ApplySession(dlg.SelectedSessionName, dlg.SelectedCommandGroup,
+                         dlg.SelectedLogFolder, dlg.SelectedMcpOnOpen);
             return;
         }
 
@@ -202,8 +205,40 @@ public partial class UartDocumentView : UserControl
         OpenSession();
         SaveConnectionDefaults();
         RefreshMetrics();
-        // 연결 뒤에 전환 — 안내가 "연결됨" 에 덮이지 않게(NewTab 과 같은 순서).
-        SetCommandGroup(dlg.SelectedCommandGroup);
+        // 연결 뒤에 적용 — 안내가 "연결됨" 에 덮이지 않게(새 탭과 같은 순서).
+        // 전에는 SetCommandGroup 만 불러서 세션 이름·로그 폴더·열 때 MCP 가 조용히 빠졌다.
+        ApplySession(dlg.SelectedSessionName, dlg.SelectedCommandGroup,
+                     dlg.SelectedLogFolder, dlg.SelectedMcpOnOpen);
+    }
+
+    /// <summary>
+    /// 저장된 프로필을 <b>지금 이 탭에</b> 적용한다(세션 관리에서 더블클릭).
+    /// 포트를 이미 쥐고 있어도 되게 기존 세션을 먼저 닫고 다시 연다 —
+    /// 새 탭으로는 같은 포트를 두 번 열 수 없어 이 경로가 필요하다.
+    /// </summary>
+    public void ApplySessionProfile(SessionProfile s)
+    {
+        CloseCurrentSession();
+
+        if (!string.IsNullOrWhiteSpace(s.Port) &&
+            !string.Equals(s.Port, _portName, StringComparison.OrdinalIgnoreCase))
+        {
+            _portName = s.Port;
+            RepointMcpExposure();
+            RaiseTitle();
+        }
+
+        _resetOnOpen = s.ResetOnOpen;
+        if (s.NewlineRx is { } rx) SetReceiveNewline(rx);
+        if (s.NewlineTx is { } tx) SetTransmitNewline(tx);
+        _params = MakeParams(s.Baud);
+
+        if (_engine is null) EnsureEngine();
+        OpenSession();
+        SaveConnectionDefaults();
+        RefreshMetrics();
+
+        ApplySession(s.Name, s.CommandGroup, s.LogFolder, s.McpOnOpen);
     }
 
     public void Disconnect() => _conn?.Disconnect();

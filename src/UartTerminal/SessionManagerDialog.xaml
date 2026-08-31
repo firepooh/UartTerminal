@@ -104,6 +104,7 @@
         <Border Grid.Row="2" Style="{StaticResource InsetPanel}">
         <Grid>
         <ListBox x:Name="SessionList" SelectionChanged="SessionList_SelectionChanged"
+                 MouseDoubleClick="SessionList_MouseDoubleClick"
                  Background="Transparent" BorderThickness="0" Padding="4"
                  HorizontalContentAlignment="Stretch">
             <ListBox.ItemTemplate>
@@ -261,6 +262,10 @@
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button Content="{loc:Str Common.Cancel}" Style="{StaticResource GhostButton}" MinHeight="30" IsCancel="True"/>
+                <!-- 더블클릭으로도 되지만 그건 눈에 안 보인다 — 같은 일을 하는 버튼을 함께 둔다. -->
+                <Button x:Name="ApplyButton" Content="{loc:Str Sess.ApplyToTab}" Style="{StaticResource DialogButton}"
+                        MinHeight="30" Padding="14,0" Margin="8,0,0,0"
+                        ToolTip="{loc:Str Sess.ApplyToTabTip}" Click="ApplyToTab_Click"/>
                 <Button x:Name="OkButton" Content="{loc:Str Common.Save}" Style="{StaticResource SendButton}"
                         MinWidth="86" MinHeight="30" Margin="8,0,0,0" IsDefault="True" Click="Ok_Click"/>
             </StackPanel>
