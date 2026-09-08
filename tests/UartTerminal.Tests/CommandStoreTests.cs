@@ -153,16 +153,70 @@ public sealed class CommandStoreTests : IDisposable
         Assert.Equal("keep", reload.Items[0].Name);
     }
 
+    /// <summary>
+    /// 전에는 여기서 개행을 공백으로 눕혀 '한 줄' 을 강제했다(README §8 비목표).
+    /// 이제 전송 문자열은 <b>여러 줄을 유지</b>한다 — 줄마다 하나씩 보내는 것이 그 필드의 뜻이 됐다.
+    /// 다만 CRLF 는 LF 로 통일한다: 파일에 둘이 섞이면 같은 명령이 diff 에서 달라 보인다.
+    /// </summary>
     [Fact]
-    public void Sanitize_EnforcesSingleLineInvariant()
+    public void Sanitize_KeepsLineBreaksInText()
     {
         var s = NewStore();
         s.Load();
-        // 손편집으로 다중 라인(=시퀀스)을 넣어도 한 줄로 접힌다
         s.ReplaceAll(new[] { Cmd("multi", "first\r\nsecond") });
-        Assert.Equal("first  second", s.Items[0].Text);
-        Assert.DoesNotContain('\n', s.Items[0].Text);
+
+        Assert.Equal("first\nsecond", s.Items[0].Text);
         Assert.DoesNotContain('\r', s.Items[0].Text);
+        Assert.Equal(new[] { "first", "second" }, s.Items[0].Lines);
+    }
+
+    /// <summary>
+    /// 이름은 여전히 한 줄이다 — 칩·메뉴에 그대로 들어가므로 줄바꿈이 있으면 화면이 깨진다.
+    /// </summary>
+    [Fact]
+    public void Sanitize_KeepsNameOnOneLine()
+    {
+        var s = NewStore();
+        s.Load();
+        s.ReplaceAll(new[] { Cmd("두\n줄\r\n이름", "ver") });
+
+        Assert.DoesNotContain('\n', s.Items[0].Name);
+        Assert.DoesNotContain('\r', s.Items[0].Name);
+    }
+
+    /// <summary>이름이 비면 <b>첫 줄</b>로 채운다(전문을 넣으면 칩이 터진다).</summary>
+    [Fact]
+    public void Sanitize_UnnamedMultiLineTakesFirstLineAsName()
+    {
+        var s = NewStore();
+        s.Load();
+        s.ReplaceAll(new[] { Cmd("", "reset\nver\nfree") });
+
+        Assert.Equal("reset", s.Items[0].Name);
+    }
+
+    /// <summary>손편집으로 들어온 말도 안 되는 지연은 버리고 기본값으로 돌린다.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(CommandStore.MaxDelayMs + 1)]
+    public void Sanitize_DropsOutOfRangeDelay(int delay)
+    {
+        var s = NewStore();
+        s.Load();
+        s.ReplaceAll(new[] { new SavedCommand { Name = "a", Text = "a\nb", DelayMs = delay } });
+
+        Assert.Null(s.Items[0].DelayMs);
+        Assert.Equal(SavedCommand.DefaultDelayMs, s.Items[0].EffectiveDelayMs);
+    }
+
+    [Fact]
+    public void Sanitize_KeepsValidDelay()
+    {
+        var s = NewStore();
+        s.Load();
+        s.ReplaceAll(new[] { new SavedCommand { Name = "a", Text = "a\nb", DelayMs = 1200 } });
+
+        Assert.Equal(1200, s.Items[0].DelayMs);
     }
 
     [Fact]

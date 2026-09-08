@@ -49,6 +49,19 @@
             <Setter Property="Padding" Value="9,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
+
+        <!--
+          여러 줄 입력칸. InlineInput 은 Height=28 로 고정돼 있어(줄 높이를 맞추려고)
+          줄이 늘어도 안 자라고 스크롤만 생긴다 — 여기서 풀어 준다.
+          MaxHeight 는 다섯 줄쯤: 한 명령이 목록을 다 차지하지 않게 하되 그 안에서는 다 보이게.
+        -->
+        <Style x:Key="InlineMultiInput" TargetType="TextBox" BasedOn="{StaticResource InlineInput}">
+            <Setter Property="Height" Value="Auto"/>
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="MaxHeight" Value="108"/>
+            <Setter Property="VerticalContentAlignment" Value="Top"/>
+            <Setter Property="Padding" Value="9,4"/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="16">
@@ -151,7 +164,9 @@
                                 <TextBlock x:Name="NameText" Grid.Column="2" Text="{Binding Display}"
                                            VerticalAlignment="Center" FontWeight="SemiBold"
                                            Margin="0,0,10,0" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Name="SentText" Grid.Column="3" Text="{Binding Text}"
+                                <!-- 원문을 그대로 쓰면 여러 줄 명령이 줄바꿈째 들어와 줄 높이가 튄다.
+                                     Summary 가 한 줄로 줄이고, 여러 줄이면 줄 수와 지연을 덧붙인다. -->
+                                <TextBlock x:Name="SentText" Grid.Column="3" Text="{Binding Summary}"
                                            VerticalAlignment="Center"
                                            FontFamily="{StaticResource MonoFont}"
                                            FontSize="{StaticResource Font.Caption}"
@@ -163,16 +178,38 @@
                                          Style="{StaticResource InlineInput}" MaxLength="40" Margin="0,0,10,0"
                                          ToolTip="{loc:Str Cmd.NameLabel}"
                                          Text="{Binding Name, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
+                                <!--
+                                  AcceptsReturn: 줄바꿈으로 명령을 여러 개 넣는다(위에서 아래로 전송).
+                                  Enter 가 줄바꿈이 되므로 이 칸에서는 [저장]이 Enter 로 눌리지 않는다 — 의도한 것이다.
+                                  MaxLines 로 다섯 줄까지만 자라고 그 뒤로는 스크롤한다(줄 하나가 목록을 다 먹지 않게).
+                                -->
                                 <TextBox x:Name="SendBox" Grid.Column="3" Visibility="Collapsed"
-                                         Style="{StaticResource InlineInput}" MaxLength="2000"
+                                         Style="{StaticResource InlineMultiInput}" MaxLength="4000"
+                                         AcceptsReturn="True" MaxLines="5"
+                                         VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
                                          ToolTip="{loc:Str Cmd.TextLabel}"
                                          Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
-                                <CheckBox x:Name="ConfirmBox" Grid.Column="4" Visibility="Collapsed"
-                                          Style="{StaticResource AppCheckBox}" Margin="12,0,2,0"
-                                          VerticalAlignment="Center"
-                                          ToolTip="{loc:Str Cmd.Confirm}"
-                                          Content="{loc:Str Cmd.ConfirmShort}"
-                                          IsChecked="{Binding Confirm, Mode=TwoWay}"/>
+                                <StackPanel x:Name="EditExtras" Grid.Column="4" Visibility="Collapsed"
+                                            Orientation="Horizontal" VerticalAlignment="Top" Margin="12,1,2,0">
+                                    <!-- 지연은 줄이 둘 이상일 때만 의미가 있다 — 아래 트리거가 그때만 보여 준다. -->
+                                    <StackPanel x:Name="DelayPane" Orientation="Horizontal"
+                                                Visibility="Collapsed" VerticalAlignment="Center">
+                                        <TextBox x:Name="DelayBox" Style="{StaticResource InlineInput}"
+                                                 Width="58" MaxLength="6" VerticalAlignment="Center"
+                                                 ToolTip="{loc:Str Cmd.DelayTip}"
+                                                 Text="{Binding DelayText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay, TargetNullValue=''}"/>
+                                        <TextBlock Text="{loc:Str Cmd.DelayUnit}" VerticalAlignment="Center"
+                                                   Margin="5,0,12,0"
+                                                   FontSize="{StaticResource Font.Glyph}"
+                                                   Foreground="{DynamicResource TextFaint}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ConfirmBox"
+                                              Style="{StaticResource AppCheckBox}"
+                                              VerticalAlignment="Center"
+                                              ToolTip="{loc:Str Cmd.Confirm}"
+                                              Content="{loc:Str Cmd.ConfirmShort}"
+                                              IsChecked="{Binding Confirm, Mode=TwoWay}"/>
+                                </StackPanel>
 
                                 <!-- 폴더는 전송 문자열이 없다 — 그 자리에 이유를 적는다 -->
                                 <TextBlock x:Name="FolderHint" Grid.Column="3" Grid.ColumnSpan="2"
@@ -190,8 +227,16 @@
                                     <Setter TargetName="Warn" Property="Visibility" Value="Collapsed"/>
                                     <Setter TargetName="NameBox" Property="Visibility" Value="Visible"/>
                                     <Setter TargetName="SendBox" Property="Visibility" Value="Visible"/>
-                                    <Setter TargetName="ConfirmBox" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="EditExtras" Property="Visibility" Value="Visible"/>
                                 </DataTrigger>
+                                <!-- 지연은 줄이 둘 이상인 동안만 — 한 줄짜리에 쓸모없는 숫자칸을 띄우지 않는다 -->
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True"/>
+                                        <Condition Binding="{Binding IsMultiLine}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter TargetName="DelayPane" Property="Visibility" Value="Visible"/>
+                                </MultiDataTrigger>
                                 <!-- 폴더를 고른 경우: 전송 칸·확인 대신 안내 -->
                                 <MultiDataTrigger>
                                     <MultiDataTrigger.Conditions>
@@ -199,7 +244,7 @@
                                         <Condition Binding="{Binding IsFolder}" Value="True"/>
                                     </MultiDataTrigger.Conditions>
                                     <Setter TargetName="SendBox" Property="Visibility" Value="Collapsed"/>
-                                    <Setter TargetName="ConfirmBox" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="EditExtras" Property="Visibility" Value="Collapsed"/>
                                     <Setter TargetName="FolderHint" Property="Visibility" Value="Visible"/>
                                 </MultiDataTrigger>
                             </DataTemplate.Triggers>

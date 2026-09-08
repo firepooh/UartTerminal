@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -26,10 +27,48 @@ public partial class CommandEditDialog : Window
         private string _name = "";
         private string _text = "";
         private bool _confirm;
+        private int? _delayMs;
 
         public string Name { get => _name; set { _name = value ?? ""; Raise(); } }
         public string Text { get => _text; set { _text = value ?? ""; Raise(); } }
         public bool Confirm { get => _confirm; set { _confirm = value; Raise(); } }
+
+        /// <summary>줄 사이 대기(ms). null = 기본값(<see cref="SavedCommand.DefaultDelayMs"/>).</summary>
+        public int? DelayMs { get => _delayMs; set { _delayMs = value; Raise(); } }
+
+        /// <summary>
+        /// 지연 입력칸과 오가는 문자열. 비우면 기본값으로 되돌아간다 —
+        /// 숫자칸에서 지우다 만 상태를 0 으로 읽으면 줄 사이 대기가 조용히 사라진다.
+        /// 숫자가 아닌 입력은 무시하고 이전 값을 지킨다.
+        /// </summary>
+        public string DelayText
+        {
+            get => (_delayMs ?? SavedCommand.DefaultDelayMs).ToString(CultureInfo.InvariantCulture);
+            set
+            {
+                string t = (value ?? "").Trim();
+                if (t.Length == 0) { DelayMs = null; return; }
+                if (int.TryParse(t, NumberStyles.None, CultureInfo.InvariantCulture, out int v)) DelayMs = v;
+            }
+        }
+
+        /// <summary>줄이 둘 이상인지 — 지연 칸을 그때만 띄운다.</summary>
+        public bool IsMultiLine => SavedCommand.SplitLines(_text).Count > 1;
+
+        /// <summary>
+        /// 접힌 줄에 보일 한 줄 요약. 원문을 그대로 쓰면 여러 줄이 줄바꿈째 들어와 목록 높이가 튄다.
+        /// </summary>
+        public string Summary
+        {
+            get
+            {
+                var lines = SavedCommand.SplitLines(_text);
+                if (lines.Count == 0) return "";
+                if (lines.Count == 1) return lines[0];
+                return Loc.F("Cmd.SummaryLines", lines[0], lines.Count,
+                             _delayMs ?? SavedCommand.DefaultDelayMs);
+            }
+        }
 
         /// <summary>폴더(하위를 갖는 항목)인지. 하위 항목 자신은 false.</summary>
         public bool IsFolder { get; init; }
@@ -51,6 +90,9 @@ public partial class CommandEditDialog : Window
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Display)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ConfirmMark)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Summary)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMultiLine)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DelayText)));
         }
     }
 
@@ -93,11 +135,11 @@ public partial class CommandEditDialog : Window
                 {
                     gr.Rows.Add(new Row { Name = c.Name, Text = "", Confirm = c.Confirm, IsFolder = true });
                     foreach (var s in c.Items!)
-                        gr.Rows.Add(new Row { Name = s.Name, Text = s.Text, Confirm = s.Confirm, IsChild = true });
+                        gr.Rows.Add(new Row { Name = s.Name, Text = s.Text, Confirm = s.Confirm, DelayMs = s.DelayMs, IsChild = true });
                 }
                 else
                 {
-                    gr.Rows.Add(new Row { Name = c.Name, Text = c.Text, Confirm = c.Confirm });
+                    gr.Rows.Add(new Row { Name = c.Name, Text = c.Text, Confirm = c.Confirm, DelayMs = c.DelayMs });
                 }
             }
             _groups.Add(gr);
@@ -637,13 +679,13 @@ public partial class CommandEditDialog : Window
                 for (int k = i + 1; k < rows.Count && rows[k].IsChild; k++)
                 {
                     var s = rows[k];
-                    subs.Add(new SavedCommand { Name = s.Name, Text = s.Text, Confirm = s.Confirm });
+                    subs.Add(new SavedCommand { Name = s.Name, Text = s.Text, Confirm = s.Confirm, DelayMs = s.DelayMs });
                 }
                 list.Add(new SavedCommand { Name = r.Name, Text = "", Confirm = r.Confirm, Items = subs });
             }
             else
             {
-                list.Add(new SavedCommand { Name = r.Name, Text = r.Text, Confirm = r.Confirm });
+                list.Add(new SavedCommand { Name = r.Name, Text = r.Text, Confirm = r.Confirm, DelayMs = r.DelayMs });
             }
         }
         return list;

@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -5,22 +6,67 @@ using System.Text.Json.Serialization;
 namespace UartTerminal.Core.Config;
 
 /// <summary>
-/// 저장된 <b>한 줄</b> 명령. 사용자가 입력바에 타이핑한 것과 바이트 단위로 동일하게 전송된다
+/// 저장된 명령. 사용자가 입력바에 타이핑한 것과 바이트 단위로 동일하게 전송된다
 /// (전송 시 CR 부착 — 코드베이스 전역의 단일 개행 규약).
-/// 다단계 시퀀스·대기·조건 분기는 이 기능의 범위가 아니며 MCP(uart_send/uart_expect)가 담당한다.
+///
+/// <para><b>여러 줄</b>이면 위에서 아래로 한 줄씩 보내고 줄 사이에 <see cref="EffectiveDelayMs"/> 만큼 쉰다.
+/// 원래는 한 줄만 허용했는데(README §8 비목표), 명령 몇 개를 순서대로 넣는 일이 잦아 그 경계를 옮겼다.
+/// 다만 <b>지연은 명령당 하나</b>이고 조건 분기·응답 대기는 여전히 없다 —
+/// 그쪽이 필요하면 MCP(uart_send/uart_expect)가 담당한다.</para>
 /// </summary>
 public sealed record SavedCommand
 {
+    /// <summary>줄 사이 기본 대기(ms). 값을 적지 않은 명령과 옛 파일이 이 값을 쓴다.</summary>
+    public const int DefaultDelayMs = 500;
+
     /// <summary>버튼에 표시할 짧은 이름. 비어 있으면 <see cref="Text"/>를 그대로 쓴다.</summary>
     [JsonPropertyName("name")] public string Name { get; init; } = "";
 
-    /// <summary>실제 전송할 문자열(개행 없음).</summary>
+    /// <summary>전송할 문자열. 줄바꿈으로 나누면 순서대로 보낸다.</summary>
     [JsonPropertyName("text")] public string Text { get; init; } = "";
+
+    /// <summary>
+    /// 줄 사이 대기(ms). null 이면 <see cref="DefaultDelayMs"/>.
+    /// nullable 로 둔 이유는 한 줄짜리(대부분)에 쓸모없는 필드가 파일마다 붙지 않게 하려는 것이다 —
+    /// 0 을 기본값으로 삼는 WhenWritingDefault 로는 500 이 매번 기록된다.
+    /// </summary>
+    [JsonPropertyName("delayMs")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? DelayMs { get; init; }
 
     /// <summary>전송 전 확인을 받을지(restart/erase 류 위험 명령의 오클릭 방어).</summary>
     [JsonPropertyName("confirm")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Confirm { get; init; }
+
+    /// <summary>실제로 쓸 대기(ms). 음수는 0 으로 본다(손편집 방어).</summary>
+    [JsonIgnore]
+    public int EffectiveDelayMs => DelayMs is int d ? (d < 0 ? 0 : d) : DefaultDelayMs;
+
+    /// <summary>보낼 줄들. 빈 줄은 건너뛴다 — 입력칸 끝에 남는 개행이 빈 전송이 되면 안 된다.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> Lines => SplitLines(Text);
+
+    /// <summary>줄이 둘 이상인지(= 지연이 의미를 갖는지).</summary>
+    [JsonIgnore]
+    public bool IsMultiLine => Lines.Count > 1;
+
+    /// <summary>
+    /// 전송할 줄로 나눈다. CRLF·CR·LF 를 모두 받고, 줄마다 앞뒤 공백을 떼고, 빈 줄은 버린다.
+    /// 콘솔 명령에서 앞뒤 공백은 의미가 없고, 붙여넣기로 섞여 들어오는 일이 잦다.
+    /// </summary>
+    public static IReadOnlyList<string> SplitLines(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return Array.Empty<string>();
+
+        var result = new List<string>();
+        foreach (string raw in text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n'))
+        {
+            string line = raw.Trim();
+            if (line.Length > 0) result.Add(line);
+        }
+        return result;
+    }
 
     /// <summary>
     /// 하위 명령(폴더). 비어 있지 않으면 이 항목은 <b>폴더</b>로 취급되어 클릭 시 하위 목록에서 고르게 한다
@@ -76,7 +122,10 @@ public sealed class CommandStore
     public const int MaxSubCommands = 50;    // 폴더 하나당 하위 항목 수
     public const int MaxGroups = 50;
     public const int MaxNameLength = 40;
-    public const int MaxTextLength = 2000;
+    public const int MaxTextLength = 4000;
+
+    /// <summary>줄 사이 대기 상한(ms). 10분을 넘기는 값은 손편집 실수로 본다.</summary>
+    public const int MaxDelayMs = 600_000;
 
     /// <summary>그룹이 하나도 없는 파일을 승격할 때 쓰는 기본 그룹 이름.</summary>
     public const string DefaultGroupName = "기본";   // loc:data — commands.json 에 저장되는 그룹 이름
@@ -349,15 +398,25 @@ public sealed class CommandStore
                 continue;
             }
 
-            string text = OneLine(c.Text);
+            // 전송 문자열은 개행을 <b>남긴다</b> — 줄마다 하나씩 보내는 것이 이 필드의 뜻이 됐다.
+            // 전에는 여기서 개행을 공백으로 바꿔 '한 줄' 을 강제했다(README §8).
+            string text = MultiLine(c.Text);
             if (text.Length == 0) continue;
             if (text.Length > MaxTextLength) text = text[..MaxTextLength];
 
+            // 이름은 여전히 한 줄이다 — 칩·메뉴에 들어가므로 줄바꿈이 있으면 화면이 깨진다.
             string name = OneLine(c.Name);
-            if (name.Length == 0) name = text;
+            if (name.Length == 0) name = OneLine(SavedCommand.SplitLines(text).FirstOrDefault() ?? "");
             if (name.Length > MaxNameLength) name = name[..MaxNameLength];
 
-            list.Add(new SavedCommand { Name = name, Text = text, Confirm = c.Confirm });
+            list.Add(new SavedCommand
+            {
+                Name = name,
+                Text = text,
+                Confirm = c.Confirm,
+                // 손편집 방어: 음수·과도한 값은 버리고 기본값으로 돌린다.
+                DelayMs = c.DelayMs is int d && d >= 0 && d <= MaxDelayMs ? d : null,
+            });
             if (list.Count >= MaxCommands) break;
         }
         return list;
@@ -392,8 +451,15 @@ public sealed class CommandStore
         return list;
     }
 
+    /// <summary>이름·그룹명처럼 <b>한 줄이어야 하는</b> 값. 개행은 공백으로 눕힌다.</summary>
     private static string OneLine(string? s) =>
         (s ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+
+    /// <summary>
+    /// 전송 문자열: 개행을 <b>남기되</b> LF 하나로 통일하고, 빈 줄과 줄별 앞뒤 공백을 정리한다.
+    /// 파일에 CRLF 와 LF 가 섞이면 같은 명령이 diff 에서 달라 보인다.
+    /// </summary>
+    private static string MultiLine(string? s) => string.Join("\n", SavedCommand.SplitLines(s));
 
     /// <summary>손상 파일을 타임스탬프 이름으로 보관(사용자가 직접 복구할 수 있게).</summary>
     private void PreserveCorrupt()

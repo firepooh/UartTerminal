@@ -42,6 +42,9 @@ public partial class UartDocumentView : UserControl
     private TerminalView? _view;
     private ConnectionController? _conn; // 연결 수명주기 상태머신(UI 비의존) — 세션/재연결/양보 관리
     private UartBridge? _bridge;
+    /// <summary>탭이 닫혔다. 진행 중인 여러 줄 전송이 이걸 보고 멈춘다.</summary>
+    private bool _closed;
+
     /// <summary>
     /// HTTP 레지스트리에 지금 등록돼 있는 포트명(없으면 null). <see cref="_portName"/> 을 그대로 쓰지 않는 이유는
     /// 포트가 바뀔 때 <see cref="_portName"/> 이 <b>먼저</b> 갱신되기 때문이다 — 그러면 예전 이름을 못 지운다.
@@ -1255,6 +1258,8 @@ public partial class UartDocumentView : UserControl
     {
         if (cmd.IsFolder)
             return Loc.F("Doc.FolderTip", cmd.Name, cmd.Items!.Count);
+        if (cmd.IsMultiLine)
+            return Loc.F("Doc.ChipTipSequence", cmd.Lines.Count, cmd.EffectiveDelayMs, cmd.Text);
         return Loc.F(cmd.Confirm ? "Doc.ChipTipConfirm" : "Doc.ChipTip", cmd.Text);
     }
 
@@ -1309,7 +1314,49 @@ public partial class UartDocumentView : UserControl
             if (r != MessageBoxResult.OK) return;
         }
 
-        SendLine(cmd.Text);
+        var lines = cmd.Lines;
+        if (lines.Count == 0) return;
+        if (lines.Count == 1) { SendLine(lines[0]); return; }
+
+        _ = RunSequenceAsync(cmd.Name, lines, cmd.EffectiveDelayMs);
+    }
+
+    /// <summary>여러 줄 명령이 도는 중인지. 겹쳐 돌면 두 시퀀스가 뒤섞여 나간다.</summary>
+    private bool _sequenceRunning;
+
+    /// <summary>
+    /// 여러 줄 명령을 위에서 아래로 보낸다. 줄 사이에 <paramref name="delayMs"/> 만큼 쉰다.
+    ///
+    /// <para>중단 UI 는 없다(의도). 다만 <b>포트가 끊기면 남은 줄을 보내지 않는다</b> —
+    /// 이건 취소 기능이 아니라, 죽은 포트로 계속 쏘지 않는다는 뜻이다.
+    /// 탭을 닫아도 같은 이유로 멈춘다.</para>
+    /// </summary>
+    private async Task RunSequenceAsync(string name, IReadOnlyList<string> lines, int delayMs)
+    {
+        if (_sequenceRunning) { SetStatus(Loc.S("Doc.SequenceBusy")); return; }
+        _sequenceRunning = true;
+        try
+        {
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (_closed) return;
+                if (!IsConnected)
+                {
+                    SetStatus(Loc.F("Doc.SequenceStopped", i + 1, lines.Count));
+                    return;
+                }
+
+                SendLine(lines[i]);
+                SetStatus(Loc.F("Doc.SequenceProgress", DisplayName(name), i + 1, lines.Count));
+
+                // 마지막 줄 뒤에는 쉬지 않는다 — 기다릴 다음 줄이 없다.
+                if (i < lines.Count - 1 && delayMs > 0)
+                    await Task.Delay(delayMs).ConfigureAwait(true);
+            }
+        }
+        finally { _sequenceRunning = false; }
+
+        static string DisplayName(string n) => n.Length > 0 ? n : "…";   // loc:data
     }
 
     /// <summary>현재 입력창 내용을 명령으로 저장(휘발성 히스토리 → 영속 명령 승격 경로).</summary>
@@ -1935,6 +1982,7 @@ public partial class UartDocumentView : UserControl
         _logger = null;
         _conn?.CloseDocument();
         try { HideFromHttp(); } catch { }
+        _closed = true;   // 진행 중인 여러 줄 전송을 멈춘다
     }
 
     // ── 스크롤바/상태/이벤트 ─────────────────────────────────────────────────────
