@@ -10,9 +10,39 @@
     <ApplicationIcon>..\..\UartTerminal.ico</ApplicationIcon>
     <AssemblyName>UartTerminal</AssemblyName>
     <RootNamespace>UartTerminal</RootNamespace>
-    <!-- 기본(로컬) 버전. CI 는 태그에서 -p:Version=... 으로 덮어쓴다. -->
-    <Version>1.1.0</Version>
+    <!--
+      버전은 git 태그가 정한다. 여기에 숫자를 적어 두면 태그만 올라가고 숫자는 남는다
+      (실제로 1.1.0 이 v1.15.0 까지 남아 로컬 빌드가 옛 버전을 표시했다).
+      CI 는 태그에서 -p:Version=... 을 넘기고, 로컬 빌드는 아래 VersionFromGit 타깃이 읽는다.
+      git 이나 태그가 없으면(소스만 받은 경우) SDK 기본값 1.0.0 이 된다.
+    -->
+    <VersionFromGit Condition="'$(Version)' == ''">true</VersionFromGit>
   </PropertyGroup>
+
+  <!--
+    git describe 로 마지막 태그와 그 뒤 커밋 수를 읽는다.
+      v1.15.0-0-g1b6cca9 → 1.15.0        (태그 위에서 빌드)
+      v1.15.0-4-g1b6cca9 → 1.15.0-dev.4  (태그 뒤 4커밋 — 아직 배포 안 된 빌드)
+    InformationalVersion·AssemblyVersion·FileVersion 은 SDK 가 평가 시점에 Version 에서 굳혀 두므로
+    여기서 함께 다시 정한다. GetAssemblyAttributes 보다 앞서야 해서 GetAssemblyVersion 앞에 건다.
+  -->
+  <Target Name="VersionFromGit" BeforeTargets="GetAssemblyVersion" Condition="'$(VersionFromGit)' == 'true'">
+    <Exec Command="git describe --tags --long" WorkingDirectory="$(MSBuildProjectDirectory)"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true"
+          StandardOutputImportance="low" StandardErrorImportance="low" EchoOff="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitDescribe" />
+      <Output TaskParameter="ExitCode" PropertyName="_GitDescribeExit" />
+    </Exec>
+    <PropertyGroup Condition="'$(_GitDescribeExit)' == '0' And $([System.Text.RegularExpressions.Regex]::IsMatch('$(_GitDescribe.Trim())', '^v\d+\.\d+\.\d+-\d+-g[0-9a-f]+$'))">
+      <_GitTag>$([System.Text.RegularExpressions.Regex]::Replace('$(_GitDescribe.Trim())', '^v(\d+\.\d+\.\d+)-(\d+)-g[0-9a-f]+$', '${1}'))</_GitTag>
+      <_GitHeight>$([System.Text.RegularExpressions.Regex]::Replace('$(_GitDescribe.Trim())', '^v(\d+\.\d+\.\d+)-(\d+)-g[0-9a-f]+$', '${2}'))</_GitHeight>
+      <Version>$(_GitTag)</Version>
+      <Version Condition="'$(_GitHeight)' != '0'">$(_GitTag)-dev.$(_GitHeight)</Version>
+      <InformationalVersion>$(Version)</InformationalVersion>
+      <AssemblyVersion>$(_GitTag).0</AssemblyVersion>
+      <FileVersion>$(_GitTag).$(_GitHeight)</FileVersion>
+    </PropertyGroup>
+  </Target>
 
   <ItemGroup>
     <!-- 창(타이틀바/작업표시줄) 아이콘용: 어셈블리 리소스 루트에 배치해 pack URI "/UartTerminal.ico" 로 참조 -->

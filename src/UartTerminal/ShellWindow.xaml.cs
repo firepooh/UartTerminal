@@ -47,6 +47,12 @@ public partial class ShellWindow : Window
 
     public static ShellWindow? Primary { get; private set; }
 
+    /// <summary>
+    /// 제목 줄 꼬리("UartTerminal v1.15.0"). 창이 여럿 떠 있거나 구버전을 함께 띄웠을 때
+    /// 어느 것인지 바로 구분하게 한다. 버전은 언어와 무관하므로 한 번만 계산해 둔다.
+    /// </summary>
+    private static readonly string AppTitle = $"UartTerminal v{AboutDialog.AppVersion}";
+
     private readonly AppState _state;
     private readonly CommandStore _commands;
     private readonly SessionStore _sessions;
@@ -587,7 +593,7 @@ public partial class ShellWindow : Window
     private void RefreshChrome()
     {
         var doc = ActiveDoc;
-        Title = doc is null ? "UartTerminal" : $"{doc.Title} - UartTerminal";
+        Title = doc is null ? AppTitle : $"{doc.Title} - {AppTitle}";
         StatusText.Text = doc?.StatusMessage ?? "";
         SyncStatusLink();
         MetricsText.Text = doc?.MetricsMessage ?? "";
