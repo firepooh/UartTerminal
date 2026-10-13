@@ -92,26 +92,60 @@ public sealed class ZipFlashSource : IFlashSource, IDisposable
     public void Dispose() => _zip.Dispose();
 }
 
-/// <summary>이미 풀려 있는 폴더를 원본으로.</summary>
+/// <summary>
+/// 이미 풀려 있는 폴더를 원본으로. 압축을 푼 배포 폴더와 ESP-IDF 의 <c>build</c> 폴더를 같이 받는다.
+///
+/// 하위 폴더는 <see cref="MaxDepth"/> 단계까지만 내려간다. <c>build</c> 폴더는
+/// <c>bootloader/bootloader.bin</c> 처럼 한 단계 아래에 bin 을 두지만, 그 아래에는 오브젝트 파일이 수천 개다.
+/// 끝까지 훑으면 폴더를 잘못 골랐을 때(C:\ 등) 창이 멈춘다.
+/// 같은 파일명이 여러 곳에 있으면 <b>얕은 쪽</b>이 이긴다 — zip 원본의 "첫 번째만" 규칙과 맞춘다.
+/// </summary>
 public sealed class DirectoryFlashSource : IFlashSource
 {
-    private readonly string _root;
+    /// <summary>루트 아래로 내려가는 깊이(1 = 바로 아래 폴더까지).</summary>
+    public const int MaxDepth = 2;
+
+    private readonly Dictionary<string, string> _byName;
 
     public DirectoryFlashSource(string root)
     {
-        _root = root;
-        Files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-            .Select(p => (Path.GetFileName(p), new FileInfo(p).Length))
-            .ToList();
+        var opts = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            MaxRecursionDepth = MaxDepth,
+            IgnoreInaccessible = true,
+        };
+        string full = Path.GetFullPath(root);
+
+        _byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var list = new List<(string, long)>();
+        // 열거 순서는 보장되지 않으므로 깊이 → 경로 순으로 정렬해 "얕은 쪽 우선" 을 확정한다.
+        foreach (string path in Directory.EnumerateFiles(full, "*", opts)
+                     .OrderBy(p => p.Count(c => c == Path.DirectorySeparatorChar))
+                     .ThenBy(p => p, StringComparer.OrdinalIgnoreCase))
+        {
+            string name = Path.GetFileName(path);
+            if (_byName.TryAdd(name, path)) list.Add((name, new FileInfo(path).Length));
+        }
+        Files = list;
     }
 
     public IReadOnlyList<(string Name, long Size)> Files { get; }
 
-    public Stream? Open(string name)
-    {
-        string? hit = Directory.EnumerateFiles(_root, name, SearchOption.AllDirectories).FirstOrDefault();
-        return hit is null ? null : File.OpenRead(hit);
-    }
+    public Stream? Open(string name) => FullPath(name) is { } p ? File.OpenRead(p) : null;
+
+    /// <summary>파일명에 해당하는 실제 경로. 폴더 원본은 압축 해제 없이 이 경로를 esptool 에 그대로 넘긴다.</summary>
+    public string? FullPath(string name) => _byName.TryGetValue(name, out string? p) ? p : null;
+}
+
+/// <summary>경로 하나(zip 파일 또는 폴더)로 알맞은 원본을 고른다.</summary>
+public static class FlashSources
+{
+    public static bool IsFolder(string path) => Directory.Exists(path);
+
+    /// <summary>폴더면 <see cref="DirectoryFlashSource"/>, 아니면 zip 으로 연다. zip 원본은 호출자가 Dispose 한다.</summary>
+    public static IFlashSource Open(string path) =>
+        IsFolder(path) ? new DirectoryFlashSource(path) : new ZipFlashSource(path);
 }
 
 /// <summary>

@@ -91,7 +91,10 @@ public sealed class AppState
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public AppLanguage Language { get; set; } = AppLanguage.Korean;
 
-    /// <summary>마지막으로 플래시한 펌웨어 패키지(zip) 경로. 반복 작업이 대부분이라 다음에 바로 불러온다.</summary>
+    /// <summary>
+    /// 마지막으로 플래시한 펌웨어 패키지 경로(zip 파일 또는 폴더). 반복 작업이 대부분이라 다음에 바로 불러온다.
+    /// 폴더도 받게 되면서 이름이 맞지 않게 됐지만 state.json 키라서 그대로 둔다.
+    /// </summary>
     public string? LastFlashZip { get; set; }
 
     /// <summary>플래시 속도(bps). 기본 576000 — ESP32-S3 devkit 에서 안정적으로 쓰이는 값.</summary>

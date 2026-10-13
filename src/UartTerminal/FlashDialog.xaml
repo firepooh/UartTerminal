@@ -98,10 +98,11 @@
                         <TextBlock Grid.Row="0" Margin="2,0,0,10" Style="{StaticResource HintText}"
                                    Text="{loc:Str Flash.Intro}"/>
 
-                        <!-- zip 선택 -->
+                        <!-- 원본 선택: zip 파일 또는 압축을 푼 폴더(ESP-IDF build 폴더 포함) -->
                         <Grid Grid.Row="1">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -113,8 +114,11 @@
                             <TextBox x:Name="ZipBox" Grid.Row="1" Grid.Column="0" Style="{StaticResource CommandInput}"
                                      MinWidth="0" Height="30" Padding="9,0" VerticalContentAlignment="Center"
                                      IsReadOnly="True" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-                            <Button x:Name="BrowseButton" Grid.Row="1" Grid.Column="1" Content="{loc:Str Common.Browse}" Style="{StaticResource DialogButton}"
+                            <Button x:Name="BrowseButton" Grid.Row="1" Grid.Column="1" Content="{loc:Str Flash.BrowseZip}" Style="{StaticResource DialogButton}"
                                     MinWidth="72" Height="30" Margin="8,0,0,0" VerticalAlignment="Bottom" Click="Browse_Click"/>
+                            <Button x:Name="BrowseFolderButton" Grid.Row="1" Grid.Column="2" Content="{loc:Str Flash.BrowseFolder}" Style="{StaticResource DialogButton}"
+                                    MinWidth="72" Height="30" Margin="8,0,0,0" VerticalAlignment="Bottom"
+                                    ToolTip="{loc:Str Flash.BrowseFolderTip}" Click="BrowseFolder_Click"/>
                         </Grid>
 
                         <!-- 칩(패키지 해석에 쓰인다 — 영역 탭은 영역 정의가 칩을 정한다) -->
@@ -348,6 +352,10 @@
                        Foreground="{DynamicResource TextFaint}" TextTrimming="CharacterEllipsis"
                        Text="{loc:Str Flash.CheckingTool}"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <!-- 전체 지우기는 탭과 무관한 동작이라 공용 버튼 줄에 둔다. [플래시 시작]과 거리를 둬 잘못 누르지 않게 -->
+                <Button x:Name="EraseButton" Content="{loc:Str Flash.Erase}" Style="{StaticResource DangerButton}"
+                        ToolTip="{loc:Str Flash.EraseTip}"
+                        MinWidth="72" MinHeight="32" Margin="0,0,24,0" IsEnabled="False" Click="Erase_Click"/>
                 <Button x:Name="StopButton" Content="{loc:Str Flash.Stop}" Style="{StaticResource DialogButton}"
                         MinWidth="72" MinHeight="32" Margin="0,0,8,0" Visibility="Collapsed" Click="Stop_Click"/>
                 <Button x:Name="CloseButton" Content="{loc:Str Common.Close}" Style="{StaticResource GhostButton}"

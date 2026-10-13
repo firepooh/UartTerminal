@@ -426,6 +426,113 @@ public sealed class FlashPackageTests : IDisposable
         Assert.DoesNotContain(pkg.Warnings, w => w.Key == "Flash.Warn.UnknownLocation");
     }
 
+    // ── 폴더 원본(압축을 푼 배포 폴더 / ESP-IDF build 폴더) ──────────────────────
+
+    private string MakeFolder(string name, params (string RelPath, byte[] Data)[] files)
+    {
+        string root = Path.Combine(_dir, name);
+        foreach (var (rel, data) in files)
+        {
+            string path = Path.Combine(root, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllBytes(path, data);
+        }
+        return root;
+    }
+
+    private static byte[] Text(string s) => System.Text.Encoding.UTF8.GetBytes(s);
+
+    [Fact]
+    public void Folder_AnalyzesLikeTheSameZip()
+    {
+        // zip 을 그대로 푼 폴더 — 결과가 zip 원본과 같아야 한다.
+        string root = MakeFolder("unzipped",
+            ("flash_project_args", Text(RealArgs)),
+            ("bootloader.bin", Image(9, 22_426)),
+            ("partition-table.bin", Image(9, 3_072)),
+            ("ota_data_initial.bin", Image(9, 8_192)),
+            ("myapp.bin", Image(9, 4_096)),
+            ("myapp-1.2.3.bin", Image(9, 4_096)),
+            ("storage.bin", Image(9, 1_024)));
+
+        var fromFolder = FlashPackageAnalyzer.Analyze(new DirectoryFlashSource(root), root);
+        var fromZip = Analyze(MakeRealisticZip());
+
+        Assert.Equal(EspChip.Esp32S3, fromFolder.Chip);
+        Assert.True(fromFolder.IsUsable);
+        Assert.Equal(fromZip.Items.Select(i => (i.Offset, i.Role, i.Selected)),
+                     fromFolder.Items.Select(i => (i.Offset, i.Role, i.Selected)));
+        Assert.Equal("myapp-1.2.3.bin", fromFolder.Items.Single(i => i.Role == "app").FileName);
+    }
+
+    [Fact]
+    public void Folder_ReadsIdfBuildTree()
+    {
+        // ESP-IDF build 폴더: bin 이 한 단계 아래에 있고 args 경로가 그 구조를 가리킨다.
+        string root = MakeFolder("build",
+            ("flasher_args.json", Text("""
+                {
+                  "flash_files": { "0x0": "bootloader/bootloader.bin",
+                                   "0x8000": "partition_table/partition-table.bin",
+                                   "0x10000": "sample.bin" },
+                  "extra_esptool_args": { "chip": "esp32s3" }
+                }
+                """)),
+            (Path.Combine("bootloader", "bootloader.bin"), Image(9)),
+            (Path.Combine("partition_table", "partition-table.bin"), Image(9)),
+            ("sample.bin", Image(9)));
+
+        var src = new DirectoryFlashSource(root);
+        var pkg = FlashPackageAnalyzer.Analyze(src, root);
+
+        Assert.Equal(new uint[] { 0x0, 0x8000, 0x10000 }, pkg.Items.Select(i => i.Offset).ToArray());
+        Assert.All(pkg.Items, i => Assert.NotNull(i.FileName));
+        // 압축 해제 없이 esptool 에 넘길 실제 경로를 돌려준다.
+        Assert.Equal(Path.Combine(root, "bootloader", "bootloader.bin"), src.FullPath("bootloader.bin"));
+        Assert.Null(src.FullPath("nothing.bin"));
+    }
+
+    [Fact]
+    public void Folder_StopsAtMaxDepth()
+    {
+        // build 폴더 깊은 곳의 오브젝트까지 훑지 않는다 — 잘못 고른 큰 폴더에서 창이 멈추지 않게.
+        string root = MakeFolder("deep",
+            ("a.bin", Image(9)),
+            (Path.Combine("d1", "b.bin"), Image(9)),
+            (Path.Combine("d1", "d2", "c.bin"), Image(9)),
+            (Path.Combine("d1", "d2", "d3", "too-deep.bin"), Image(9)));
+
+        var names = new DirectoryFlashSource(root).Files.Select(f => f.Name).ToList();
+
+        Assert.Equal(2, DirectoryFlashSource.MaxDepth);
+        Assert.Equal(new[] { "a.bin", "b.bin", "c.bin" }, names);
+    }
+
+    [Fact]
+    public void Folder_ShallowerFileWinsOnNameClash()
+    {
+        string root = MakeFolder("clash",
+            (Path.Combine("old", "app.bin"), Image(9, 100)),
+            ("app.bin", Image(9, 200)));
+
+        var src = new DirectoryFlashSource(root);
+
+        Assert.Equal(200, src.Files.Single(f => f.Name == "app.bin").Size);
+        Assert.Equal(Path.Combine(root, "app.bin"), src.FullPath("app.bin"));
+    }
+
+    [Fact]
+    public void Sources_PickFolderOrZipByPath()
+    {
+        string root = MakeFolder("pick", ("a.bin", Image(9)));
+        string zip = MakeZip("pick.zip", z => AddBytes(z, "a.bin", Image(9)));
+
+        Assert.IsType<DirectoryFlashSource>(FlashSources.Open(root));
+        var z = FlashSources.Open(zip);
+        Assert.IsType<ZipFlashSource>(z);
+        ((IDisposable)z).Dispose();
+    }
+
     [Fact]
     public void WorkFolderName_IsStableForSameZip()
     {

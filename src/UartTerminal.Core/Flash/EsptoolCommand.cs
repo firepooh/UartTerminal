@@ -47,17 +47,7 @@ public static class EsptoolCommand
         string optFreq = hyphenSyntax ? "--flash-freq" : "--flash_freq";
         string optSize = hyphenSyntax ? "--flash-size" : "--flash_size";
 
-        var args = new List<string>();
-
-        if (request.Chip != EspChip.Unknown)
-        {
-            args.Add("--chip");
-            args.Add(request.Chip.EsptoolName());
-        }
-        args.Add("--port");
-        args.Add(request.Port);
-        args.Add("--baud");
-        args.Add(request.Baud.ToString());
+        var args = Connection(request.Chip, request.Port, request.Baud);
 
         args.Add(cmd);
 
@@ -78,6 +68,37 @@ public static class EsptoolCommand
             args.Add(file);
         }
 
+        return args;
+    }
+
+    /// <summary>
+    /// 플래시 전체 지우기. 칩을 모르면 <c>--chip</c> 을 빼서 esptool 이 접속해 감지하게 한다
+    /// (지우기는 패키지와 무관하므로 패키지에서 판별한 칩을 끌어올 이유가 없다).
+    /// <code>
+    /// v4: esptool --port COM4 --baud 576000 erase_flash
+    /// v5: esptool --port COM4 --baud 576000 erase-flash
+    /// </code>
+    /// </summary>
+    public static List<string> BuildEraseFlash(string port, int baud, EspChip chip, bool hyphenSyntax)
+    {
+        var args = Connection(chip, port, baud);
+        args.Add(hyphenSyntax ? "erase-flash" : "erase_flash");
+        return args;
+    }
+
+    /// <summary>명령 앞에 오는 공통 옵션(칩·포트·속도). 두 명령이 같은 순서를 쓰게 한곳에 둔다.</summary>
+    private static List<string> Connection(EspChip chip, string port, int baud)
+    {
+        var args = new List<string>();
+        if (chip != EspChip.Unknown)
+        {
+            args.Add("--chip");
+            args.Add(chip.EsptoolName());
+        }
+        args.Add("--port");
+        args.Add(port);
+        args.Add("--baud");
+        args.Add(baud.ToString());
         return args;
     }
 

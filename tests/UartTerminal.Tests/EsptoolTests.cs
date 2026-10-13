@@ -108,6 +108,40 @@ public sealed class EsptoolTests
         Assert.DoesNotContain("--after", args);
     }
 
+    // ── 전체 지우기 ──────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(false, "erase_flash")]
+    [InlineData(true, "erase-flash")]
+    public void Erase_FollowsVersionSyntax(bool hyphen, string expected)
+    {
+        var args = EsptoolCommand.BuildEraseFlash("COM4", 576000, EspChip.Unknown, hyphen);
+
+        Assert.Equal(new[] { "--port", "COM4", "--baud", "576000", expected }, args);
+    }
+
+    [Fact]
+    public void Erase_PassesChipOnlyWhenKnown()
+    {
+        var args = EsptoolCommand.BuildEraseFlash("COM4", 576000, EspChip.Esp32S3, hyphenSyntax: false);
+
+        Assert.Equal(new[] { "--chip", "esp32s3", "--port", "COM4", "--baud", "576000", "erase_flash" }, args);
+    }
+
+    [Fact]
+    public void Progress_EraseOutput_ShowsErasingPhase()
+    {
+        // 지우기는 바이트 진행률이 없다 — 단계 문구만 바뀌면 된다(v4·v5 문구 모두).
+        var parser = new EsptoolProgressParser(Array.Empty<long>());
+
+        Assert.True(parser.Feed("Erasing flash (this may take a while)...", out var v4));
+        Assert.Equal("Flash.Phase.Erasing", v4.Phase);
+
+        var parser5 = new EsptoolProgressParser(Array.Empty<long>());
+        Assert.True(parser5.Feed("Erasing flash memory (this may take a while)...", out var v5));
+        Assert.Equal("Flash.Phase.Erasing", v5.Phase);
+    }
+
     [Fact]
     public void DisplayLine_QuotesPathsWithSpaces()
     {

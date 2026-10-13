@@ -1,11 +1,13 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using UartTerminal.Core;
 using UartTerminal.Core.Flash;
@@ -13,8 +15,9 @@ using UartTerminal.Core.Flash;
 namespace UartTerminal;
 
 /// <summary>
-/// 펌웨어 플래시 화면. zip 을 고르면 <see cref="FlashPackageAnalyzer"/> 가 칩·오프셋·파일을 뽑아
-/// 표로 보여주고, 시작하면 <b>포트를 양보 → esptool 실행 → 재연결</b> 순으로 진행한다.
+/// 펌웨어 플래시 화면. zip 이나 압축을 푼 폴더를 고르면 <see cref="FlashPackageAnalyzer"/> 가
+/// 칩·오프셋·파일을 뽑아 표로 보여주고, 시작하면 <b>포트를 양보 → esptool 실행 → 재연결</b> 순으로 진행한다.
+/// 같은 수명주기로 플래시 전체 지우기(erase_flash)도 한다.
 ///
 /// 포트 양보/복귀는 이미 검증된 경로(MCP uart_close/uart_open 과 동일한 컨트롤러 메서드)를
 /// 콜백으로 받아 재사용한다 — 이 창은 시리얼을 직접 만지지 않는다.
@@ -117,6 +120,12 @@ public partial class FlashDialog : Window
     private bool _running;
     private bool _syncing;
 
+    // 진행률 표시. 전체 지우기처럼 바이트 진행률이 없는 작업은 퍼센트 대신 경과 시간을 보인다 —
+    // 수십 초 동안 "0%" 로 멈춰 있으면 멈춘 것처럼 보인다.
+    private string _phaseKey = "Flash.Phase.Preparing";
+    private Stopwatch? _elapsed;
+    private DispatcherTimer? _elapsedTimer;
+
     // ── 영역 굽기 탭 ──
     /// <summary>주소 기본값. 안내문(Flash.RegionIntro)에도 명기돼 있다 — 바꿨다가 되돌릴 때 보라고.</summary>
     private const string DefaultRegionAddress = "0xD90000";
@@ -184,9 +193,9 @@ public partial class FlashDialog : Window
             ToolText.Text = $"{_tool.VersionText}  ·  {_tool.Path}";
         }
 
-        // 지난번 zip 이 그대로 있으면 바로 불러온다(반복 작업이 대부분이다).
-        if (!string.IsNullOrEmpty(_state.LastFlashZip) && File.Exists(_state.LastFlashZip!))
-            LoadPackage(_state.LastFlashZip!);
+        // 지난번 zip(또는 폴더)이 그대로 있으면 바로 불러온다(반복 작업이 대부분이다).
+        if (_state.LastFlashZip is { Length: > 0 } last && (File.Exists(last) || Directory.Exists(last)))
+            LoadPackage(last);
 
         // 주소: 마지막으로 쓴 값, 없으면 기본값. 소스는 복원만 한다 —
         // 실제 불러오기는 영역 탭에 들어올 때(탭 전환 핸들러) 일어난다.
@@ -340,7 +349,22 @@ public partial class FlashDialog : Window
         UpdateButtons();
     }
 
-    // ── zip 선택/해석 ────────────────────────────────────────────────────────
+    // ── 패키지(zip/폴더) 선택·해석 ───────────────────────────────────────────
+
+    /// <summary>
+    /// 지난번 원본이 있던 폴더. 지난번 것이 폴더였어도 그 <b>부모</b>를 연다 —
+    /// 새 버전은 대개 옆 폴더로 나오므로 형제 폴더가 보이는 편이 고르기 쉽다.
+    /// </summary>
+    private string? LastSourceParent()
+    {
+        try
+        {
+            return _state.LastFlashZip is { Length: > 0 } last
+                   && Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(last)) is { Length: > 0 } dir
+                   && Directory.Exists(dir) ? dir : null;
+        }
+        catch { return null; }
+    }
 
     private void Browse_Click(object sender, RoutedEventArgs e)
     {
@@ -350,26 +374,40 @@ public partial class FlashDialog : Window
             Filter = Loc.S("Flash.PickFilter"),
             CheckFileExists = true,
         };
-        if (!string.IsNullOrEmpty(_state.LastFlashZip))
-        {
-            try { dlg.InitialDirectory = Path.GetDirectoryName(_state.LastFlashZip!); } catch { }
-        }
+        if (LastSourceParent() is { } dir) dlg.InitialDirectory = dir;
         if (dlg.ShowDialog(this) != true) return;
 
         LoadPackage(dlg.FileName);
     }
 
-    private void LoadPackage(string zipPath)
+    /// <summary>압축을 푼 폴더나 ESP-IDF build 폴더를 고른다. bin 을 복사하지 않고 그 자리의 파일을 쓴다.</summary>
+    private void BrowseFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFolderDialog { Title = Loc.S("Flash.PickFolderTitle") };
+        if (LastSourceParent() is { } dir) dlg.InitialDirectory = dir;
+        if (dlg.ShowDialog(this) != true) return;
+
+        LoadPackage(dlg.FolderName);
+    }
+
+    /// <summary><paramref name="sourcePath"/> 는 zip 파일이나 폴더다. 해석 규칙은 둘이 같다.</summary>
+    private void LoadPackage(string sourcePath)
     {
         _rows.Clear();
         NoticePane.Visibility = Visibility.Collapsed;
         NoticeText.Text = "";
-        ZipBox.Text = zipPath;
+        ZipBox.Text = sourcePath;
 
+        // 후보별 크기 맵(파일을 바꾸면 크기 표시도 따라가게)
+        var sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            using var src = new ZipFlashSource(zipPath);
-            _package = FlashPackageAnalyzer.Analyze(src, zipPath, SelectedChipOverride());
+            var src = FlashSources.Open(sourcePath);
+            using (src as IDisposable)
+            {
+                _package = FlashPackageAnalyzer.Analyze(src, sourcePath, SelectedChipOverride());
+                foreach (var (name, size) in src.Files) sizes[name] = size;
+            }
         }
         catch (Exception ex)
         {
@@ -378,11 +416,6 @@ public partial class FlashDialog : Window
             UpdateButtons();
             return;
         }
-
-        // 후보별 크기 맵(파일을 바꾸면 크기 표시도 따라가게)
-        var sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        using (var src = new ZipFlashSource(zipPath))
-            foreach (var (name, size) in src.Files) sizes[name] = size;
 
         foreach (var item in _package.Items)
         {
@@ -419,7 +452,7 @@ public partial class FlashDialog : Window
         foreach (var w in _package.Warnings) AppendNotice(Loc.F("Flash.Prefix.Warn", Loc.Format(w)));
         foreach (var er in _package.Errors) AppendNotice(Loc.F("Flash.Prefix.Err", Loc.Format(er)));
 
-        _state.LastFlashZip = zipPath;
+        _state.LastFlashZip = sourcePath;
         _state.Save();
         UpdateButtons();
     }
@@ -466,6 +499,8 @@ public partial class FlashDialog : Window
                                 && !string.IsNullOrEmpty(_portName)
                                 && (onRegionTab ? regionReady : packageReady);
         // 중지는 실행 중에만 나타난다 — 대기 상태에서 비활성 버튼이 자리를 지킬 이유가 없다.
+        // 전체 지우기는 패키지와 무관하다 — 도구와 포트만 있으면 어느 탭에서든 누를 수 있다.
+        EraseButton.IsEnabled = !_running && _tool is not null && !string.IsNullOrEmpty(_portName);
         StopButton.Visibility = _running ? Visibility.Visible : Visibility.Collapsed;
         StopButton.IsEnabled = _running;
         CloseButton.IsEnabled = !_running;
@@ -474,6 +509,7 @@ public partial class FlashDialog : Window
         // 목록이 비면 안내를 겹쳐 보인다.
         ItemListEmpty.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         BrowseButton.IsEnabled = !_running;
+        BrowseFolderButton.IsEnabled = !_running;
         ChipBox.IsEnabled = !_running;
         BaudBox.IsEnabled = !_running;
         ItemList.IsEnabled = !_running;
@@ -536,7 +572,7 @@ public partial class FlashDialog : Window
 
         // UI 값은 여기서 <b>전부 지역 변수로</b> 읽는다. 아래 작업은 백그라운드 스레드를 오가므로
         // 컨트롤을 직접 만지면 "다른 스레드가 이 개체를 소유하고 있어…" 예외가 난다.
-        string zipPath = ZipBox.Text;
+        string sourcePath = ZipBox.Text;
         int baud = BaudBox.SelectedItem is int b ? b : 576000;
         bool keepSettings = KeepBox.IsChecked == true;
         bool reconnectAfter = ReconnectBox.IsChecked == true;
@@ -550,18 +586,29 @@ public partial class FlashDialog : Window
             Loc.S("Flash.Msg.ConfirmTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK);
         if (confirm != MessageBoxResult.OK) return;
 
-        await RunFlashAsync(reconnectAfter, async ct =>
+        await RunEsptoolAsync(reconnectAfter, "Flash.Log.Done", timed: false, async ct =>
         {
-            // 압축 해제(재사용)
-            string root = Path.Combine(AppState.Dir, "flash", FlashExtractor.WorkFolderName(zipPath));
-            Log(Loc.F("Flash.Log.Extract", root));
-            var map = await Task.Run(() => FlashExtractor.Extract(zipPath, root), ct);
+            // 파일명 → 실제 경로. 폴더는 그 자리의 파일을 쓰고, zip 은 작업 폴더에 푼다(재사용).
+            Func<string, string?> pathOf;
+            if (FlashSources.IsFolder(sourcePath))
+            {
+                Log(Loc.F("Flash.Log.UseFolder", sourcePath));
+                var dir = await Task.Run(() => new DirectoryFlashSource(sourcePath), ct);
+                pathOf = dir.FullPath;
+            }
+            else
+            {
+                string root = Path.Combine(AppState.Dir, "flash", FlashExtractor.WorkFolderName(sourcePath));
+                Log(Loc.F("Flash.Log.Extract", root));
+                var map = await Task.Run(() => FlashExtractor.Extract(sourcePath, root), ct);
+                pathOf = name => map.TryGetValue(name, out string? full) ? full : null;
+            }
 
             var files = new List<(uint Offset, string File)>();
             foreach (var p in plan)
             {
-                if (!map.TryGetValue(p.Name, out string? full))
-                    throw new FileNotFoundException(Loc.F("Flash.Msg.ExtractMissing", p.Name));
+                if (pathOf(p.Name) is not { } full || !File.Exists(full))
+                    throw new FileNotFoundException(Loc.F("Flash.Msg.PackageFileMissing", p.Name));
                 files.Add((p.Offset, full));
             }
 
@@ -576,7 +623,9 @@ public partial class FlashDialog : Window
                 FlashFreq = _package.Args.FlashFreq,
                 FlashSize = _package.Args.FlashSize,
             };
-            return (request, plan.Select(p => p.Size).ToList());
+            // 크기는 표가 아니라 실제 파일에서 다시 잰다 — 폴더는 불러온 뒤 다시 빌드됐을 수 있다.
+            return (EsptoolCommand.BuildWriteFlash(request, _tool!.UsesHyphenSyntax),
+                    files.Select(f => new FileInfo(f.File).Length).ToList());
         });
     }
 
@@ -599,7 +648,7 @@ public partial class FlashDialog : Window
             Loc.S("Flash.Msg.ConfirmTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK);
         if (confirm != MessageBoxResult.OK) return;
 
-        await RunFlashAsync(reconnectAfter, _ =>
+        await RunEsptoolAsync(reconnectAfter, "Flash.Log.Done", timed: false, _ =>
         {
             var request = new FlashRequest
             {
@@ -609,22 +658,47 @@ public partial class FlashDialog : Window
                 Files = new[] { (address, bin) },
                 KeepFlashSettings = keepSettings,
             };
-            return Task.FromResult((request, new List<long> { size }));
+            return Task.FromResult((EsptoolCommand.BuildWriteFlash(request, _tool!.UsesHyphenSyntax),
+                                    new List<long> { size }));
         });
     }
 
     /// <summary>
-    /// 공용 실행 경로: 준비(<paramref name="prepare"/>) → 포트 양보 → esptool → 포트 복귀.
-    /// 패키지/영역 두 모드가 요청만 다르고 수명주기는 같아야 하므로 한곳에 둔다 —
-    /// 복귀(finally)가 두 벌이면 한쪽만 고쳐지는 날이 온다.
+    /// 플래시 전체 지우기(erase_flash). 패키지와 무관하므로 칩은 esptool 자동 감지에 맡긴다.
+    /// 되돌릴 수 없는 동작이라 확인창의 기본 단추를 [취소]로 둔다.
     /// </summary>
-    private async Task RunFlashAsync(bool reconnectAfter,
-        Func<CancellationToken, Task<(FlashRequest Request, List<long> Sizes)>> prepare)
+    private async void Erase_Click(object sender, RoutedEventArgs e)
+    {
+        if (_running || _tool is null || string.IsNullOrEmpty(_portName)) return;
+
+        int baud = BaudBox.SelectedItem is int b ? b : 576000;
+        bool reconnectAfter = ReconnectBox.IsChecked == true;
+        bool hyphen = _tool.UsesHyphenSyntax;
+
+        var confirm = MessageBox.Show(this, Loc.F("Flash.Msg.EraseConfirm", _portName),
+            Loc.S("Flash.Msg.EraseTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
+        if (confirm != MessageBoxResult.OK) return;
+
+        await RunEsptoolAsync(reconnectAfter, "Flash.Log.EraseDone", timed: true, _ =>
+            Task.FromResult((EsptoolCommand.BuildEraseFlash(_portName, baud, EspChip.Unknown, hyphen),
+                             new List<long>())));
+    }
+
+    /// <summary>
+    /// 공용 실행 경로: 준비(<paramref name="prepare"/>) → 포트 양보 → esptool → 포트 복귀.
+    /// 패키지·부분 플래시·전체 지우기가 인자만 다르고 수명주기는 같아야 하므로 한곳에 둔다 —
+    /// 복귀(finally)가 여러 벌이면 한쪽만 고쳐지는 날이 온다.
+    /// <paramref name="prepare"/> 는 esptool 인자와 파일 크기(진행률 계산용)를 돌려준다.
+    /// <paramref name="timed"/> 면 퍼센트 대신 경과 시간을 보인다(바이트 진행률이 없는 작업).
+    /// </summary>
+    private async Task RunEsptoolAsync(bool reconnectAfter, string doneLogKey, bool timed,
+        Func<CancellationToken, Task<(List<string> Args, List<long> Sizes)>> prepare)
     {
         if (_tool is null) return;
 
         _running = true;
         _cts = new CancellationTokenSource();
+        _elapsed = null;   // 지난 작업의 경과 시간이 다음 작업의 퍼센트 자리를 차지하지 않게
         LogBox.Clear();
         Progress.Value = 0;
         SetProgressText("Flash.Phase.Preparing", 0);
@@ -633,8 +707,8 @@ public partial class FlashDialog : Window
         bool released = false;
         try
         {
-            // 1) 준비(압축 해제·요청 구성 — 모드별)
-            var (request, sizes) = await prepare(_cts.Token);
+            // 1) 준비(압축 해제·인자 구성 — 모드별)
+            var (args, sizes) = await prepare(_cts.Token);
 
             // 2) 포트 양보
             SetProgressText("Flash.Phase.Releasing", 0);
@@ -649,7 +723,6 @@ public partial class FlashDialog : Window
             }
 
             // 3) esptool 실행
-            var args = EsptoolCommand.BuildWriteFlash(request, _tool.UsesHyphenSyntax);
             Log(EsptoolCommand.ToDisplayLine(_tool.Path, args));
             Log("");
 
@@ -661,14 +734,16 @@ public partial class FlashDialog : Window
                 SetProgressText(p.Phase, p.Fraction);
             });
 
+            if (timed) StartElapsed();
             var result = await runner.RunAsync(args, sizes, _cts.Token);
+            StopElapsed();
 
             if (result.Ok)
             {
                 Progress.Value = 1;
                 SetProgressText("Flash.Phase.Done", 1);
                 Log("");
-                Log(Loc.S("Flash.Log.Done"));
+                Log(Loc.S(doneLogKey));
             }
             else
             {
@@ -690,6 +765,8 @@ public partial class FlashDialog : Window
         }
         finally
         {
+            StopElapsed();   // 예외로 빠져나와도 타이머가 남지 않게
+
             // 4) 포트 복귀 — 성공/실패/취소 어느 경우에도 되돌린다.
             if (released && reconnectAfter)
             {
@@ -739,7 +816,29 @@ public partial class FlashDialog : Window
             Dispatcher.BeginInvoke(() => SetProgressText(phaseKey, fraction));
             return;
         }
-        ProgressText.Text = $"{Loc.S(phaseKey)}  ·  {fraction * 100:0}%";
+        _phaseKey = phaseKey;
+        string tail = _elapsed is { } sw
+            ? Loc.F("Flash.Elapsed", (int)sw.Elapsed.TotalSeconds)
+            : $"{fraction * 100:0}%";
+        ProgressText.Text = $"{Loc.S(phaseKey)}  ·  {tail}";
+    }
+
+    /// <summary>경과 시간 표시를 시작한다. 단계 문구는 그대로 두고 초만 1초마다 올린다.</summary>
+    private void StartElapsed()
+    {
+        _elapsed = Stopwatch.StartNew();
+        _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _elapsedTimer.Tick += (_, _) => SetProgressText(_phaseKey, 0);
+        _elapsedTimer.Start();
+        SetProgressText(_phaseKey, 0);
+    }
+
+    /// <summary>타이머만 멈춘다. 스톱워치는 남겨 "완료 · 14초" 처럼 마지막 시간을 보여 준다.</summary>
+    private void StopElapsed()
+    {
+        _elapsedTimer?.Stop();
+        _elapsedTimer = null;
+        _elapsed?.Stop();
     }
 
     private void Log(string line)
