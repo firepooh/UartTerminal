@@ -157,6 +157,8 @@ public static class FlashSources
 ///  3) 같은 앱의 사본이 여럿(<c>myapp.bin</c> / <c>myapp-1.2.3.bin</c>) → 후보로 올리고 버전 붙은 쪽을 기본 선택
 ///  4) zip 에 칩 정보가 없어도 <b>bootloader 헤더의 chip_id</b> 로 확정
 ///  5) 같은 오프셋에 두 파일이 잡히면 오류로 막는다
+///  6) args 가 가리키는 앱(<c>myapp.bin</c>)이 있고 버전 붙은 사본(<c>myapp-1.2.3.bin</c>)도 함께 있음
+///     → 사본을 그 줄의 후보로 올린다('위치 불명' 경고가 아니다)
 /// </summary>
 public static class FlashPackageAnalyzer
 {
@@ -200,8 +202,14 @@ public static class FlashPackageAnalyzer
         // ── 3) 항목 만들기 ───────────────────────────────────────────────────
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var items = args.Entries.Count > 0
-            ? BuildFromArgs(args, files, used, warnings)
+            ? BuildFromArgs(source, args, files, used, warnings)
             : BuildFromConventions(files, used, chip, warnings);
+
+        // 표시는 오프셋 순으로 — args 파일의 줄 순서는 빌드 시스템 사정이라 읽기 어렵다
+        // (실제 배포본: 0x8000 → 0xd000 → 0x1000 → …). Flash Download Tool 도 주소 순으로 적는다.
+        // 기록 순서는 결과에 영향이 없다. esptool 은 넘긴 순서대로 쓰지만, 먼저 주소 겹침을 검사해
+        // 겹치면 거부하므로 각 파일은 제 영역에만 쓰인다.
+        items = items.OrderBy(i => i.Offset).ToList();
 
         // args 에 없고 후보로도 올라가지 않은 .bin 만 '위치 불명'으로 알린다.
         // (후보로 노출된 사본은 사용자가 목록에서 바로 고를 수 있으므로 경고가 아니다)
@@ -282,9 +290,13 @@ public static class FlashPackageAnalyzer
 
     // ── 항목 구성 ────────────────────────────────────────────────────────────
 
-    private static List<FlashItem> BuildFromArgs(FlashArgs args, List<(string Name, long Size)> files,
+    private static List<FlashItem> BuildFromArgs(IFlashSource source, FlashArgs args,
+                                                 List<(string Name, long Size)> files,
                                                  HashSet<string> used, List<LocMessage> warnings)
     {
+        // args 가 이름으로 가리키는 파일 — 이것들은 다른 줄의 사본 후보가 될 수 없다.
+        var named = args.Entries.Select(e => e.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var items = new List<FlashItem>();
         foreach (var entry in args.Entries)
         {
@@ -296,7 +308,28 @@ public static class FlashPackageAnalyzer
             var candidates = Array.Empty<string>() as IReadOnlyList<string>;
             LocMessage? note = null;
 
-            if (hit.Name is null)
+            if (hit.Name is not null && role == "app"
+                && FindCopies(files, hit.Name, named) is { Count: > 0 } copies)
+            {
+                // ①' 이름은 맞는데 버전 붙은 사본이 함께 있다(배포 zip 에서 흔하다) → 둘 다 후보로.
+                // 내용이 같으면 고르는 의미가 없으니 버전 붙은 쪽(추적 가능)을 쓰고 경고하지 않는다.
+                // 다르면 args 쪽을 믿고, 무엇이 다른지 사용자가 확인하게 경고한다.
+                candidates = copies.Prepend(hit.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+                string argsName = hit.Name;
+                if (copies.All(c => SameContent(source, files, argsName, c)))
+                {
+                    string best = PreferredCandidate(candidates);
+                    hit = files.First(f => f.Name == best);
+                    note = LocMessage.Of("Flash.Note.SameCopies", candidates.Count);
+                }
+                else
+                {
+                    note = LocMessage.Of("Flash.Note.Candidates", candidates.Count);
+                    warnings.Add(LocMessage.Of("Flash.Warn.ArgsCopiesDiffer",
+                        $"0x{entry.Offset:X}", argsName, string.Join(", ", copies)));
+                }
+            }
+            else if (hit.Name is null)
             {
                 // ② args 의 이름이 실제와 다른 경우(rename) → 역할로 재탐색
                 var byRole = FindCandidates(files, role, used);
@@ -408,6 +441,55 @@ public static class FlashPackageAnalyzer
         var hits = files.Where(f => IsBin(f.Name) && Free(f.Name) && RoleOf(f.Name, uint.MaxValue) == want);
 
         return hits.Select(f => f.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// args 가 가리키는 앱 파일의 사본으로 보이는 bin — 이름이 같은 줄기로 시작하고(<c>myapp</c> →
+    /// <c>myapp-1.2.3.bin</c>, <c>myapp_v2.bin</c>) 다른 역할에 걸리지 않으며 args 가 가리키지 않는 파일.
+    /// 이름만 보고 아무 bin 이나 끌어오면 엉뚱한 파일이 앱 자리에 기본 선택될 수 있어 줄기를 요구한다.
+    /// </summary>
+    private static IReadOnlyList<string> FindCopies(List<(string Name, long Size)> files, string appName,
+                                                    HashSet<string> named)
+    {
+        string stem = Path.GetFileNameWithoutExtension(appName);
+        return files
+            .Where(f => IsBin(f.Name)
+                        && !named.Contains(f.Name)
+                        && !string.Equals(f.Name, appName, StringComparison.OrdinalIgnoreCase)
+                        && RoleOf(f.Name, uint.MaxValue) == "other"
+                        && Path.GetFileNameWithoutExtension(f.Name) is { } s
+                        && s.Length > stem.Length
+                        && s.StartsWith(stem, StringComparison.OrdinalIgnoreCase)
+                        && s[stem.Length] is '-' or '_' or '.' or ' ')
+            .Select(f => f.Name)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>두 파일의 내용이 바이트 단위로 같은가. 크기가 다르면 열어 보지 않는다. 못 읽으면 다르다고 본다.</summary>
+    private static bool SameContent(IFlashSource source, List<(string Name, long Size)> files, string a, string b)
+    {
+        long sa = files.First(f => f.Name == a).Size, sb = files.First(f => f.Name == b).Size;
+        if (sa != sb) return false;
+        try
+        {
+            using var x = source.Open(a);
+            using var y = source.Open(b);
+            if (x is null || y is null) return false;
+            var bx = new byte[1 << 16];
+            var by = new byte[1 << 16];
+            while (true)
+            {
+                int nx = x.ReadAtLeast(bx, bx.Length, throwOnEndOfStream: false);
+                int ny = y.ReadAtLeast(by, by.Length, throwOnEndOfStream: false);
+                if (nx != ny || !bx.AsSpan(0, nx).SequenceEqual(by.AsSpan(0, ny))) return false;
+                if (nx == 0) return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>후보 중 기본 선택: 버전이 박힌 이름 우선(추적 가능), 그다음 이름이 긴 쪽.</summary>

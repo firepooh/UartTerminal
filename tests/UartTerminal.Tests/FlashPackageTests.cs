@@ -426,6 +426,92 @@ public sealed class FlashPackageTests : IDisposable
         Assert.DoesNotContain(pkg.Warnings, w => w.Key == "Flash.Warn.UnknownLocation");
     }
 
+    // ── args 가 가리키는 앱 + 버전 붙은 사본(다른 배포 zip 에서 관측) ────────────────
+
+    /// <summary>
+    /// args 가 앱 이름(sensor.bin)을 정확히 가리키고, 버전 붙은 사본도 함께 들어 있는 zip.
+    /// args 줄 순서도 실제 배포본처럼 주소 순이 아니다.
+    /// </summary>
+    private string MakeArgsMatchedZip(byte[] app, byte[] copy) => MakeZip("sensor-3.0.1a.1-abc1234.zip", z =>
+    {
+        AddText(z, "flash_project_args", """
+            --flash_mode dio --flash_freq 40m --flash_size 16MB
+            0x8000 partition_table/partition-table.bin
+            0xd000 ota_data_initial.bin
+            0x1000 bootloader/bootloader.bin
+            0x10000 sensor.bin
+            0xc10000 storage.bin
+            """);
+        AddBytes(z, "bootloader.bin", Image(0, 25_888));
+        AddBytes(z, "partition-table.bin", Image(0, 3_072));
+        AddBytes(z, "ota_data_initial.bin", Image(0, 8_192));
+        AddBytes(z, "sensor.bin", app);
+        AddBytes(z, "sensor-3.0.1a.1.bin", copy);
+        AddBytes(z, "storage.bin", Image(0, 4_096));
+    });
+
+    [Fact]
+    public void Items_AreSortedByOffset_NotArgsOrder()
+    {
+        var app = Image(0, 4_096);
+        var pkg = Analyze(MakeArgsMatchedZip(app, app));
+
+        Assert.Equal(new uint[] { 0x1000, 0x8000, 0xD000, 0x10000, 0xC10000 },
+                     pkg.Items.Select(i => i.Offset).ToArray());
+    }
+
+    [Fact]
+    public void IdenticalVersionedCopy_IsOfferedOnAppRow_WithoutWarning()
+    {
+        // 예전에는 사본이 '쓸 위치를 알 수 없음' 경고로 빠졌다 — 앱 줄의 후보로 보여야 한다.
+        var app = Image(0, 4_096);
+        var pkg = Analyze(MakeArgsMatchedZip(app, (byte[])app.Clone()));
+
+        var row = pkg.Items.Single(i => i.Role == "app");
+        Assert.Equal(new[] { "sensor-3.0.1a.1.bin", "sensor.bin" }, row.Candidates);
+        Assert.Equal("sensor-3.0.1a.1.bin", row.FileName);        // 내용이 같으면 버전 붙은 쪽
+        Assert.Equal("Flash.Note.SameCopies", row.Note?.Key);
+        Assert.DoesNotContain(pkg.Warnings, w => w.Key == "Flash.Warn.UnknownLocation");
+        Assert.DoesNotContain(pkg.Warnings, w => w.Key == "Flash.Warn.ArgsCopiesDiffer");
+        Assert.True(pkg.IsUsable);
+    }
+
+    [Fact]
+    public void DifferentVersionedCopy_KeepsArgsFile_AndWarns()
+    {
+        var app = Image(0, 4_096);
+        var other = Image(0, 4_096);
+        other[100] = 0x5A;                                          // 크기는 같고 내용만 다르다
+
+        var pkg = Analyze(MakeArgsMatchedZip(app, other));
+
+        var row = pkg.Items.Single(i => i.Role == "app");
+        Assert.Equal(2, row.Candidates.Count);
+        Assert.Equal("sensor.bin", row.FileName);                  // 다르면 args 를 믿는다
+        Assert.Equal("Flash.Note.Candidates", row.Note?.Key);
+        Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.ArgsCopiesDiffer");
+    }
+
+    [Fact]
+    public void UnrelatedExtraBin_IsNotTreatedAsAppCopy()
+    {
+        // 이름 줄기가 다른 bin 까지 끌어오면 엉뚱한 파일이 앱 자리에 기본 선택될 수 있다.
+        string zip = MakeZip("extra.zip", z =>
+        {
+            AddText(z, "flash_project_args", "0x1000 bootloader/bootloader.bin\n0x10000 sensor.bin\n");
+            AddBytes(z, "bootloader.bin", Image(0));
+            AddBytes(z, "sensor.bin", Image(0));
+            AddBytes(z, "phy_init_data.bin", Image(0));
+            AddBytes(z, "sensors-old.bin", Image(0));               // 줄기 'sensor' 뒤에 구분자가 없다
+        });
+
+        var pkg = Analyze(zip);
+
+        Assert.Empty(pkg.Items.Single(i => i.Role == "app").Candidates);
+        Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.UnknownLocation" && w.Args.Contains("phy_init_data.bin"));
+        Assert.Contains(pkg.Warnings, w => w.Key == "Flash.Warn.UnknownLocation" && w.Args.Contains("sensors-old.bin"));
+    }
+
     // ── 폴더 원본(압축을 푼 배포 폴더 / ESP-IDF build 폴더) ──────────────────────
 
     private string MakeFolder(string name, params (string RelPath, byte[] Data)[] files)

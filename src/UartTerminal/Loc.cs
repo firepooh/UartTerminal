@@ -375,6 +375,8 @@ public sealed class Loc : INotifyPropertyChanged
         ["Flash.Note.Unchecked"] = ("기본 해제", "off by default"),
         ["Flash.Note.Replaced"] = ("args 의 {0} 을(를) 찾지 못해 {1} 으로 대체", "{0} from args not found — using {1}"),
         ["Flash.Note.Candidates"] = ("후보 {0}개 — 확인 필요", "{0} candidates — please verify"),
+        ["Flash.Note.SameCopies"] = ("내용이 같은 사본 {0}개", "{0} identical copies"),
+        ["Flash.Warn.ArgsCopiesDiffer"] = ("{0}: args 는 {1} 을 가리킵니다. 이름이 비슷한 {2} 은(는) 내용이 다릅니다.\nargs 의 {1} 을 기본 선택했습니다 — 맞는지 확인하세요.", "{0}: args points to {1}, but {2} has a similar name and different content.\n{1} from args is selected by default — please verify."),
         ["Flash.Note.EstimatedOffset"] = ("오프셋 추정값 — 확인 필요", "offset is a guess — please verify"),
         ["Flash.Log.Extract"] = ("패키지 해제: {0}", "Extracting package: {0}"),
         ["Flash.Log.UseFolder"] = ("폴더의 파일을 그대로 씁니다: {0}", "Using the folder's files as-is: {0}"),

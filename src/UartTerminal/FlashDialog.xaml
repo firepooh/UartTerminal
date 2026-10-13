@@ -66,9 +66,8 @@
 
     <Grid Margin="16">
         <Grid.RowDefinitions>
-            <!-- 남는 세로는 탭(파일 목록)이 갖는다. 로그 행은 접혀 있을 땐 Auto 라 제 높이(한 줄)만
-                 쓰고, 펼치면 코드에서 * 로 바꿔 남은 공간을 나눠 갖는다 — 접힌 로그가 빈 공간을
-                 붙들고 있어서 목록이 눌리던 것을 막는다. -->
+            <!-- 남는 세로는 탭(파일 목록)이 갖는다. 로그는 Auto 지만 높이를 코드(FitLogToList)가 정한다 —
+                 창 높이가 모자라면 로그가 먼저 줄고, 그래도 모자랄 때만 목록이 스크롤된다. -->
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -79,7 +78,7 @@
 
         <!-- 0) 모드 탭: 펌웨어 패키지(zip 전체) / 영역 굽기(bin 하나를 고정 주소에).
              MinHeight = 영역 탭 콘텐츠가 다 보이는 높이 — 경고 패널이 떠서 공간을 뺏어도
-             탭 내용(구울 BIN 행까지)이 잘리지 않는다. 부족분은 로그(*)가 줄어드는 걸로 흡수. -->
+             탭 내용(구울 BIN 행까지)이 잘리지 않는다. 부족분은 로그가 줄어드는 걸로 흡수. -->
         <TabControl x:Name="ModeTabs" Grid.Row="0" Style="{StaticResource DialogTabControl}"
                     MinHeight="270"
                     SelectionChanged="ModeTabs_SelectionChanged">
@@ -92,7 +91,7 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition x:Name="ListRow" Height="*"/>
                         </Grid.RowDefinitions>
 
                         <TextBlock Grid.Row="0" Margin="2,0,0,10" Style="{StaticResource HintText}"
@@ -158,9 +157,10 @@
                         </Border>
 
                         <!-- 목록 — 파인 면 위에. 비어 있으면 안내를 겹쳐 둔다(검은 구멍만 남지 않게) -->
-                        <Border Grid.Row="4" Style="{StaticResource InsetPanel}" MinHeight="150">
+                        <Border x:Name="ListArea" Grid.Row="4" Style="{StaticResource InsetPanel}" MinHeight="150">
                         <Grid>
-                        <ListBox x:Name="ItemList" HorizontalContentAlignment="Stretch"
+                        <!-- 픽셀 단위 스크롤: FitLogToList 가 목록이 원하는 높이를 픽셀로 읽는다(항목 단위면 줄 수가 나온다) -->
+                        <ListBox x:Name="ItemList" HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="False"
                                  Background="Transparent" BorderThickness="0" Padding="4">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
@@ -322,8 +322,10 @@
                        Foreground="{DynamicResource TextDim}" Text="{loc:Str Flash.Idle}"/>
         </Grid>
 
-        <!-- 4) 로그 — 처음부터 고정 높이로 자리를 잡고, 넘치면 스크롤한다.
-             접었다 폈다 하면 창이 커졌다 작아졌다 해서 실사용에서 거슬린다(그렇게 만들었다가 되돌림). -->
+        <!-- 4) 로그 — 처음부터 자리를 잡고, 넘치면 스크롤한다. 출력이 늘어도 창 크기는 그대로다.
+             접었다 폈다 하면 창이 커졌다 작아졌다 해서 실사용에서 거슬린다(그렇게 만들었다가 되돌림).
+             다만 높이 240 은 "자리가 있을 때" 값이다. 창이 모자라면 FitLogToList 가 96 까지 줄여
+             파일 목록에 자리를 내준다(빈 로그가 자리를 지키고 목록이 한 줄로 눌리던 문제). -->
         <Border Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource InsetPanel}">
             <Grid>
                 <Grid.RowDefinitions>

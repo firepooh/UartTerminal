@@ -135,6 +135,8 @@ esptool 은 GPL-2.0+ 이므로 배포 시 출처·소스 위치를 [THIRD-PARTY-
 | `flash_project_args` 의 경로가 빌드 트리 기준(`bootloader/bootloader.bin`)인데 zip 은 평면 | 파일명(basename)으로 매칭 |
 | args 의 앱 이름이 실제와 다름(빌드명 `firmware.bin` → 배포 `myapp*.bin`) | 역할로 재탐색하고 경고 |
 | 같은 앱의 사본이 여럿(`myapp.bin` / `myapp-1.2.3.bin`) | 그 줄만 콤보로 노출, **버전 붙은 쪽**을 기본 선택 |
+| args 가 가리키는 앱(`myapp.bin`)은 있는데 버전 붙은 사본도 함께 있음 | 사본을 그 줄의 후보로 노출(위치 불명 경고 아님). 내용이 같으면 버전 붙은 쪽, 다르면 args 쪽을 기본 선택하고 경고 |
+| args 의 줄 순서가 주소 순이 아님(`0x8000` → `0xd000` → `0x1000` …) | 주소 순으로 정렬해 표시(Flash Download Tool 과 같은 순서) |
 | zip 에 칩 정보가 없음 | `bootloader.bin` 헤더의 `chip_id` 로 확정(필요할 때만 수동 override) |
 | 같은 오프셋에 두 파일 / 빈 파일 | 오류로 차단 |
 

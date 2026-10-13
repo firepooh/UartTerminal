@@ -158,6 +158,7 @@ public partial class FlashDialog : Window
 
         Closing += OnClosing;
         Loaded += OnLoaded;
+        LayoutUpdated += FitLogToList;
     }
 
     /// <summary>모달로 띄운다. 이미 열려 있으면 무시(중복 플래시 방지).</summary>
@@ -393,6 +394,9 @@ public partial class FlashDialog : Window
     /// <summary><paramref name="sourcePath"/> 는 zip 파일이나 폴더다. 해석 규칙은 둘이 같다.</summary>
     private void LoadPackage(string sourcePath)
     {
+        // 목록이 바뀌면 로그 높이를 원래대로 돌려놓고 FitLogToList 가 다시 맞추게 한다.
+        // 창이 내용에 맞춰 줄어드는 상태(SizeToContent)에서는 남는 자리가 보이지 않아 되돌릴 계기가 없다.
+        LogBox.Height = LogHeightMax;
         _rows.Clear();
         NoticePane.Visibility = Visibility.Collapsed;
         NoticeText.Text = "";
@@ -475,6 +479,48 @@ public partial class FlashDialog : Window
         if (_syncing || BaudBox.SelectedItem is not int b) return;
         _state.FlashBaud = b;
         _state.Save();
+    }
+
+    // ── 배치: 파일 목록이 로그보다 먼저 ─────────────────────────────────────
+
+    /// <summary>로그 높이. 자리가 있으면 최대, 모자라면 최소까지 줄여 목록에 내준다.</summary>
+    private const double LogHeightMax = 240;
+    private const double LogHeightMin = 96;
+
+    private ScrollViewer? _listScroll;
+
+    /// <summary>
+    /// 창 높이가 모자라면(사용자가 창을 줄였거나 화면이 작을 때) 로그를 먼저 줄인다.
+    /// 로그는 시작 전에는 비어 있다. 고정 높이로 두면 빈 로그가 자리를 지키고 파일 목록이 한 줄로 눌린다.
+    /// 로그가 최소 높이에 닿은 뒤에야 목록이 스크롤된다. 자리가 남으면 로그를 최대 높이까지 되돌린다.
+    /// 높이를 바꾸면 배치가 한 번 더 돌고, 그때 차이가 1 미만이라 멈춘다.
+    /// </summary>
+    private void FitLogToList(object? sender, EventArgs e)
+    {
+        if (!IsLoaded || !ReferenceEquals(ModeTabs.SelectedItem, PackageTab)) return;
+        _listScroll ??= FindFirst<ScrollViewer>(ItemList);
+        if (_listScroll is null || _listScroll.ViewportHeight <= 0) return;
+
+        // 목록 칸이 원하는 높이 = 항목 전체 높이 + 뷰포트 바깥(테두리·여백). 비었으면 최소 높이.
+        // 칸이 모자라면 테두리는 MinHeight 를 지킨 채 잘리므로, 실제로 받은 높이는 행(ListRow)에서 읽는다.
+        double chrome = ListArea.ActualHeight - _listScroll.ViewportHeight;
+        double need = Math.Max(ListArea.MinHeight, _listScroll.ExtentHeight + chrome);
+        double shortfall = need - ListRow.ActualHeight;   // 양수면 목록이 잘리고, 음수면 남는다
+
+        double next = Math.Clamp(LogBox.Height - shortfall, LogHeightMin, LogHeightMax);
+        if (Math.Abs(next - LogBox.Height) >= 1) LogBox.Height = next;
+    }
+
+    private static T? FindFirst<T>(DependencyObject root) where T : DependencyObject
+    {
+        int n = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < n; i++)
+        {
+            var c = VisualTreeHelper.GetChild(root, i);
+            if (c is T hit) return hit;
+            if (FindFirst<T>(c) is { } deep) return deep;
+        }
+        return null;
     }
 
     private void AppendNotice(string text)
