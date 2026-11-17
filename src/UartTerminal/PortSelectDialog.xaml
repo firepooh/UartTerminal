@@ -82,6 +82,10 @@
             <CheckBox x:Name="ResetOnOpenCheck" Style="{StaticResource AppCheckBox}"
                       Content="{loc:Str Port.ResetOnOpen}"
                       Margin="0,0,0,8"/>
+            <!-- 기본 켜짐: 포트를 열면 AI 가 MCP 로 바로 쓸 수 있게(엔드포인트는 127.0.0.1 전용) -->
+            <CheckBox x:Name="McpOnOpenCheck" Style="{StaticResource AppCheckBox}"
+                      Content="{loc:Str Port.McpOnOpen}" ToolTip="{loc:Str Port.McpOnOpenTip}"
+                      Margin="0,0,0,8"/>
             <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFaint}" FontSize="{StaticResource Font.Caption}"
                        Text="{loc:Str Port.Fixed}"/>
         </StackPanel>

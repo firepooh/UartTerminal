@@ -169,8 +169,10 @@ public partial class UartDocumentView : UserControl
         // 세션 목록을 함께 띄운다. 전에는 sessions:null 이라 '포트만 다시 고르는' 화면이었는데,
         // 그러면 이미 포트를 열어 둔 탭에 저장해 둔 프로필을 적용할 방법이 앱 어디에도 없었다
         // (새 탭은 같은 포트를 두 번 열 수 없어 막힌다).
+        // MCP 체크: 처음 여는 탭은 기본(켜짐), 이미 쓰던 탭은 지금 상태를 그대로 보여 준다.
         var dlg = new PortSelectDialog(preselect, _params.BaudRate, sessions: _sessions,
-                                       preselectResetOnOpen: _resetOnOpen) { Owner = OwnerWindow };
+                                       preselectResetOnOpen: _resetOnOpen,
+                                       preselectMcpOnOpen: _engine is null || McpEnabled) { Owner = OwnerWindow };
         if (dlg.ShowDialog() != true || dlg.SelectedPort is not { } port)
         {
             // 취소는 아무것도 바꾸지 않아야 한다. 특히 진행 중인 자동 재연결 대기를 죽이면
@@ -1174,7 +1176,7 @@ public partial class UartDocumentView : UserControl
         _sessionName = string.IsNullOrWhiteSpace(name) ? null : name!.Trim();
         _logFolder = string.IsNullOrWhiteSpace(logFolder) ? null : logFolder!.Trim();
         SetCommandGroup(commandGroup);
-        if (mcpOnOpen) McpEnableFromSession();
+        if (mcpOnOpen) McpEnableOnOpen();
         RaiseTitle();
     }
 
@@ -1929,15 +1931,15 @@ public partial class UartDocumentView : UserControl
     }
 
     /// <summary>
-    /// 세션의 '열 때 MCP 켜기' 적용. <b>켜는 방향만</b> 반영한다 — 세션에 값이 없다고 해서
-    /// 이미 켜 둔 서버를 끄면 재연결 한 번에 붙어 있던 AI 도구가 조용히 떨어진다.
+    /// '열 때 MCP 켜기' 적용(포트 선택 창의 체크, 또는 세션 값). <b>켜는 방향만</b> 반영한다 —
+    /// 체크가 꺼져 있다고 이미 켜 둔 서버를 끄면 재연결 한 번에 붙어 있던 AI 도구가 조용히 떨어진다.
     /// 켠 사실은 상태바로 알린다(자동으로 포트가 노출된 것을 모르고 지나가지 않게).
     /// </summary>
-    public void McpEnableFromSession()
+    public void McpEnableOnOpen()
     {
         if (McpEnabled) return;
         McpSetEnabled(true);
-        if (McpEnabled) SetStatus(Loc.F("Doc.McpOnBySession", _portName));
+        if (McpEnabled) SetStatus(Loc.F("Doc.McpOnAtOpen", _portName));
     }
 
     public void McpSetReadOnly(bool ro)

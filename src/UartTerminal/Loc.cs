@@ -230,6 +230,8 @@ public sealed class Loc : INotifyPropertyChanged
         ["Port.Detected"] = ("감지된 포트", "Detected ports"),
         ["Port.Hint"] = ("세션 없이 포트만 골라 바로 연결해도 됩니다.", "You can also just pick a port and connect."),
         ["Port.ResetOnOpen"] = ("열 때 보드 리셋 (EN 펄스 — 부팅 로그를 처음부터 보기)", "Reset board on open (EN pulse — see boot log from the start)"),
+        ["Port.McpOnOpen"] = ("열 때 MCP 켜기 (AI 가 이 포트를 쓸 수 있게)", "Enable MCP on open (let AI use this port)"),
+        ["Port.McpOnOpenTip"] = ("이 PC 안(127.0.0.1)에서만 접속을 받습니다. [MCP] 메뉴에서 언제든 끌 수 있습니다.", "Accepts connections only from this PC (127.0.0.1). You can turn it off any time from the [MCP] menu."),
         ["Port.EmptyList"] = ("감지된 포트가 없습니다 — 케이블을 연결하고 [새로고침]", "No ports detected — plug the cable in and press [Refresh]"),
         ["Sess.EmptyList"] = ("저장된 세션이 없습니다 — 아래에 이름을 넣고 [저장]", "No saved sessions — type a name below and press [Save]"),
         ["Cmd.EmptyList"] = ("이 그룹에 명령이 없습니다 — [명령 추가]", "No commands in this group — press [Add command]"),
@@ -467,7 +469,7 @@ public sealed class Loc : INotifyPropertyChanged
         ["Doc.DisconnectWhileLogging"] = ("{0} 은(는) 지금 로깅 중입니다. 연결을 해제하면 그 시점부터의 수신은 파일에 남지 않습니다.\n\n해제할까요?",
                                           "{0} is being logged right now. Disconnecting means nothing after this point is written to the file.\n\nDisconnect?"),
         ["Doc.DisconnectedByUser"] = ("연결 해제: {0} — 점을 다시 누르면 재연결", "Disconnected: {0} — click the dot again to reconnect"),
-        ["Doc.McpOnBySession"] = ("세션 설정에 따라 MCP 서버를 켰습니다 — {0}", "MCP server started per the session setting — {0}"),
+        ["Doc.McpOnAtOpen"] = ("열 때 MCP 를 켰습니다 — {0}", "MCP enabled on open — {0}"),
         ["Doc.SessionNewlineSuffix"] = (" · 개행 ↓{0} ↑{1}", " · new-line ↓{0} ↑{1}"),
         ["Doc.SessionPrompt"] = ("이 연결({0} · {1}bps{2})을 어떤 이름으로 저장할까요?", "Under what name should this connection ({0} · {1} bps{2}) be saved?"),
         ["Doc.SessionPromptTitle"] = ("세션 저장", "Save Session"),
@@ -550,10 +552,10 @@ public sealed class Loc : INotifyPropertyChanged
                                "You can start the AI first — enable it later and the tools appear in that same session."),
 
         ["McpGuide.S5Head"] = ("알아 두실 것", "Worth knowing"),
-        ["McpGuide.S5B1"] = ("MCP 활성화는 앱을 껐다 켜면 풀립니다.\n" +
-                             "매번 켜기 번거로우면 세션에 '열 때 MCP 켜기' 를 저장해 두세요.",
-                             "Enabling MCP does not survive a restart.\n" +
-                             "To avoid doing it every time, save a session with 'MCP on open'."),
+        ["McpGuide.S5B1"] = ("포트를 새로 열 때는 MCP 가 기본으로 켜집니다.\n" +
+                             "원하지 않으면 연결 창에서 '열 때 MCP 켜기' 를 푸세요.",
+                             "MCP is on by default when you open a port.\n" +
+                             "Uncheck 'Enable MCP on open' in the connect dialog if you don't want it."),
         ["McpGuide.S5B2"] = ("'AI 읽기 전용' 은 기본 꺼짐입니다.\n" +
                              "켜 두지 않으면 AI 가 송신·리셋·포트 양보까지 할 수 있습니다.",
                              "'AI read-only' is off by default.\n" +
