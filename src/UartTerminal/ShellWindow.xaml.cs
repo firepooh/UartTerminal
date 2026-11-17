@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -39,7 +40,6 @@ public partial class ShellWindow : Window
     private static Brush DotIdle => Theme.Brush("DotIdle");
     private static Brush DotReconnecting => Theme.Brush("DotReconnecting");
     private static Brush DotReleased => Theme.Brush("DotReleased");
-    private static Brush SplitterBrush => Theme.Brush("SplitterBrush");
     private static Brush TitleActiveFg => Theme.Brush("TitleActiveFg");
     private static Brush TitleInactiveFg => Theme.Brush("TitleInactiveFg");
     private static Brush ConnectedFg => Theme.Brush("TitleActiveFg");
@@ -317,41 +317,66 @@ public partial class ShellWindow : Window
             grid.Children.Add(panel);
         }
 
-        // 세로 스플리터(열 경계) — 좌우 크기 조절
+        // 세로 경계(열 사이) — 좌우 크기 조절
         for (int c = 1; c < totalCols; c += 2)
         {
-            var gs = new GridSplitter
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Background = SplitterBrush,
-                ResizeBehavior = GridResizeBehavior.PreviousAndNext,
-                ResizeDirection = GridResizeDirection.Columns,
-                ShowsPreview = false,
-            };
-            Grid.SetColumn(gs, c);
-            Grid.SetRow(gs, 0);
-            Grid.SetRowSpan(gs, totalRows);
-            grid.Children.Add(gs);
+            int index = c;
+            var thumb = new Thumb { Style = (Style)FindResource("SplitterThumb"), Cursor = Cursors.SizeWE };
+            thumb.DragDelta += (_, e) => DragSplit(grid, columns: true, index, e.HorizontalChange);
+            Grid.SetColumn(thumb, c);
+            Grid.SetRow(thumb, 0);
+            Grid.SetRowSpan(thumb, totalRows);
+            grid.Children.Add(thumb);
         }
-        // 가로 스플리터(행 경계) — 상하 크기 조절
+        // 가로 경계(행 사이) — 상하 크기 조절
         for (int r = 1; r < totalRows; r += 2)
         {
-            var gs = new GridSplitter
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Background = SplitterBrush,
-                ResizeBehavior = GridResizeBehavior.PreviousAndNext,
-                ResizeDirection = GridResizeDirection.Rows,
-                ShowsPreview = false,
-            };
-            Grid.SetRow(gs, r);
-            Grid.SetColumn(gs, 0);
-            Grid.SetColumnSpan(gs, totalCols);
-            grid.Children.Add(gs);
+            int index = r;
+            var thumb = new Thumb { Style = (Style)FindResource("SplitterThumb"), Cursor = Cursors.SizeNS };
+            thumb.DragDelta += (_, e) => DragSplit(grid, columns: false, index, e.VerticalChange);
+            Grid.SetRow(thumb, r);
+            Grid.SetColumn(thumb, 0);
+            Grid.SetColumnSpan(thumb, totalCols);
+            grid.Children.Add(thumb);
         }
         ContentHost.Children.Add(grid);
+    }
+
+    /// <summary>분할 패널이 경계 끌기로 줄어들 수 있는 최소 크기. 0 까지 줄면 패널이 사라진 것처럼 보인다.</summary>
+    private const double MinSplitPanel = 120;
+
+    /// <summary>
+    /// 분할 경계를 끌어 양옆(위아래) 두 칸의 크기를 바꾼다.
+    ///
+    /// GridSplitter 를 쓰지 않는 이유: 드래그 중 두 칸 크기의 합이 시작 때와 조금이라도 다르면
+    /// GridSplitter 는 드래그를 취소하고 <b>시작 때 크기로 되돌린다</b>(마우스 캡처를 잃어도 같다).
+    /// 화면 배율에 맞춘 픽셀 반올림만으로도 합이 1픽셀 어긋날 수 있어,
+    /// 비율을 많이 바꾸면 경계가 시작 위치로 튀어 돌아갔다.
+    /// 여기서는 되돌리는 경로 없이 현재 크기에 변화량만 더한다.
+    ///
+    /// 모든 콘텐츠 칸을 현재 실제 크기의 Star 로 다시 적는다. 그러면 Star 한 단위가 1픽셀이 되어
+    /// 두 칸만 정확히 바꿀 수 있고, 창 크기를 바꾸면 지금 비율대로 함께 늘고 준다.
+    /// </summary>
+    private static void DragSplit(Grid grid, bool columns, int splitter, double change)
+    {
+        int count = columns ? grid.ColumnDefinitions.Count : grid.RowDefinitions.Count;
+        double Actual(int i) => columns ? grid.ColumnDefinitions[i].ActualWidth : grid.RowDefinitions[i].ActualHeight;
+        void SetStar(int i, double size)
+        {
+            var len = new GridLength(Math.Max(size, 1), GridUnitType.Star);
+            if (columns) grid.ColumnDefinitions[i].Width = len;
+            else grid.RowDefinitions[i].Height = len;
+        }
+
+        double before = Actual(splitter - 1), after = Actual(splitter + 1);
+        // 이미 최소보다 작은 칸(창이 아주 좁을 때)을 억지로 키우지는 않는다.
+        double minBefore = Math.Min(MinSplitPanel, before), minAfter = Math.Min(MinSplitPanel, after);
+        change = Math.Clamp(change, minBefore - before, after - minAfter);
+        if (change == 0) return;
+
+        for (int i = 0; i < count; i += 2) SetStar(i, Actual(i));   // 콘텐츠 칸은 짝수 인덱스
+        SetStar(splitter - 1, before + change);
+        SetStar(splitter + 1, after - change);
     }
 
     private Border BuildPanel(UartDocumentView doc)
